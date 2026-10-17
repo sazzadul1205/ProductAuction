@@ -1,0 +1,18 @@
+# Visual Studio
+.vs/
+*.user
+*.suo
+
+# Build output
+**/bin/
+**/obj/
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+secrets.json
+
+# Logs and test output
+*.log
+**/TestResults/
