@@ -51,6 +51,9 @@ builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
+// Create the default roles when the API starts.
+await RoleSeeder.SeedRolesAsync(app.Services);
+
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {

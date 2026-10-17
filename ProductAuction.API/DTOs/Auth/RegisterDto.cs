@@ -16,5 +16,9 @@ namespace ProductAuction.API.DTOs.Auth
         [Required]
         [StringLength(150)]
         public string FullName { get; set; } = string.Empty;
+
+        // The role selected during registration.
+        [Required]
+        public string Role { get; set; } = "Buyer";
     }
 }
