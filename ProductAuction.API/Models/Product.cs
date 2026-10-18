@@ -9,6 +9,7 @@ namespace ProductAuction.API.Models
 
         public string SellerId { get; set; } = string.Empty;
         public int CategoryId { get; set; }
+        public Category Category { get; set; } = null!;
 
         public string Title { get; set; } = string.Empty;
         public string ShortSummary { get; set; } = string.Empty;

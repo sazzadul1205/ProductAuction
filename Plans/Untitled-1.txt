@@ -1,0 +1,10 @@
+GET All (everyones) a list type so less data 
+Get All (Single Users)
+GET 1
+POST New Product
+PUT Update Exsisiting Product if its not Approved
+DELETE Own Product Delete 
+
+GET All that Are Pending approval | a list type so less data 
+GET 1 also Details need to see 
+PUT Approve / Reject (Reasone)
