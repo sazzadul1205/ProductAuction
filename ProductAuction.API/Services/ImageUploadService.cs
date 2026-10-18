@@ -38,11 +38,11 @@ namespace ProductAuction.API.Services
                 throw new ArgumentException("Only JPG, JPEG, PNG, and WEBP images are allowed.");
             }
 
-            // Build the path to the uploads folder.
-            var uploadFolder = Path.Combine(
-                _environment.WebRootPath ?? _environment.ContentRootPath,
-                "wwwroot",
-                "uploads");
+            // Resolve the web root (wwwroot). Fall back to ContentRoot/wwwroot if not set.
+            var webRoot = _environment.WebRootPath ?? Path.Combine(_environment.ContentRootPath, "wwwroot");
+
+            // Build the path to the uploads folder (single "wwwroot", no duplication).
+            var uploadFolder = Path.Combine(webRoot, "uploads");
 
             // Create the uploads folder if it does not exist yet.
             Directory.CreateDirectory(uploadFolder);
@@ -80,9 +80,10 @@ namespace ProductAuction.API.Services
                 return Task.FromResult(false);
             }
 
-            // Build the full path to the file on disk.
+            // Resolve the web root (wwwroot). Fall back to ContentRoot/wwwroot if not set.
             var webRoot = _environment.WebRootPath ?? Path.Combine(_environment.ContentRootPath, "wwwroot");
 
+            // Build the full path to the file on disk.
             var filePath = Path.Combine(webRoot, "uploads", fileName);
 
             // If the file is not there, nothing to delete.

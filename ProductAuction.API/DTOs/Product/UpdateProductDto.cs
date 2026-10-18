@@ -42,5 +42,14 @@ namespace ProductAuction.API.DTOs.Product
         [Required]
         [Range(1, int.MaxValue)]
         public int CategoryId { get; set; }
+
+        // New image files to add to the product.
+        public List<IFormFile>? NewImages { get; set; }
+
+        // IDs of existing images the seller wants to delete.
+        public List<int>? DeleteImageIds { get; set; }
+
+        public int? MainImageId { get; set; }
+
     }
 }

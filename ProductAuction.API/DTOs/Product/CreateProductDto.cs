@@ -46,5 +46,7 @@ namespace ProductAuction.API.DTOs.Product
 
         // Product images uploaded with the product form.
         public List<IFormFile>? Images { get; set; }
+
+        public int? MainImageIndex { get; set; }
     }
 }

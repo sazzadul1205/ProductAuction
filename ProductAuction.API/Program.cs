@@ -66,6 +66,9 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+// To Server Static Files Like images
+app.UseStaticFiles(); 
+
 app.UseAuthentication();
 app.UseAuthorization();
 

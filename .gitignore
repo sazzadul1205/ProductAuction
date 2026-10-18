@@ -1,5 +1,6 @@
 # Visual Studio
 .vs/
+.vscode/
 *.user
 *.suo
 
@@ -16,3 +17,6 @@ secrets.json
 # Logs and test output
 *.log
 **/TestResults/
+
+# Uploaded images (runtime files, not source)
+**/wwwroot/uploads/
