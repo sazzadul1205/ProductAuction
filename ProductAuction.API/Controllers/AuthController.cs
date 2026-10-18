@@ -113,7 +113,16 @@ namespace ProductAuction.API.Controllers
                 CreatedAt = DateTime.UtcNow
             };
 
+            // Create an empty wallet for the new user.
+            var wallet = new Wallet
+            {
+                UserId = user.Id,
+                Balance = 0,
+                ReservedBalance = 0
+            };
+
             _context.UserProfiles.Add(profile);
+            _context.Wallets.Add(wallet);
             await _context.SaveChangesAsync();
 
             // Return a successful registration response.
