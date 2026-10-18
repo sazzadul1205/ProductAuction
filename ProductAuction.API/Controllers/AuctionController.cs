@@ -465,19 +465,19 @@ namespace ProductAuction.API.Controllers
         }
 
 
-        // PUT: api/auction/1/cancel
-        // Cancel an upcoming auction.
         [HttpPut("{id}/cancel")]
-        public async Task<IActionResult> CancelAuction(int id)
+        [Authorize]
+        public async Task<IActionResult> CancelAuction(int id, CancelAuctionDto dto)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var isAdmin = User.IsInRole("Admin");
 
-            if (userId == null)
+            if (string.IsNullOrWhiteSpace(dto.Reason))
             {
-                return Unauthorized(new
+                return BadRequest(new
                 {
-                    status = 401,
-                    message = "Please log in first."
+                    status = 400,
+                    message = "A cancellation reason is required."
                 });
             }
 
@@ -492,37 +492,102 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Only the user who created the auction can cancel it for now.
-            if (auction.SellerId != userId)
+            var isSeller = auction.SellerId == userId;
+
+            if (!isSeller && !isAdmin)
             {
                 return Forbid();
             }
 
-            if (auction.Status != "Upcoming")
+            if (auction.Status != "Upcoming" && auction.Status != "Active")
             {
                 return BadRequest(new
                 {
                     status = 400,
-                    message = "Only upcoming auctions can be cancelled."
+                    message = "Only upcoming or active auctions can be cancelled."
                 });
             }
 
+            // Sellers can cancel only upcoming auctions.
+            if (isSeller && auction.Status != "Upcoming")
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "Sellers can only cancel upcoming auctions."
+                });
+            }
+
+            var reservation = await _context.WalletReservations
+                .FirstOrDefaultAsync(r =>
+                    r.ProductId == auction.ProductId &&
+                    r.Type == "SellerDeposit" &&
+                    r.Status == "Reserved");
+
+            if (reservation != null)
+            {
+                if (isSeller)
+                {
+                    // Seller cancellation: forfeit the deposit.
+                    reservation.Status = "Forfeited";
+                }
+                else
+                {
+                    // Admin abort: return the seller's deposit.
+                    var wallet = await _context.Wallets
+                        .FirstOrDefaultAsync(w => w.Id == reservation.WalletId);
+
+                    if (wallet == null)
+                    {
+                        return BadRequest(new
+                        {
+                            status = 400,
+                            message = "Seller wallet not found."
+                        });
+                    }
+
+                    if (wallet.ReservedBalance < reservation.Amount)
+                    {
+                        return BadRequest(new
+                        {
+                            status = 400,
+                            message = "Insufficient reserved balance to release the deposit."
+                        });
+                    }
+
+                    wallet.ReservedBalance -= reservation.Amount;
+                    reservation.Status = "Released";
+                }
+
+                // TODO: When an admin aborts an active auction, return the buyer's
+                // reserved 25% deposit/funds and update the corresponding
+                // WalletReservation and Wallet balances.
+                // Handle all affected buyers and prevent duplicate refunds.
+
+                auction.Status = "Cancelled";
+                auction.CancellationReason = dto.Reason;
+            }
+
             auction.Status = "Cancelled";
-            //auction.CancellationReason = dto.Reason;
+            auction.CancellationReason = dto.Reason;
 
             await _context.SaveChangesAsync();
 
             return Ok(new
             {
                 status = 200,
-                message = "Auction cancelled successfully.",
+                message = isSeller
+                    ? "Auction cancelled. Your deposit has been forfeited."
+                    : "Auction aborted by admin. The seller's deposit has been returned.",
                 data = new
                 {
                     auction.Id,
-                    auction.Status
+                    auction.Status,
+                    auction.CancellationReason
                 }
             });
         }
+
 
         // TODO: Implement automatic auction completion after the bidding workflow is ready.
         // - Check auctions whose EndTime has passed.
