@@ -52,13 +52,22 @@ namespace ProductAuction.API.Controllers
 
             // Public registration only allows Buyer or Seller.
             if (dto.Role != "Buyer" && dto.Role != "Seller")
-            {
+                {
                 return BadRequest(new
                 {
                     status = 400,
                     message = "Only Buyer and Seller roles are allowed."
                 });
             }
+
+            //if (dto.Role != "Buyer" && dto.Role != "Seller" && dto.Role != "Admin")
+            //{
+            //    return BadRequest(new
+            //    {
+            //        status = 400,
+            //        message = "Only Buyer and Seller roles are allowed."
+            //    });
+            //}
 
             // Create the user's Identity account.
             var user = new IdentityUser
@@ -123,8 +132,7 @@ namespace ProductAuction.API.Controllers
         public async Task<IActionResult> Login(LoginDto dto)
         {
             // Find the account by email.
-            var user =
-                await _userManager.FindByEmailAsync(dto.Email);
+            var user =await _userManager.FindByEmailAsync(dto.Email);
 
             // Do not reveal whether the email or password was incorrect.
             if (user == null)
@@ -137,9 +145,7 @@ namespace ProductAuction.API.Controllers
             }
 
             // Check the submitted password.
-            var passwordIsValid =
-                await _userManager.CheckPasswordAsync(
-                    user, dto.Password);
+            var passwordIsValid =await _userManager.CheckPasswordAsync(user, dto.Password);
 
             if (!passwordIsValid)
             {

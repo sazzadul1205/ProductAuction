@@ -13,8 +13,7 @@ namespace ProductAuction.API.Data
             "Buyer"
         };
 
-        public static async Task SeedRolesAsync(
-            IServiceProvider serviceProvider)
+        public static async Task SeedRolesAsync(IServiceProvider serviceProvider)
         {
             // Create a scope to access Identity services.
             using var scope = serviceProvider.CreateScope();
