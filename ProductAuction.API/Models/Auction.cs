@@ -10,8 +10,8 @@ namespace ProductAuction.API.Models
         public int ProductId { get; set; }
         public string SellerId { get; set; } = string.Empty;
 
-        public DateTime StartTime { get; set; }
-        public DateTime EndTime { get; set; }
+        public DateTime? StartTime { get; set; }
+        public DateTime? EndTime { get; set; }
 
         // Expected values: Upcoming, Active, Completed, Cancelled
         public string Status { get; set; } = "Upcoming";

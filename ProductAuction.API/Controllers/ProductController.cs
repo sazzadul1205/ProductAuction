@@ -884,6 +884,21 @@ namespace ProductAuction.API.Controllers
             {
                 // Approved — the reservation stays in place.
                 product.RejectionReason = null;
+
+                // Create an auction automatically when the product is approved.
+                var auctionExists = await _context.Auctions.AnyAsync(a => a.ProductId == product.Id);
+
+                if (!auctionExists)
+                {
+                    var auction = new Auction
+                    {
+                        ProductId = product.Id,
+                        SellerId = product.SellerId,
+                        Status = "Upcoming"
+                    };
+
+                    _context.Auctions.Add(auction);
+                }
             }
 
             await _context.SaveChangesAsync();
