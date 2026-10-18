@@ -1,0 +1,352 @@
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using ProductAuction.API.Data;
+using ProductAuction.API.DTOs.Profile;
+using System.Security.Claims;
+
+namespace ProductAuction.API.Controllers
+{
+    [Route("api/[controller]")]
+    [ApiController]
+    [Authorize]
+    public class ProfileController : ControllerBase
+    {
+        private readonly AppDbContext _context;
+
+        public ProfileController(AppDbContext context)
+        {
+            _context = context;
+        }
+
+        // GET: api/profile
+        // Get all the Profiles
+        [HttpGet]
+        public async Task<IActionResult> GetAllProfiles()
+        {
+            // Retrieve all profiles, newest first.
+            var profiles = await _context.UserProfiles
+                .OrderByDescending(p => p.CreatedAt)
+                .Select(p => new ProfileVerificationResponseDto
+                {
+                    Id = p.Id,
+                    UserId = p.UserId,
+                    FullName = p.FullName,
+                    NationalIdNumber = p.NationalIdNumber,
+                    NationalIdFrontImageUrl = p.NationalIdFrontImageUrl,
+                    NationalIdBackImageUrl = p.NationalIdBackImageUrl,
+                    VerificationStatus = p.VerificationStatus,
+                    RejectionReason = p.RejectionReason,
+                    CreatedAt = p.CreatedAt
+                })
+                .ToListAsync();
+
+            return Ok(new
+            {
+                status = 200,
+                message = "Profiles retrieved successfully.",
+                data = profiles
+            });
+        }
+
+
+        // GET: api/profile
+        // Get the Profile by Its Id
+        [HttpGet("{id}")]
+        public async Task<IActionResult> GetProfileById(int id)
+        {
+            // Find the profile using its database ID.
+            var profile = await _context.UserProfiles
+                .Where(p => p.Id == id)
+                .Select(p => new ProfileVerificationResponseDto
+                {
+                    Id = p.Id,
+                    UserId = p.UserId,
+                    FullName = p.FullName,
+                    NationalIdNumber = p.NationalIdNumber,
+                    NationalIdFrontImageUrl = p.NationalIdFrontImageUrl,
+                    NationalIdBackImageUrl = p.NationalIdBackImageUrl,
+                    VerificationStatus = p.VerificationStatus,
+                    RejectionReason = p.RejectionReason,
+                    CreatedAt = p.CreatedAt
+                })
+                .FirstOrDefaultAsync();
+
+            // Return 404 if the profile does not exist.
+            if (profile == null)
+            {
+                return NotFound(new
+                {
+                    status = 404,
+                    message = "Profile not found."
+                });
+            }
+
+            return Ok(new
+            {
+                status = 200,
+                message = "Profile retrieved successfully.",
+                data = profile
+            });
+        }
+
+        // GET: api/profile/me
+        // Returns the profile of the currently logged-in user.
+        [HttpGet("me")]
+        public async Task<IActionResult> GetMyProfile()
+        {
+            // Read the user's ID from the validated JWT token.
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            if (userId == null)
+            {
+                return Unauthorized(new
+                {
+                    status = 401,
+                    message = "User identity was not found in the token."
+                });
+            }
+
+            // Find the profile belonging to this user.
+            var profile = await _context.UserProfiles.FirstOrDefaultAsync(p => p.UserId == userId);
+
+            if (profile == null)
+            {
+                return NotFound(new
+                {
+                    status = 404,
+                    message = "Profile not found."
+                });
+            }
+
+            // Return only the fields defined in the response DTO.
+            var response = new ProfileResponseDto
+            {
+                FullName = profile.FullName,
+                ProfilePhotoUrl = profile.ProfilePhotoUrl,
+                Address = profile.Address,
+                City = profile.City,
+                NationalIdNumber = profile.NationalIdNumber,
+                NationalIdFrontImageUrl = profile.NationalIdFrontImageUrl,
+                NationalIdBackImageUrl = profile.NationalIdBackImageUrl,
+                VerificationStatus = profile.VerificationStatus,
+                CreatedAt = profile.CreatedAt,
+                UpdatedAt = profile.UpdatedAt
+            };
+
+            return Ok(new
+            {
+                status = 200,
+                message = "Profile retrieved successfully.",
+                data = response
+            });
+        }
+
+        // PUT: api/profile/me
+        // Updates the editable fields of the current user's profile.
+        [HttpPut("me")]
+        public async Task<IActionResult> UpdateMyProfile(UpdateProfileDto dto)
+        {
+            // Read the user's ID from the validated JWT token.
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            if (userId == null)
+            {
+                return Unauthorized(new
+                {
+                    status = 401,
+                    message = "User identity was not found in the token."
+                });
+            }
+
+            // Find the profile belonging to this user.
+            var profile = await _context.UserProfiles.FirstOrDefaultAsync(p => p.UserId == userId);
+
+            if (profile == null)
+            {
+                return NotFound(new
+                {
+                    status = 404,
+                    message = "Profile not found."
+                });
+            }
+
+            // Update only the fields users are allowed to edit.
+            profile.FullName = dto.FullName;
+            profile.ProfilePhotoUrl = dto.ProfilePhotoUrl;
+            profile.Address = dto.Address;
+            profile.City = dto.City;
+            profile.NationalIdNumber = dto.NationalIdNumber;
+            profile.NationalIdFrontImageUrl = dto.NationalIdFrontImageUrl;
+            profile.NationalIdBackImageUrl = dto.NationalIdBackImageUrl;
+
+            // Record when the profile was last updated.
+            profile.UpdatedAt = DateTime.UtcNow;
+
+            // Save the changes to the database.
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                status = 200,
+                message = "Profile updated successfully."
+            });
+
+        }
+
+        // PUT: api/profile/submit-verification
+        // Update the Profile so the Product is now Goint To Varification 
+        [HttpPut("submit-verification")]
+        public async Task<IActionResult> SubmitVerification()
+        {
+            // Read the user's ID from the validated JWT token.
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            if (userId == null)
+            {
+                return Unauthorized(new
+                {
+                    status = 401,
+                    message = "User identity was not found in the token."
+                });
+            }
+
+            // Find the profile belonging to this user.
+            var profile = await _context.UserProfiles.FirstOrDefaultAsync(p => p.UserId == userId);
+
+            if (profile == null)
+            {
+                return NotFound(new
+                {
+                    status = 404,
+                    message = "Profile not found."
+                });
+            }
+
+            // Require all National ID details before submission.
+            if (string.IsNullOrEmpty(profile.NationalIdNumber) ||string.IsNullOrEmpty(profile.NationalIdFrontImageUrl) || string.IsNullOrEmpty(profile.NationalIdBackImageUrl))
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "Please provide your National ID number and both ID image URLs before submitting."
+                });
+            }
+
+            // Submit the profile for admin review.
+            profile.VerificationStatus = "PendingReview";
+            profile.VerifiedBy = null;
+            profile.VerifiedAt = null;
+            profile.RejectionReason = null;
+            profile.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                status = 200,
+                message = "Verification submitted successfully. Await admin review.",
+                data = new
+                {
+                    id = profile.Id,
+                    verificationStatus = profile.VerificationStatus,
+                    submittedAt = profile.UpdatedAt
+                }
+            });
+        }
+
+        // GET: api/profile/pending-verification
+        // Get all the Pofiles that are Pending Varification
+        [HttpGet("pending-verification")]
+        public async Task<IActionResult> GetPendingVerificationProfiles()
+        {
+            var profiles = await _context.UserProfiles
+                .Where(p => p.VerificationStatus == "PendingReview")
+                .Select(p => new ProfileVerificationResponseDto
+                {
+                    Id = p.Id,
+                    UserId = p.UserId,
+                    FullName = p.FullName,
+                    NationalIdNumber = p.NationalIdNumber,
+                    NationalIdFrontImageUrl = p.NationalIdFrontImageUrl,
+                    NationalIdBackImageUrl = p.NationalIdBackImageUrl,
+                    VerificationStatus = p.VerificationStatus,
+                    RejectionReason = p.RejectionReason,
+                    CreatedAt = p.CreatedAt
+                })
+                .ToListAsync();
+
+            return Ok(new
+            {
+                status = 200,
+                message = "Pending verification profiles retrieved successfully.",
+                data = profiles
+            });
+        }
+
+        // GET api/profile/5/verify
+        // Update the Profile With Eithere Varified or not 
+        [HttpPut("{id}/verify")]
+        public async Task<IActionResult> VerifyProfile(int id, VerifyProfileDto dto)
+        {
+            // Accept only the two supported decisions.
+            if (dto.Status != "Verified" && dto.Status != "Rejected")
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "Status must be Verified or Rejected."
+                });
+            }
+
+            // If Rejected it needs a Rejection Reasone
+            if (dto.Status == "Rejected" && string.IsNullOrEmpty(dto.RejectionReason))
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "A rejection reason is required."
+                });
+            }
+
+            // Check if the Profile Exsisits 
+            var profile = await _context.UserProfiles.FirstOrDefaultAsync(p => p.Id  == id);
+
+            if (profile == null)
+            {
+                return NotFound(new
+                {
+                    status = 404,
+                    message = "Profile not found."
+                });
+            }
+
+            // Read the user's ID from the validated JWT token.
+            var adminId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            profile.VerificationStatus = dto.Status;
+            profile.VerifiedBy = adminId;
+            profile.VerifiedAt = DateTime.UtcNow;
+            // Save the rejection reason only if the status is "Rejected"; otherwise clear it (null).
+            profile.RejectionReason = dto.Status == "Rejected" ? dto.RejectionReason : null;
+            profile.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                status = 200,
+                message = "Profile verification decision saved successfully.",
+                data = new
+                {
+                    id = profile.Id,
+                    userId = profile.UserId,
+                    verificationStatus = profile.VerificationStatus,
+                    verifiedBy = profile.VerifiedBy,
+                    verifiedAt = profile.VerifiedAt,
+                    rejectionReason = profile.RejectionReason
+                }
+            });
+        }
+    }
+}
