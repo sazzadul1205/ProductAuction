@@ -1,5 +1,4 @@
 ﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ProductAuction.API.Data;
@@ -105,9 +104,9 @@ namespace ProductAuction.API.Controllers
         [AllowAnonymous]
         public async Task<IActionResult> GetProductById(int id)
         {
-            // Query the product with this id and project it into a response DTO.
+            // Query the product with this id (approved only) and project it into a response DTO.
             var product = await _context.Products
-                .Where(p => p.Id == id)
+                .Where(p => p.Id == id && p.ApprovalStatus == "Approved")
                 .Select(p => new ProductResponseDto
                 {
                     Id = p.Id,
@@ -143,7 +142,7 @@ namespace ProductAuction.API.Controllers
                 })
                 .FirstOrDefaultAsync();
 
-            // If no product matches this id, return not found.
+            // If no approved product matches this id, return not found.
             if (product == null)
             {
                 return NotFound(new
@@ -164,7 +163,7 @@ namespace ProductAuction.API.Controllers
 
 
         // POST: api/product
-        // Create a New Product
+        // Create a New Product (saved as a Draft — no wallet reservation yet).
         [HttpPost]
         public async Task<IActionResult> CreateProduct([FromForm] CreateProductDto dto)
         {
@@ -202,10 +201,8 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // TODO: Check the seller's wallet balance and reserve
-            // 25% of the product's starting price before approval.
-
             // Create the product. SellerId comes from the JWT.
+            // Drafts do NOT reserve any wallet funds; the deposit is taken on submission.
             var product = new Product
             {
                 SellerId = userId,
@@ -222,7 +219,7 @@ namespace ProductAuction.API.Controllers
                 KnownIssues = dto.KnownIssues ?? string.Empty,
                 StartingPrice = dto.StartingPrice,
                 BuyoutPrice = dto.BuyoutPrice,
-                ApprovalStatus = "PendingApproval",
+                ApprovalStatus = "Draft",
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -254,13 +251,13 @@ namespace ProductAuction.API.Controllers
             return Ok(new
             {
                 status = 200,
-                message = "Product created successfully."
+                message = "Draft product created successfully."
             });
         }
 
 
         // PUT: api/product/{id}
-        // Update product details and images.
+        // Update product details and images (drafts only).
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdateProduct(int id, [FromForm] UpdateProductDto dto)
         {
@@ -294,15 +291,17 @@ namespace ProductAuction.API.Controllers
                 return Forbid();
             }
 
-            // Only pending products can be edited.
-            if (product.ApprovalStatus != "PendingApproval")
+            // Only draft products can be edited.
+            if (product.ApprovalStatus != "Draft" && product.ApprovalStatus != "Rejected")
             {
                 return BadRequest(new
                 {
                     status = 400,
-                    message = "Only products pending approval can be updated."
+                    message = "Only draft & Rejected products can be updated."
                 });
             }
+
+
 
             // Validate prices.
             if (dto.BuyoutPrice < dto.StartingPrice)
@@ -341,13 +340,8 @@ namespace ProductAuction.API.Controllers
             product.StartingPrice = dto.StartingPrice;
             product.BuyoutPrice = dto.BuyoutPrice;
 
-            // TODO: Recalculate the seller's wallet reservation
-            // if the starting price changes.
-
             // Get the product's existing images.
-            var images = await _context.ProductImages
-                .Where(i => i.ProductId == id)
-                .ToListAsync();
+            var images = await _context.ProductImages.Where(i => i.ProductId == id).ToListAsync();
 
             // Delete selected images.
             if (dto.DeleteImageIds != null && dto.DeleteImageIds.Count > 0)
@@ -414,23 +408,230 @@ namespace ProductAuction.API.Controllers
 
                 chosen.IsMain = true;
             }
+
             // Ensure one image is marked as the main image, if any exist.
             else if (images.Count > 0 && !images.Any(i => i.IsMain))
             {
                 images[0].IsMain = true;
             }
 
+            // If the product was rejected and is being edited, move it back to Draft
+            // so the seller can resubmit.
+            if (product.ApprovalStatus == "Rejected")
+            {
+                product.ApprovalStatus = "Draft";
+                product.RejectionReason = null;
+            }
+
             await _context.SaveChangesAsync();
-             
+
             return Ok(new
             {
                 status = 200,
-                message = "Product and images updated successfully."
+                message = "Draft product and images updated successfully."
+            });
+        }
+
+
+        // POST: api/product/{id}/submit-for-approval
+        // Submit a draft product for admin approval.
+        [HttpPost("{id}/submit-for-approval")]
+        public async Task<IActionResult> SubmitForApproval(int id)
+        {
+            // Get the logged-in seller's ID from the JWT.
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            if (userId == null)
+            {
+                return Unauthorized(new
+                {
+                    status = 401,
+                    message = "User identity was not found in the token."
+                });
+            }
+
+            // Find the seller's product.
+            var product = await _context.Products.FirstOrDefaultAsync(p => p.Id == id);
+
+            if (product == null)
+            {
+                return NotFound(new
+                {
+                    status = 404,
+                    message = "Product not found."
+                });
+            }
+
+            // Only the owner can submit the product.
+            if (product.SellerId != userId)
+            {
+                return Forbid();
+            }
+
+            // Only draft products can be submitted.
+            if (product.ApprovalStatus != "Draft")
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "Only draft products can be submitted for approval."
+                });
+            }
+
+            // Find the seller's wallet.
+            var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == userId);
+
+            if (wallet == null)
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "Seller wallet not found."
+                });
+            }
+
+            // Calculate the required deposit: 25% of starting price.
+            decimal reservationAmount = product.StartingPrice * 0.25m;
+
+            // Reserved funds cannot be used again.
+            decimal availableBalance = wallet.Balance - wallet.ReservedBalance;
+
+            if (availableBalance < reservationAmount)
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "Insufficient available wallet balance.",
+                    requiredAmount = reservationAmount,
+                    availableBalance
+                });
+            }
+
+            // Reserve the seller's deposit.
+            wallet.ReservedBalance += reservationAmount;
+
+            // Create a reservation linked to this product.
+            var reservation = new WalletReservation
+            {
+                WalletId = wallet.Id,
+                ProductId = product.Id,
+                Type = "SellerDeposit",
+                Amount = reservationAmount,
+                Status = "Reserved"
+            };
+
+            _context.WalletReservations.Add(reservation);
+
+            // Send the product to the admin review queue.
+            product.ApprovalStatus = "PendingApproval";
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                status = 200,
+                message = "Product submitted for approval successfully."
+            });
+        }
+
+        // POST: api/product/{id}/withdraw
+        // Withdraw a pending product back to Draft (only while it hasn't been reviewed).
+        [HttpPost("{id}/withdraw")]
+        public async Task<IActionResult> WithdrawSubmission(int id)
+        {
+            // Get the logged-in seller's ID from the JWT.
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            if (userId == null)
+            {
+                return Unauthorized(new
+                {
+                    status = 401,
+                    message = "User identity was not found in the token."
+                });
+            }
+
+            // Find the product.
+            var product = await _context.Products.FirstOrDefaultAsync(p => p.Id == id);
+
+            if (product == null)
+            {
+                return NotFound(new
+                {
+                    status = 404,
+                    message = "Product not found."
+                });
+            }
+
+            // Only the owner can withdraw the product.
+            if (product.SellerId != userId)
+            {
+                return Forbid();
+            }
+
+            // Only products that are still waiting for review can be withdrawn.
+            // Once approved or rejected, the product can no longer be toggled.
+            if (product.ApprovalStatus != "PendingApproval")
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "Only products pending approval can be withdrawn."
+                });
+            }
+
+            // Find the active reservation linked to this product.
+            var reservation = await _context.WalletReservations
+                .FirstOrDefaultAsync(r =>
+                    r.ProductId == product.Id &&
+                    r.Type == "SellerDeposit" &&
+                    r.Status == "Reserved");
+
+            if (reservation != null)
+            {
+                var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.Id == reservation.WalletId);
+
+                if (wallet == null)
+                {
+                    return BadRequest(new
+                    {
+                        status = 400,
+                        message = "Wallet linked to the reservation was not found. Please contact an administrator."
+                    });
+                }
+
+                // Ensure the wallet has enough reserved funds to release.
+                if (wallet.ReservedBalance < reservation.Amount)
+                {
+                    return BadRequest(new
+                    {
+                        status = 400,
+                        message = "Wallet reservation balance is inconsistent. Please contact an administrator."
+                    });
+                }
+
+                // Release the funds and update the reservation.
+                wallet.ReservedBalance -= reservation.Amount;
+                reservation.Status = "Released";
+            }
+
+            // Flip the product back to Draft so the seller can edit it again.
+            product.ApprovalStatus = "Draft";
+
+            // Clear any leftover rejection reason from a previous cycle.
+            product.RejectionReason = null;
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                status = 200,
+                message = "Product withdrawn and moved back to draft."
             });
         }
 
         // DELETE: api/product/{id}
-        // Delete a product that is still pending approval.
+        // Delete a draft product (no reservation to release).
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteProduct(int id)
         {
@@ -464,13 +665,13 @@ namespace ProductAuction.API.Controllers
                 return Forbid();
             }
 
-            // Only pending products can be deleted.
-            if (product.ApprovalStatus != "PendingApproval")
+            // Only draft products can be deleted.
+            if (product.ApprovalStatus != "Draft" && product.ApprovalStatus != "Rejected")
             {
                 return BadRequest(new
                 {
                     status = 400,
-                    message = "Only products pending approval can be deleted."
+                    message = "Only draft or rejected products can be deleted."
                 });
             }
 
@@ -491,9 +692,10 @@ namespace ProductAuction.API.Controllers
             return Ok(new
             {
                 status = 200,
-                message = "Product deleted successfully."
+                message = "Draft product deleted successfully."
             });
         }
+
 
         // GET: api/product/pending-approval
         // Get products waiting for admin approval.
@@ -528,6 +730,7 @@ namespace ProductAuction.API.Controllers
                 data = products
             });
         }
+
 
         // GET: api/product/pending-approval/{id}
         // Get full details of a product waiting for approval.
@@ -587,6 +790,7 @@ namespace ProductAuction.API.Controllers
             });
         }
 
+
         // PUT: api/product/{id}/approval
         // Admin approves or rejects a product.
         [HttpPut("{id}/approval")]
@@ -625,7 +829,7 @@ namespace ProductAuction.API.Controllers
             }
 
             // A rejected product must have a reason.
-            if (dto.Status == "Rejected" &&string.IsNullOrWhiteSpace(dto.RejectionReason))
+            if (dto.Status == "Rejected" && string.IsNullOrWhiteSpace(dto.RejectionReason))
             {
                 return BadRequest(new
                 {
@@ -640,9 +844,45 @@ namespace ProductAuction.API.Controllers
             if (dto.Status == "Rejected")
             {
                 product.RejectionReason = dto.RejectionReason;
+
+                // Release the seller's deposit reservation on rejection.
+                var reservation = await _context.WalletReservations
+                    .FirstOrDefaultAsync(r =>
+                        r.ProductId == product.Id &&
+                        r.Type == "SellerDeposit" &&
+                        r.Status == "Reserved");
+
+                if (reservation != null && reservation.Status == "Reserved")
+                {
+                    var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.Id == reservation.WalletId);
+
+                    if (wallet == null)
+                    {
+                        return BadRequest(new
+                        {
+                            status = 400,
+                            message = "Wallet linked to the reservation was not found. Please contact an administrator."
+                        });
+                    }
+
+                    // Check that the wallet has enough reserved funds.
+                    if (wallet.ReservedBalance < reservation.Amount)
+                    {
+                        return BadRequest(new
+                        {
+                            status = 400,
+                            message = "Wallet reservation balance is inconsistent. Please contact an administrator."
+                        });
+                    }
+
+                    // Release the funds and update the reservation.
+                    wallet.ReservedBalance -= reservation.Amount;
+                    reservation.Status = "Released";
+                }
             }
             else
             {
+                // Approved — the reservation stays in place.
                 product.RejectionReason = null;
             }
 

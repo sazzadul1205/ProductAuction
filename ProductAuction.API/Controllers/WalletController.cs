@@ -211,6 +211,64 @@ namespace ProductAuction.API.Controllers
             });
         }
 
+        // GET: api/wallet/reservations
+        // Returns the logged-in user's reservation list.
+        [HttpGet("reservations")]
+        public async Task<IActionResult> GetMyReservations()
+        {
+            // Get the user's ID from the JWT token.
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            if (userId == null)
+            {
+                return Unauthorized(new
+                {
+                    status = 401,
+                    message = "User ID not found."
+                });
+            }
+
+            // Find the user's wallet.
+            var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == userId);
+
+            if (wallet == null)
+            {
+                return NotFound(new
+                {
+                    status = 404,
+                    message = "Wallet not found."
+                });
+            }
+
+            // Get reservations belonging only to this user's wallet.
+            // Get reservations belonging only to this user's wallet.
+            var reservations = await _context.WalletReservations
+                .Where(r => r.WalletId == wallet.Id)
+                .Select(r => new
+                {
+                    r.Id,
+                    r.ProductId,
+                    ProductTitle = _context.Products
+                        .Where(p => p.Id == r.ProductId)
+                        .Select(p => p.Title)
+                        .FirstOrDefault(),
+                    r.AuctionId,
+                    r.SaleId,
+                    r.Type,
+                    r.Amount,
+                    r.Status
+                })
+                .OrderBy(r => r.Id)
+                .ToListAsync();
+
+            return Ok(new
+            {
+                status = 200,
+                message = "Wallet reservations retrieved successfully.",
+                data = reservations
+            });
+        }
+
         // GET: api/wallet/deposit-requests/pending
         // Returns all deposit requests waiting for admin review.
         [HttpGet("deposit-requests/pending")]
