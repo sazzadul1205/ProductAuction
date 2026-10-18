@@ -508,6 +508,7 @@ namespace ProductAuction.API.Controllers
             }
 
             auction.Status = "Cancelled";
+            //auction.CancellationReason = dto.Reason;
 
             await _context.SaveChangesAsync();
 

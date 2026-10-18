@@ -231,6 +231,9 @@ namespace ProductAuction.API.Migrations
                     b.Property<int>("BidCount")
                         .HasColumnType("int");
 
+                    b.Property<string>("CancellationReason")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<decimal?>("CurrentHighestBid")
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
@@ -238,7 +241,7 @@ namespace ProductAuction.API.Migrations
                     b.Property<string>("CurrentHighestBidderId")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<DateTime>("EndTime")
+                    b.Property<DateTime?>("EndTime")
                         .HasColumnType("datetime2");
 
                     b.Property<int>("ProductId")
@@ -255,7 +258,7 @@ namespace ProductAuction.API.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<DateTime>("StartTime")
+                    b.Property<DateTime?>("StartTime")
                         .HasColumnType("datetime2");
 
                     b.Property<string>("Status")

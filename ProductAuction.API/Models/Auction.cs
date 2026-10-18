@@ -15,6 +15,7 @@ namespace ProductAuction.API.Models
 
         // Expected values: Upcoming, Active, Completed, Cancelled
         public string Status { get; set; } = "Upcoming";
+        public string? CancellationReason { get; set; }
 
         [Precision(18, 2)]
         public decimal? CurrentHighestBid { get; set; }
