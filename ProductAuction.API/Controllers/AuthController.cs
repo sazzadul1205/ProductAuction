@@ -2,9 +2,11 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using ProductAuction.API.Data;
 using ProductAuction.API.DTOs.Auth;
+using ProductAuction.API.DTOs.Profile;
 using ProductAuction.API.Models;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
@@ -221,6 +223,174 @@ namespace ProductAuction.API.Controllers
                 userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value,
                 email = User.FindFirst(ClaimTypes.Email)?.Value,
                 role = User.FindFirst(ClaimTypes.Role)?.Value
+            });
+        }
+
+        // GET: api/auth/me
+        // Returns the current user's account and profile information.
+        [Authorize]
+        [HttpGet("me")]
+        public async Task<IActionResult> Me()
+        {
+            // Get the user ID from the validated JWT.
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            if (string.IsNullOrEmpty(userId))
+            {
+                return Unauthorized(new
+                {
+                    status = 401,
+                    message = "User identity was not found in the token."
+                });
+            }
+
+            // Find the Identity account.
+            var user = await _userManager.FindByIdAsync(userId);
+
+            if (user == null)
+            {
+                return Unauthorized(new
+                {
+                    status = 401,
+                    message = "User account was not found."
+                });
+            }
+
+            // Find the profile linked to this account.
+            var profile = await _context.UserProfiles
+                .FirstOrDefaultAsync(p => p.UserId == user.Id);
+
+            // Get all roles assigned to this account.
+            var roles = await _userManager.GetRolesAsync(user);
+
+            return Ok(new
+            {
+                status = 200,
+                message = "Current user retrieved successfully.",
+
+                account = new
+                {
+                    userId = user.Id,
+                    email = user.Email,
+                    emailConfirmed = user.EmailConfirmed,
+                    phoneNumber = user.PhoneNumber,
+                    roles
+                },
+
+                profile = profile == null ? null : new
+                {
+                    fullName = profile.FullName,
+                    profilePhotoUrl = profile.ProfilePhotoUrl,
+                    address = profile.Address,
+                    city = profile.City,
+                    nationalIdNumber = profile.NationalIdNumber,
+                    nationalIdFrontImageUrl = profile.NationalIdFrontImageUrl,
+                    nationalIdBackImageUrl = profile.NationalIdBackImageUrl,
+                    verificationStatus = profile.VerificationStatus,
+                    rejectionReason = profile.RejectionReason,
+                    createdAt = profile.CreatedAt,
+                    updatedAt = profile.UpdatedAt
+                }
+            });
+        }
+
+        // PUT: api/auth/me
+        // Updates the editable profile of the currently logged-in user.
+        [Authorize]
+        [HttpPut("me")]
+        public async Task<IActionResult> UpdateMe(UpdateProfileDto dto)
+        {
+            // Get the current user's ID from the validated JWT.
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            if (string.IsNullOrEmpty(userId))
+            {
+                return Unauthorized(new
+                {
+                    status = 401,
+                    message = "User identity was not found in the token."
+                });
+            }
+
+            // Find the current user's profile.
+            var profile = await _context.UserProfiles
+                .FirstOrDefaultAsync(p => p.UserId == userId);
+
+            if (profile == null)
+            {
+                return NotFound(new
+                {
+                    status = 404,
+                    message = "User profile not found."
+                });
+            }
+
+            // Update the fields allowed by UpdateProfileDto.
+            profile.FullName = dto.FullName;
+            profile.ProfilePhotoUrl = dto.ProfilePhotoUrl;
+            profile.Address = dto.Address;
+            profile.City = dto.City;
+            profile.NationalIdNumber = dto.NationalIdNumber;
+            profile.NationalIdFrontImageUrl = dto.NationalIdFrontImageUrl;
+            profile.NationalIdBackImageUrl = dto.NationalIdBackImageUrl;
+            profile.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                status = 200,
+                message = "Profile updated successfully."
+            });
+        }
+
+        // POST: api/auth/change-password
+        // Changes the password of the currently logged-in user.
+        [Authorize]
+        [HttpPost("change-password")]
+        public async Task<IActionResult> ChangePassword(ChangePasswordDto dto)
+        {
+            // Get the current user's ID from the validated JWT.
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            if (string.IsNullOrEmpty(userId))
+            {
+                return Unauthorized(new
+                {
+                    status = 401,
+                    message = "User identity was not found in the token."
+                });
+            }
+
+            // Find the current Identity account.
+            var user = await _userManager.FindByIdAsync(userId);
+
+            if (user == null)
+            {
+                return NotFound(new
+                {
+                    status = 404,
+                    message = "User account not found."
+                });
+            }
+
+            // and apply its configured password rules.
+            var result = await _userManager.ChangePasswordAsync(user,dto.CurrentPassword,dto.NewPassword);
+
+            if (!result.Succeeded)
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "Password change failed.",
+                    errors = result.Errors.Select(e => e.Description)
+                });
+            }
+
+            return Ok(new
+            {
+                status = 200,
+                message = "Password changed successfully."
             });
         }
     }

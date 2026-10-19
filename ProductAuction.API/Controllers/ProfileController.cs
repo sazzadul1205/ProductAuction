@@ -90,57 +90,6 @@ namespace ProductAuction.API.Controllers
             });
         }
 
-        // GET: api/profile/me
-        // Returns the profile of the currently logged-in user.
-        [HttpGet("me")]
-        public async Task<IActionResult> GetMyProfile()
-        {
-            // Read the user's ID from the validated JWT token.
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-
-            if (userId == null)
-            {
-                return Unauthorized(new
-                {
-                    status = 401,
-                    message = "User identity was not found in the token."
-                });
-            }
-
-            // Find the profile belonging to this user.
-            var profile = await _context.UserProfiles.FirstOrDefaultAsync(p => p.UserId == userId);
-
-            if (profile == null)
-            {
-                return NotFound(new
-                {
-                    status = 404,
-                    message = "Profile not found."
-                });
-            }
-
-            // Return only the fields defined in the response DTO.
-            var response = new ProfileResponseDto
-            {
-                FullName = profile.FullName,
-                ProfilePhotoUrl = profile.ProfilePhotoUrl,
-                Address = profile.Address,
-                City = profile.City,
-                NationalIdNumber = profile.NationalIdNumber,
-                NationalIdFrontImageUrl = profile.NationalIdFrontImageUrl,
-                NationalIdBackImageUrl = profile.NationalIdBackImageUrl,
-                VerificationStatus = profile.VerificationStatus,
-                CreatedAt = profile.CreatedAt,
-                UpdatedAt = profile.UpdatedAt
-            };
-
-            return Ok(new
-            {
-                status = 200,
-                message = "Profile retrieved successfully.",
-                data = response
-            });
-        }
 
         // PUT: api/profile/me
         // Updates the editable fields of the current user's profile.
@@ -193,6 +142,7 @@ namespace ProductAuction.API.Controllers
             });
 
         }
+
 
         // PUT: api/profile/submit-verification
         // Update the Profile so the Product is now Goint To Varification 
@@ -255,6 +205,7 @@ namespace ProductAuction.API.Controllers
             });
         }
 
+
         // GET: api/profile/pending-verification
         // Get all the Pofiles that are Pending Varification
         [HttpGet("pending-verification")]
@@ -283,6 +234,7 @@ namespace ProductAuction.API.Controllers
                 data = profiles
             });
         }
+
 
         // GET api/profile/5/verify
         // Update the Profile With Eithere Varified or not 
