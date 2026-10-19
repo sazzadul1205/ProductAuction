@@ -60,6 +60,7 @@ namespace ProductAuction.API.Controllers
         // GET: api/product/my-products
         // List the logged-in seller's own products.
         [HttpGet("my-products")]
+        [Authorize(Roles = "Seller")]
         public async Task<IActionResult> GetMyProducts()
         {
             // Read the user's ID from the validated JWT token.
@@ -108,7 +109,10 @@ namespace ProductAuction.API.Controllers
         {
             // Query the product with this id (approved only) and project it into a response DTO.
             var product = await _context.Products
-                .Where(p => p.Id == id && p.ApprovalStatus == "Approved")
+                .Where(p =>
+                p.Id == id &&
+                p.ApprovalStatus == "Approved" &&
+                p.Status == "Available")
                 .Select(p => new ProductResponseDto
                 {
                     Id = p.Id,
@@ -703,6 +707,7 @@ namespace ProductAuction.API.Controllers
         // GET: api/product/pending-approval
         // Get products waiting for admin approval.
         [HttpGet("pending-approval")]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> GetPendingApprovalProducts()
         {
             var products = await _context.Products
@@ -739,6 +744,7 @@ namespace ProductAuction.API.Controllers
         // GET: api/product/pending-approval/{id}
         // Get full details of a product waiting for approval.
         [HttpGet("pending-approval/{id}")]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> GetPendingApprovalProductById(int id)
         {
             var product = await _context.Products
@@ -798,6 +804,7 @@ namespace ProductAuction.API.Controllers
         // PUT: api/product/{id}/approval
         // Admin approves or rejects a product.
         [HttpPut("{id}/approval")]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> ReviewProduct(int id, [FromBody] ProductApprovalDto dto)
         {
             // Find the product.
