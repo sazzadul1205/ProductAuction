@@ -30,7 +30,9 @@ namespace ProductAuction.API.Controllers
         public async Task<IActionResult> GetAllProducts()
         {
             var products = await _context.Products
-                 .Where(p => p.ApprovalStatus == "Approved")
+                 .Where(p =>
+                 p.ApprovalStatus == "Approved" &&
+                 p.Status == "Available")
                  .OrderByDescending(p => p.CreatedAt)
                  .Select(p => new ProductListResponseDto
                  {
@@ -127,6 +129,7 @@ namespace ProductAuction.API.Controllers
                     BuyoutPrice = p.BuyoutPrice,
                     ApprovalStatus = p.ApprovalStatus,
                     RejectionReason = p.RejectionReason,
+                    Status = p.Status,
                     CreatedAt = p.CreatedAt,
 
                     // Load the images that belong to this product.
@@ -712,6 +715,7 @@ namespace ProductAuction.API.Controllers
                     ShortSummary = p.ShortSummary,
                     StartingPrice = p.StartingPrice,
                     BuyoutPrice = p.BuyoutPrice,
+                    Status = p.Status,
                     ApprovalStatus = p.ApprovalStatus,
 
                     MainImageUrl = _context.ProductImages

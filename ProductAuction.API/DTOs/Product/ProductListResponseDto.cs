@@ -15,6 +15,8 @@ namespace ProductAuction.API.DTOs.Product
 
         public string ApprovalStatus { get; set; } = string.Empty;
 
+        public string Status { get; set; } = "Available";
+
         public string? MainImageUrl { get; set; }
 
         public DateTime CreatedAt { get; set; }

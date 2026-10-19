@@ -392,6 +392,7 @@ namespace ProductAuction.API.Controllers
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
+
             if (userId == null)
             {
                 return Unauthorized(new
@@ -418,6 +419,7 @@ namespace ProductAuction.API.Controllers
                 return Forbid();
             }
 
+            // Once an auction has started or ended, its schedule is locked.
             if (auction.Status != "Upcoming")
             {
                 return BadRequest(new
@@ -427,6 +429,29 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
+            // An unavailable product must not have its auction scheduled.
+            var product = await _context.Products.FirstOrDefaultAsync(p => p.Id == auction.ProductId);
+
+            if (product == null)
+            {
+                return NotFound(new
+                {
+                    status = 404,
+                    message = "Auction product not found."
+                });
+            }
+
+            // The product must still be approved by an admin and not sold/withdrawn.
+            if (product.Status != "Available" || product.ApprovalStatus != "Approved")
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "The product must be approved and available to configure its auction."
+                });
+            }
+
+            // The auction must end after it starts.
             if (dto.StartTime >= dto.EndTime)
             {
                 return BadRequest(new
@@ -436,6 +461,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
+            // The new start time can't be in the past.
             if (dto.StartTime <= DateTime.UtcNow)
             {
                 return BadRequest(new
@@ -445,6 +471,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
+            // All checks passed, so apply the new schedule.
             auction.StartTime = dto.StartTime;
             auction.EndTime = dto.EndTime;
 

@@ -234,7 +234,7 @@ namespace ProductAuction.API.Controllers
 
 
         // PUT: api/dispute/{id}/resolve
-        // Admin reviews a dispute and decides who is responsible.
+        // Admin decides the responsible party and resolves the dispute.
         [HttpPut("{id}/resolve")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> ResolveDispute(int id, ResolveDisputeDto dto)
@@ -262,22 +262,29 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // A system fault must not penalize the buyer or seller.
+            if (string.IsNullOrWhiteSpace(dto.AdminDecision))
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "An admin decision is required."
+                });
+            }
+
+            // System fault cannot result in a buyer or seller penalty.
             if (dto.FaultType == "System" && dto.ApplyPenalty)
             {
                 return BadRequest(new
                 {
                     status = 400,
-                    message = "A system fault cannot receive a buyer or seller penalty."
+                    message = "A system fault cannot receive a penalty."
                 });
             }
 
-            await using var transaction = await _context.Database
-                .BeginTransactionAsync(
-                    System.Data.IsolationLevel.Serializable);
+            // Keep all database changes in one transaction.
+            await using var transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
 
-            var dispute = await _context.Disputes
-                .FirstOrDefaultAsync(d => d.Id == id);
+            var dispute = await _context.Disputes.FirstOrDefaultAsync(d => d.Id == id);
 
             if (dispute == null)
             {
@@ -288,6 +295,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
+            // A finalized dispute must not be processed again.
             if (dispute.Status != "Open" &&
                 dispute.Status != "UnderReview")
             {
@@ -298,9 +306,10 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            var sale = await _context.Sales
-                .FirstOrDefaultAsync(s => s.Id == dispute.SaleId);
+            // Load the sale this dispute belongs to.
+            var sale = await _context.Sales.FirstOrDefaultAsync(s => s.Id == dispute.SaleId);
 
+            // A dispute pointing to a missing sale means inconsistent data
             if (sale == null)
             {
                 return NotFound(new
@@ -310,9 +319,10 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            var product = await _context.Products
-                .FirstOrDefaultAsync(p => p.Id == sale.ProductId);
+            // Load the product that was sold in this sale.
+            var product = await _context.Products.FirstOrDefaultAsync(p => p.Id == sale.ProductId);
 
+            // A sale pointing to a missing product means inconsistent data.
             if (product == null)
             {
                 return NotFound(new
@@ -322,23 +332,8 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Identify the responsible party from the admin's decision.
-            string? responsibleUserId = null;
-
-            if (dto.FaultType == "Buyer")
-            {
-                responsibleUserId = sale.BuyerId;
-            }
-            else if (dto.FaultType == "Seller")
-            {
-                responsibleUserId = sale.SellerId;
-            }
-
             // Prevent duplicate penalty records.
-            var existingPenalty = await _context.Penalties
-                .AnyAsync(p => p.DisputeId == dispute.Id);
-
-            if (existingPenalty)
+            if (await _context.Penalties.AnyAsync(p => p.DisputeId == dispute.Id))
             {
                 return BadRequest(new
                 {
@@ -347,187 +342,64 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
+            // Find any active sale escrow.
+            var escrow = await _context.WalletReservations
+                .FirstOrDefaultAsync(r =>
+                    r.SaleId == sale.Id &&
+                    r.Type == "SaleEscrow" &&
+                    r.Status == "Reserved");
+
+            // A submitted payment must have its corresponding active escrow.
+            if (sale.PaymentSubmittedAt.HasValue && escrow == null)
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "Payment was submitted, but no active escrow was found. Admin investigation is required."
+                });
+            }
+
+            // Sanity check on the escrow, only if one exists.
+            if (escrow != null && escrow.Amount != sale.FinalAmount)
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "The escrow amount does not match the sale amount."
+                });
+            }
+
+            // Buyer-fault penalty with sale money in escrow needs manual review.
+            if (dto.FaultType == "Buyer" &&
+                dto.ApplyPenalty &&
+                escrow != null)
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "Sale payment remains in escrow. Admin review is required before applying a buyer-fault penalty."
+                });
+            }
+
+            // Save the admin's decision.
             dispute.AdminDecision = dto.AdminDecision.Trim();
             dispute.DecidedBy = adminId;
 
-            // SYSTEM FAULT:
-            // Do not penalize either party or move money automatically.
-            // An admin can investigate and correct the payment separately.
-            if (dto.FaultType == "System")
-            {
-                dispute.Status = "Resolved";
-
-                await _context.SaveChangesAsync();
-                await transaction.CommitAsync();
-
-                return Ok(new
-                {
-                    status = 200,
-                    message = "Dispute resolved as a system issue. No party penalty was applied.",
-                    data = new
-                    {
-                        dispute.Id,
-                        dispute.Status,
-                        FaultType = dto.FaultType,
-                        dispute.AdminDecision,
-                        dispute.DecidedBy,
-                        SaleStatus = sale.Status
-                    }
-                });
-            }
-
-            // If the admin decides not to apply a penalty,
-            // record the decision without moving money.
-            if (!dto.ApplyPenalty)
-            {
-                dispute.Status = "Resolved";
-
-                await _context.SaveChangesAsync();
-                await transaction.CommitAsync();
-
-                return Ok(new
-                {
-                    status = 200,
-                    message = "Dispute resolved without a penalty.",
-                    data = new
-                    {
-                        dispute.Id,
-                        dispute.Status,
-                        FaultType = dto.FaultType,
-                        dispute.AdminDecision,
-                        dispute.DecidedBy
-                    }
-                });
-            }
-
-            // Calculate the penalty using the product's starting price.
+            // Calculate penalty amounts only when the admin applies a penalty.
             decimal productValue = product.StartingPrice;
             decimal totalPenalty = Math.Round(productValue * 0.25m, 2);
             decimal oppositePartyAmount = Math.Round(productValue * 0.20m, 2);
             decimal platformAmount = totalPenalty - oppositePartyAmount;
 
-            // Determine the party receiving compensation.
-            string oppositePartyId =
-                responsibleUserId == sale.BuyerId
-                    ? sale.SellerId
-                    : sale.BuyerId;
 
-            var responsibleWallet = await _context.Wallets
-                .FirstOrDefaultAsync(w => w.UserId == responsibleUserId);
-
-            if (responsibleWallet == null)
+            // OPTION 1: SYSTEM FAULT
+            // No penalty. Refund escrow and release the deposits.
+            if (dto.FaultType == "System")
             {
-                return BadRequest(new
-                {
-                    status = 400,
-                    message = "The responsible party's wallet was not found."
-                });
-            }
-
-            // Sellers use SellerDeposit; buyers use BuyerFunds.
-            string reservationType =
-                dto.FaultType == "Seller"
-                    ? "SellerDeposit"
-                    : "BuyerFunds";
-
-            var reservationQuery = _context.WalletReservations
-                .Where(r =>
-                    r.WalletId == responsibleWallet.Id &&
-                    r.Type == reservationType &&
-                    r.Status == "Reserved");
-
-            if (reservationType == "SellerDeposit")
-            {
-                reservationQuery = reservationQuery
-                    .Where(r => r.ProductId == sale.ProductId);
-            }
-            else
-            {
-                reservationQuery = reservationQuery
-                    .Where(r => r.AuctionId == sale.AuctionId);
-            }
-
-            var reservation = await reservationQuery.FirstOrDefaultAsync();
-
-            if (reservation == null)
-            {
-                return BadRequest(new
-                {
-                    status = 400,
-                    message = "No eligible penalty reserve was found for the responsible party."
-                });
-            }
-
-            if (reservation.Amount != totalPenalty ||
-             responsibleWallet.ReservedBalance < reservation.Amount ||
-             responsibleWallet.Balance < totalPenalty)
-            {
-                return BadRequest(new
-                {
-                    status = 400,
-                    message = "The reserved deposit must exactly match the penalty amount, and the wallet must have sufficient funds."
-                });
-            }
-
-            var oppositePartyWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == oppositePartyId);
-
-            if (oppositePartyWallet == null)
-            {
-                return BadRequest(new
-                {
-                    status = 400,
-                    message = "The other party's wallet was not found."
-                });
-            }
-
-            var platformUser = await _context.Users
-                .FirstOrDefaultAsync(u =>
-                    u.UserName == "platform-system-account");
-
-            if (platformUser == null)
-            {
-                return BadRequest(new
-                {
-                    status = 400,
-                    message = "The platform account was not found."
-                });
-            }
-
-            var platformWallet = await _context.Wallets
-                .FirstOrDefaultAsync(w => w.UserId == platformUser.Id);
-
-            if (platformWallet == null)
-            {
-                return BadRequest(new
-                {
-                    status = 400,
-                    message = "The platform wallet was not found."
-                });
-            }
-
-            // If the seller is responsible, refund the buyer's payment.
-            // Only refund if the sale is paid and its escrow is still reserved.
-            if (dto.FaultType == "Seller" && sale.Status == "Disputed")
-            {
-                var escrow = await _context.WalletReservations
-                    .FirstOrDefaultAsync(r =>
-                        r.SaleId == sale.Id &&
-                        r.Type == "SaleEscrow" &&
-                        r.Status == "Reserved");
-
+                // Refund sale escrow, if one exists.
                 if (escrow != null)
                 {
-                    if (escrow.Amount != sale.FinalAmount)
-                    {
-                        return BadRequest(new
-                        {
-                            status = 400,
-                            message = "The sale escrow does not match the sale amount."
-                        });
-                    }
-
-                    var buyerWallet = await _context.Wallets
-                        .FirstOrDefaultAsync(w => w.UserId == sale.BuyerId);
+                    var buyerWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == sale.BuyerId);
 
                     if (buyerWallet == null)
                     {
@@ -539,6 +411,7 @@ namespace ProductAuction.API.Controllers
                     }
 
                     buyerWallet.Balance += escrow.Amount;
+                    escrow.Status = "Released";
 
                     _context.WalletTransactions.Add(new WalletTransaction
                     {
@@ -546,83 +419,433 @@ namespace ProductAuction.API.Controllers
                         Type = "Credit",
                         Amount = escrow.Amount,
                         BalanceAfter = buyerWallet.Balance,
-                        Reference = $"Sale refund for dispute #{dispute.Id}",
+                        Reference = $"System-fault refund for dispute #{dispute.Id}",
                         CreatedAt = DateTime.UtcNow
-                    });
-
-                    escrow.Status = "Released";
-                    sale.Status = "Refunded";
-                }
-                else if (sale.PaymentSubmittedAt.HasValue)
-                {
-                    // Payment was made, but the escrow is no longer available.
-                    // Do not issue a second refund automatically.
-                    return BadRequest(new
-                    {
-                        status = 400,
-                        message = "Payment was previously submitted, but no active escrow was found. Admin investigation is required before applying the penalty."
                     });
                 }
             }
 
-            // Deduct the penalty from the responsible party.
-            // Any excess reserve becomes available again.
-            responsibleWallet.Balance -= totalPenalty;
-            responsibleWallet.ReservedBalance -= reservation.Amount;
-            reservation.Status = "Forfeited";
 
-            // Pay 20% compensation to the other party.
-            oppositePartyWallet.Balance += oppositePartyAmount;
-
-            // Pay the remaining 5% to the platform.
-            platformWallet.Balance += platformAmount;
-
-            var now = DateTime.UtcNow;
-
-            _context.WalletTransactions.Add(new WalletTransaction
+            // OPTION 2: BUYER FAULT, NO PENALTY
+            // Do not forfeit the buyer's deposit. Refund escrow if present.
+            else if (dto.FaultType == "Buyer" && !dto.ApplyPenalty)
             {
-                WalletId = responsibleWallet.Id,
-                Type = "Penalty",
-                Amount = totalPenalty,
-                BalanceAfter = responsibleWallet.Balance,
-                Reference = $"Penalty for dispute #{dispute.Id}",
-                CreatedAt = now
-            });
+                if (escrow != null)
+                {
+                    var buyerWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == sale.BuyerId);
 
-            _context.WalletTransactions.Add(new WalletTransaction
+                    if (buyerWallet == null)
+                    {
+                        return BadRequest(new
+                        {
+                            status = 400,
+                            message = "The buyer's wallet was not found."
+                        });
+                    }
+
+                    buyerWallet.Balance += escrow.Amount;
+                    escrow.Status = "Released";
+
+                    _context.WalletTransactions.Add(new WalletTransaction
+                    {
+                        WalletId = buyerWallet.Id,
+                        Type = "Credit",
+                        Amount = escrow.Amount,
+                        BalanceAfter = buyerWallet.Balance,
+                        Reference = $"No-penalty refund for dispute #{dispute.Id}",
+                        CreatedAt = DateTime.UtcNow
+                    });
+                }
+            }
+
+
+            // OPTION 3: SELLER FAULT, NO PENALTY
+            // Do not forfeit the seller's deposit. Refund escrow if present.
+            else if (dto.FaultType == "Seller" && !dto.ApplyPenalty)
             {
-                WalletId = oppositePartyWallet.Id,
-                Type = "Credit",
-                Amount = oppositePartyAmount,
-                BalanceAfter = oppositePartyWallet.Balance,
-                Reference = $"Dispute compensation #{dispute.Id}",
-                CreatedAt = now
-            });
+                if (escrow != null)
+                {
+                    var buyerWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == sale.BuyerId);
 
-            _context.WalletTransactions.Add(new WalletTransaction
+                    if (buyerWallet == null)
+                    {
+                        return BadRequest(new
+                        {
+                            status = 400,
+                            message = "The buyer's wallet was not found."
+                        });
+                    }
+
+                    buyerWallet.Balance += escrow.Amount;
+                    escrow.Status = "Released";
+
+                    _context.WalletTransactions.Add(new WalletTransaction
+                    {
+                        WalletId = buyerWallet.Id,
+                        Type = "Credit",
+                        Amount = escrow.Amount,
+                        BalanceAfter = buyerWallet.Balance,
+                        Reference = $"Seller-fault refund for dispute #{dispute.Id}",
+                        CreatedAt = DateTime.UtcNow
+                    });
+                }
+            }
+
+            // OPTION 4: BUYER FAULT, PENALTY APPLIED
+            // Forfeit the buyer's deposit and distribute the penalty.
+            else if (dto.FaultType == "Buyer" && dto.ApplyPenalty)
             {
-                WalletId = platformWallet.Id,
-                Type = "Penalty",
-                Amount = platformAmount,
-                BalanceAfter = platformWallet.Balance,
-                Reference = $"Platform penalty share for dispute #{dispute.Id}",
-                CreatedAt = now
-            });
+                // Find the buyer's wallet.
+                var buyerWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == sale.BuyerId);
 
-            var penalty = new Penalty
+                if (buyerWallet == null)
+                {
+                    return BadRequest(new
+                    {
+                        status = 400,
+                        message = "The buyer's wallet was not found."
+                    });
+                }
+
+                // Find the buyer's one eligibility deposit for this auction.
+                var buyerDeposit = await _context.WalletReservations
+                    .FirstOrDefaultAsync(r =>
+                        r.WalletId == buyerWallet.Id &&
+                        r.AuctionId == sale.AuctionId &&
+                        r.Type == "BuyerFunds" &&
+                        r.Status == "Reserved");
+
+                if (buyerDeposit == null ||
+                    buyerDeposit.Amount != totalPenalty ||
+                    buyerWallet.ReservedBalance < buyerDeposit.Amount ||
+                    buyerWallet.Balance < totalPenalty)
+                {
+                    return BadRequest(new
+                    {
+                        status = 400,
+                        message = "The buyer's reserved deposit is missing or does not match the penalty amount."
+                    });
+                }
+
+                // Find the seller's wallet to receive the 20% compensation.
+                var sellerWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == sale.SellerId);
+
+                if (sellerWallet == null)
+                {
+                    return BadRequest(new
+                    {
+                        status = 400,
+                        message = "The seller's wallet was not found."
+                    });
+                }
+
+                // Find the platform wallet for the remaining 5%.
+                var platformUser = await _context.Users.FirstOrDefaultAsync(u => u.UserName == "platform-system-account");
+
+                if (platformUser == null)
+                {
+                    return BadRequest(new
+                    {
+                        status = 400,
+                        message = "The platform account was not found."
+                    });
+                }
+
+                var platformWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == platformUser.Id);
+
+                if (platformWallet == null)
+                {
+                    return BadRequest(new
+                    {
+                        status = 400,
+                        message = "The platform wallet was not found."
+                    });
+                }
+
+                // Forfeit the buyer's deposit. Do not deduct the penalty twice.
+                buyerWallet.Balance -= totalPenalty;
+                buyerWallet.ReservedBalance -= buyerDeposit.Amount;
+                buyerDeposit.Status = "Forfeited";
+
+                // Distribute the forfeited amount.
+                sellerWallet.Balance += oppositePartyAmount;
+                platformWallet.Balance += platformAmount;
+
+                var now = DateTime.UtcNow;
+
+                _context.WalletTransactions.Add(new WalletTransaction
+                {
+                    WalletId = buyerWallet.Id,
+                    Type = "Penalty",
+                    Amount = totalPenalty,
+                    BalanceAfter = buyerWallet.Balance,
+                    Reference = $"Buyer penalty for dispute #{dispute.Id}",
+                    CreatedAt = now
+                });
+
+                _context.WalletTransactions.Add(new WalletTransaction
+                {
+                    WalletId = sellerWallet.Id,
+                    Type = "Credit",
+                    Amount = oppositePartyAmount,
+                    BalanceAfter = sellerWallet.Balance,
+                    Reference = $"Dispute compensation #{dispute.Id}",
+                    CreatedAt = now
+                });
+
+                _context.WalletTransactions.Add(new WalletTransaction
+                {
+                    WalletId = platformWallet.Id,
+                    Type = "Penalty",
+                    Amount = platformAmount,
+                    BalanceAfter = platformWallet.Balance,
+                    Reference = $"Platform penalty share for dispute #{dispute.Id}",
+                    CreatedAt = now
+                });
+
+                _context.Penalties.Add(new Penalty
+                {
+                    DisputeId = dispute.Id,
+                    AgainstUserId = sale.BuyerId,
+                    ProductValue = productValue,
+                    TotalAmount = totalPenalty,
+                    OppositePartyAmount = oppositePartyAmount,
+                    PlatformAmount = platformAmount,
+                    Status = "Applied"
+                });
+            }
+
+            // OPTION 5: SELLER FAULT, PENALTY APPLIED
+            // Forfeit the seller's deposit, refund escrow if present,
+            // and distribute the penalty.
+            else if (dto.FaultType == "Seller" && dto.ApplyPenalty)
             {
-                DisputeId = dispute.Id,
-                AgainstUserId = responsibleUserId!,
-                ProductValue = productValue,
-                TotalAmount = totalPenalty,
-                OppositePartyAmount = oppositePartyAmount,
-                PlatformAmount = platformAmount,
-                Status = "Applied"
-            };
+                // Refund the buyer's sale payment before applying the penalty.
+                if (escrow != null)
+                {
+                    var buyerWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == sale.BuyerId);
 
-            _context.Penalties.Add(penalty);
+                    if (buyerWallet == null)
+                    {
+                        return BadRequest(new
+                        {
+                            status = 400,
+                            message = "The buyer's wallet was not found."
+                        });
+                    }
 
+                    buyerWallet.Balance += escrow.Amount;
+                    escrow.Status = "Released";
+
+                    _context.WalletTransactions.Add(new WalletTransaction
+                    {
+                        WalletId = buyerWallet.Id,
+                        Type = "Credit",
+                        Amount = escrow.Amount,
+                        BalanceAfter = buyerWallet.Balance,
+                        Reference = $"Seller-fault refund for dispute #{dispute.Id}",
+                        CreatedAt = DateTime.UtcNow
+                    });
+                }
+
+                // Find the seller's wallet and deposit.
+                var sellerWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == sale.SellerId);
+
+                if (sellerWallet == null)
+                {
+                    return BadRequest(new
+                    {
+                        status = 400,
+                        message = "The seller's wallet was not found."
+                    });
+                }
+
+                var sellerDeposit = await _context.WalletReservations
+                    .FirstOrDefaultAsync(r =>
+                        r.WalletId == sellerWallet.Id &&
+                        r.ProductId == sale.ProductId &&
+                        r.Type == "SellerDeposit" &&
+                        r.Status == "Reserved");
+
+                if (sellerDeposit == null ||
+                    sellerDeposit.Amount != totalPenalty ||
+                    sellerWallet.ReservedBalance < sellerDeposit.Amount ||
+                    sellerWallet.Balance < totalPenalty)
+                {
+                    return BadRequest(new
+                    {
+                        status = 400,
+                        message = "The seller's reserved deposit is missing or does not match the penalty amount."
+                    });
+                }
+
+                // Find the buyer's wallet to receive the 20% compensation.
+                var buyerWalletForPenalty = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == sale.BuyerId);
+
+                if (buyerWalletForPenalty == null)
+                {
+                    return BadRequest(new
+                    {
+                        status = 400,
+                        message = "The buyer's wallet was not found."
+                    });
+                }
+
+                // Find the platform wallet for the remaining 5%.
+                var platformUser = await _context.Users.FirstOrDefaultAsync(u => u.UserName == "platform-system-account");
+
+                if (platformUser == null)
+                {
+                    return BadRequest(new
+                    {
+                        status = 400,
+                        message = "The platform account was not found."
+                    });
+                }
+
+                var platformWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == platformUser.Id);
+
+                if (platformWallet == null)
+                {
+                    return BadRequest(new
+                    {
+                        status = 400,
+                        message = "The platform wallet was not found."
+                    });
+                }
+
+                // Forfeit the seller's deposit. Do not deduct the penalty twice.
+                sellerWallet.Balance -= totalPenalty;
+                sellerWallet.ReservedBalance -= sellerDeposit.Amount;
+                sellerDeposit.Status = "Forfeited";
+
+                // Distribute the forfeited amount.
+                buyerWalletForPenalty.Balance += oppositePartyAmount;
+                platformWallet.Balance += platformAmount;
+
+                var now = DateTime.UtcNow;
+
+                _context.WalletTransactions.Add(new WalletTransaction
+                {
+                    WalletId = sellerWallet.Id,
+                    Type = "Penalty",
+                    Amount = totalPenalty,
+                    BalanceAfter = sellerWallet.Balance,
+                    Reference = $"Seller penalty for dispute #{dispute.Id}",
+                    CreatedAt = now
+                });
+
+                _context.WalletTransactions.Add(new WalletTransaction
+                {
+                    WalletId = buyerWalletForPenalty.Id,
+                    Type = "Credit",
+                    Amount = oppositePartyAmount,
+                    BalanceAfter = buyerWalletForPenalty.Balance,
+                    Reference = $"Dispute compensation #{dispute.Id}",
+                    CreatedAt = now
+                });
+
+                _context.WalletTransactions.Add(new WalletTransaction
+                {
+                    WalletId = platformWallet.Id,
+                    Type = "Penalty",
+                    Amount = platformAmount,
+                    BalanceAfter = platformWallet.Balance,
+                    Reference = $"Platform penalty share for dispute #{dispute.Id}",
+                    CreatedAt = now
+                });
+
+                _context.Penalties.Add(new Penalty
+                {
+                    DisputeId = dispute.Id,
+                    AgainstUserId = sale.SellerId,
+                    ProductValue = productValue,
+                    TotalAmount = totalPenalty,
+                    OppositePartyAmount = oppositePartyAmount,
+                    PlatformAmount = platformAmount,
+                    Status = "Applied"
+                });
+            }
+
+            // Release the seller's deposit if it was not forfeited.
+            // A forfeited deposit is no longer Reserved, so it is skipped.
+            var sellerWalletForRelease = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == sale.SellerId);
+
+            if (sellerWalletForRelease != null)
+            {
+                var sellerDepositToRelease = await _context.WalletReservations
+                    .FirstOrDefaultAsync(r =>
+                        r.WalletId == sellerWalletForRelease.Id &&
+                        r.ProductId == sale.ProductId &&
+                        r.Type == "SellerDeposit" &&
+                        r.Status == "Reserved");
+
+                if (sellerDepositToRelease != null)
+                {
+                    sellerWalletForRelease.ReservedBalance -= sellerDepositToRelease.Amount;
+                    sellerDepositToRelease.Status = "Released";
+                }
+            }
+
+            // Release the buyer's deposit if it was not forfeited.
+            var buyerWalletForRelease = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == sale.BuyerId);
+
+            if (buyerWalletForRelease != null)
+            {
+                var buyerDepositToRelease = await _context.WalletReservations
+                    .FirstOrDefaultAsync(r =>
+                        r.WalletId == buyerWalletForRelease.Id &&
+                        r.AuctionId == sale.AuctionId &&
+                        r.Type == "BuyerFunds" &&
+                        r.Status == "Reserved");
+
+                if (buyerDepositToRelease != null)
+                {
+                    buyerWalletForRelease.ReservedBalance -= buyerDepositToRelease.Amount;
+                    buyerDepositToRelease.Status = "Released";
+                }
+            }
+
+            // Release all other buyers' eligibility deposits for this auction.
+            // Deposits already marked Forfeited are not selected here.
+            var otherBuyerReservations = await _context.WalletReservations
+                .Where(r =>
+                    r.AuctionId == sale.AuctionId &&
+                    r.Type == "BuyerFunds" &&
+                    r.Status == "Reserved")
+                .ToListAsync();
+
+            foreach (var reservation in otherBuyerReservations)
+            {
+                var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.Id == reservation.WalletId);
+
+                if (wallet == null)
+                {
+                    return BadRequest(new
+                    {
+                        status = 400,
+                        message = $"Wallet for reservation #{reservation.Id} was not found."
+                    });
+                }
+
+                wallet.ReservedBalance -= reservation.Amount;
+                reservation.Status = "Released";
+
+                _context.WalletTransactions.Add(new WalletTransaction
+                {
+                    WalletId = wallet.Id,
+                    Type = "Release",
+                    Amount = reservation.Amount,
+                    BalanceAfter = wallet.Balance,
+                    Reference = $"Auction deposit released after dispute #{dispute.Id}",
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+
+            // Finalize the dispute without deleting historical records.
             dispute.Status = "Resolved";
+            product.Status = "Unavailable";
+            sale.Status = "Refunded";
 
             await _context.SaveChangesAsync();
             await transaction.CommitAsync();
@@ -630,23 +853,29 @@ namespace ProductAuction.API.Controllers
             return Ok(new
             {
                 status = 200,
-                message = "Dispute resolved and penalty applied successfully.",
+                message = dto.ApplyPenalty
+                    ? "Dispute resolved and penalty applied successfully."
+                    : "Dispute resolved without a penalty.",
                 data = new
                 {
                     dispute.Id,
                     dispute.Status,
-                    FaultType = dto.FaultType,
+                    dto.FaultType,
                     dispute.AdminDecision,
                     dispute.DecidedBy,
+                    ProductStatus = product.Status,
                     SaleStatus = sale.Status,
-                    Penalty = new
-                    {
-                        penalty.ProductValue,
-                        penalty.TotalAmount,
-                        penalty.OppositePartyAmount,
-                        penalty.PlatformAmount,
-                        penalty.Status
-                    }
+                    PenaltyApplied = dto.ApplyPenalty,
+                    Penalty = dto.ApplyPenalty
+                        ? new
+                        {
+                            ProductValue = productValue,
+                            TotalAmount = totalPenalty,
+                            OppositePartyAmount = oppositePartyAmount,
+                            PlatformAmount = platformAmount,
+                            Status = "Applied"
+                        }
+                        : null
                 }
             });
         }

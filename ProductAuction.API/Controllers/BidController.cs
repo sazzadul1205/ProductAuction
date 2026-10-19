@@ -83,13 +83,13 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // The product must be approved before anyone can bid.
-            if (product.ApprovalStatus != "Approved")
+            // The product must be approved and available before anyone can bid.
+            if (product.ApprovalStatus != "Approved" || product.Status != "Available")
             {
                 return BadRequest(new
                 {
                     status = 400,
-                    message = "This product is not approved for bidding."
+                    message = "This product is not approved or available for bidding."
                 });
             }
 
@@ -313,13 +313,13 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Only approved products can be purchased.
-            if (product.ApprovalStatus != "Approved")
+            // Only approved and available products can be purchased.
+            if (product.ApprovalStatus != "Approved" || product.Status != "Available")
             {
                 return BadRequest(new
                 {
                     status = 400,
-                    message = "This product is not approved."
+                    message = "This product is not approved or available for purchase."
                 });
             }
 
