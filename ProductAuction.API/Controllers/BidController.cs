@@ -215,9 +215,9 @@ namespace ProductAuction.API.Controllers
             });
         }
 
-        // GET: api/bid/auction/5
+        // GET: api/bid/auction/5/bids
         // Gets the bid history for a specific auction.
-        [HttpGet("auction/{auctionId}")]
+        [HttpGet("auction/{auctionId}/bids")]
         public async Task<IActionResult> GetAuctionBidHistory(int auctionId)
         {
             // Check whether the auction exists.

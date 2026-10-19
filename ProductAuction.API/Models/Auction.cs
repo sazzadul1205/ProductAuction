@@ -8,6 +8,8 @@ namespace ProductAuction.API.Models
         public int Id { get; set; }
 
         public int ProductId { get; set; }
+
+        public Product Product { get; set; } = null!;
         public string SellerId { get; set; } = string.Empty;
 
         public DateTime? StartTime { get; set; }
