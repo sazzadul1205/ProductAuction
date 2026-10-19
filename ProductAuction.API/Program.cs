@@ -53,6 +53,13 @@ builder.Services.AddOpenApi();
 // Register Services 
 builder.Services.AddScoped<IImageUploadService, ImageUploadService>();
 
+// Background service that activates auctions when their scheduled start time arrives.
+builder.Services.AddHostedService<AuctionStatusBackgroundService>();
+
+// Background service that processes ended auctions, determines winners,
+// and creates sale records when a winning bid exists.
+builder.Services.AddHostedService<AuctionResultBackgroundService>();
+
 var app = builder.Build();
 
 // Create the default roles when the API starts. 

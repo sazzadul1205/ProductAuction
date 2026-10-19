@@ -534,8 +534,7 @@ namespace ProductAuction.API.Controllers
                 else
                 {
                     // Admin abort: return the seller's deposit.
-                    var wallet = await _context.Wallets
-                        .FirstOrDefaultAsync(w => w.Id == reservation.WalletId);
+                    var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.Id == reservation.WalletId);
 
                     if (wallet == null)
                     {
