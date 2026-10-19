@@ -50,7 +50,7 @@ builder.Services.AddAuthentication(options =>
 
 builder.Services.AddOpenApi();
 
-// Register Services 
+// Register Services
 builder.Services.AddScoped<IImageUploadService, ImageUploadService>();
 
 // Background service that activates auctions when their scheduled start time arrives.
@@ -59,6 +59,12 @@ builder.Services.AddHostedService<AuctionStatusBackgroundService>();
 // Background service that processes ended auctions, determines winners,
 // and creates sale records when a winning bid exists.
 builder.Services.AddHostedService<AuctionResultBackgroundService>();
+
+// Background service that marks unpaid sales as overdue.
+builder.Services.AddHostedService<PaymentOverdueBackgroundService>();
+
+// Background service that marks deliveries as overdue when sellers miss their deadlines.
+builder.Services.AddHostedService<DispatchOverdueBackgroundService>();
 
 var app = builder.Build();
 

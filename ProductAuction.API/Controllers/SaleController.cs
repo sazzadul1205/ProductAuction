@@ -422,8 +422,6 @@ namespace ProductAuction.API.Controllers
         }
 
 
-
-
         // POST: api/sale/{id}/dispatch
         // The seller records dispatch after the buyer has paid.
         [HttpPost("{id}/dispatch")]
