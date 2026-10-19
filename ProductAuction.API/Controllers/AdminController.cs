@@ -221,5 +221,156 @@ namespace ProductAuction.API.Controllers
                 data = products
             });
         }
+
+
+
+        // GET: api/Admin/auctions
+        // Retrieves all auctions for administrative monitoring.
+        [HttpGet("auctions")]
+        public async Task<IActionResult> GetAllAuctionsForAdmin()
+        {
+            var auctions = await _context.Auctions
+                .OrderByDescending(a => a.Id)
+                .Select(a => new
+                {
+                    auctionId = a.Id,
+                    productId = a.ProductId,
+
+                    productTitle = _context.Products
+                        .Where(p => p.Id == a.ProductId)
+                        .Select(p => p.Title)
+                        .FirstOrDefault() ?? string.Empty,
+
+                    sellerId = a.SellerId,
+                    startTime = a.StartTime,
+                    endTime = a.EndTime,
+                    status = a.Status,
+                    currentHighestBid = a.CurrentHighestBid,
+                    currentHighestBidderId = a.CurrentHighestBidderId,
+                    bidCount = a.BidCount,
+                    winnerId = a.WinnerId,
+                    result = a.Result,
+                    cancellationReason = a.CancellationReason
+                })
+                .ToListAsync();
+
+            return Ok(new
+            {
+                status = 200,
+                message = "All auctions retrieved successfully.",
+                data = auctions
+            });
+        }
+
+
+        // GET: api/Admin/auction-results
+        // Retrieves finalized auction results for administrative review.
+        [HttpGet("auction-results")]
+        public async Task<IActionResult> GetAuctionResultsForAdmin()
+        {
+            var results = await _context.Auctions
+                .Where(a =>
+                    a.Status == "Completed" &&
+                    (a.Result == "Sold" || a.Result == "NoWinner"))
+                .OrderByDescending(a => a.EndTime)
+                .Select(a => new
+                {
+                    auctionId = a.Id,
+                    productId = a.ProductId,
+
+                    productTitle = _context.Products
+                        .Where(p => p.Id == a.ProductId)
+                        .Select(p => p.Title)
+                        .FirstOrDefault() ?? string.Empty,
+
+                    sellerId = a.SellerId,
+                    winnerId = a.WinnerId,
+                    result = a.Result,
+                    finalAmount = a.CurrentHighestBid,
+                    bidCount = a.BidCount,
+                    startTime = a.StartTime,
+                    endTime = a.EndTime
+                })
+                .ToListAsync();
+
+            return Ok(new
+            {
+                status = 200,
+                message = "Auction results retrieved successfully.",
+                data = results
+            });
+        }
+
+
+        // POST: api/Admin/disputes/{id}/start-review
+        // Moves an open dispute into the admin review process.
+        [HttpPost("disputes/{id}/start-review")]
+        public async Task<IActionResult> StartDisputeReview(int id)
+        {
+            var dispute = await _context.Disputes.FirstOrDefaultAsync(d => d.Id == id);
+
+            if (dispute == null)
+            {
+                return NotFound(new
+                {
+                    status = 404,
+                    message = "Dispute not found."
+                });
+            }
+
+            // Only open disputes can begin review.
+            if (dispute.Status != "Open")
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = $"Only Open disputes can start review. Current status: {dispute.Status}."
+                });
+            }
+
+            dispute.Status = "UnderReview";
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                status = 200,
+                message = "Dispute review started successfully.",
+                data = new
+                {
+                    disputeId = dispute.Id,
+                    dispute.Status
+                }
+            });
+        }
+
+        // GET: api/Admin/penalties
+        // Retrieves all penalty records for administrative review.
+        [HttpGet("penalties")]
+        public async Task<IActionResult> GetAllPenalties()
+        {
+            var penalties = await _context.Penalties
+                .OrderByDescending(p => p.Id)
+                .Select(p => new
+                {
+                    id = p.Id,
+                    disputeId = p.DisputeId,
+                    againstUserId = p.AgainstUserId,
+                    productValue = p.ProductValue,
+                    totalAmount = p.TotalAmount,
+                    oppositePartyAmount = p.OppositePartyAmount,
+                    platformAmount = p.PlatformAmount,
+                    status = p.Status
+                })
+                .ToListAsync();
+
+            return Ok(new
+            {
+                status = 200,
+                message = "Penalties retrieved successfully.",
+                data = penalties
+            });
+        }
+
     }
 }

@@ -26,6 +26,7 @@ namespace ProductAuction.API.Controllers
         // GET: api/dispute
         // Admin views all disputes.
         [HttpGet]
+         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> GetAllDisputes()
         {
             var disputes = await _context.Disputes.OrderByDescending(d => d.CreatedAt).ToListAsync();
