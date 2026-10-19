@@ -458,19 +458,18 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            if (reservation.Amount < totalPenalty ||
-                responsibleWallet.ReservedBalance < reservation.Amount ||
-                responsibleWallet.Balance < totalPenalty)
+            if (reservation.Amount != totalPenalty ||
+             responsibleWallet.ReservedBalance < reservation.Amount ||
+             responsibleWallet.Balance < totalPenalty)
             {
                 return BadRequest(new
                 {
                     status = 400,
-                    message = "The reserved funds are insufficient for the penalty."
+                    message = "The reserved deposit must exactly match the penalty amount, and the wallet must have sufficient funds."
                 });
             }
 
-            var oppositePartyWallet = await _context.Wallets
-                .FirstOrDefaultAsync(w => w.UserId == oppositePartyId);
+            var oppositePartyWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == oppositePartyId);
 
             if (oppositePartyWallet == null)
             {

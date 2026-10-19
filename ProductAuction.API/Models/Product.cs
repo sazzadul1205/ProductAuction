@@ -34,6 +34,8 @@ namespace ProductAuction.API.Models
         public string ApprovalStatus { get; set; } = "PendingApproval";
         public string? RejectionReason { get; set; }
 
+        public string Status { get; set; } = "Available";
+
         public DateTime CreatedAt { get; set; }
     }
 }

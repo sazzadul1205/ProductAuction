@@ -465,12 +465,25 @@ namespace ProductAuction.API.Controllers
         }
 
 
+
+        // PUT: api/auction/{id}/cancel
+        // Sellers can cancel upcoming auctions and forfeit their deposit.
+        // Admins can cancel upcoming or active auctions and release reservations.
         [HttpPut("{id}/cancel")]
         [Authorize]
         public async Task<IActionResult> CancelAuction(int id, CancelAuctionDto dto)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             var isAdmin = User.IsInRole("Admin");
+
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                return Unauthorized(new
+                {
+                    status = 401,
+                    message = "User identity was not found in the token."
+                });
+            }
 
             if (string.IsNullOrWhiteSpace(dto.Reason))
             {
@@ -480,6 +493,8 @@ namespace ProductAuction.API.Controllers
                     message = "A cancellation reason is required."
                 });
             }
+
+            await using var transaction = await _context.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable);
 
             var auction = await _context.Auctions.FirstOrDefaultAsync(a => a.Id == id);
 
@@ -499,7 +514,7 @@ namespace ProductAuction.API.Controllers
                 return Forbid();
             }
 
-            if (auction.Status != "Upcoming" && auction.Status != "Active")
+            if (auction.Status != "Upcoming" &&  auction.Status != "Active")
             {
                 return BadRequest(new
                 {
@@ -518,66 +533,172 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
+            // Find this seller's reserved deposit for this product.
             var reservation = await _context.WalletReservations
                 .FirstOrDefaultAsync(r =>
                     r.ProductId == auction.ProductId &&
+                    r.WalletId == _context.Wallets
+                        .Where(w => w.UserId == auction.SellerId)
+                        .Select(w => w.Id)
+                        .FirstOrDefault() &&
                     r.Type == "SellerDeposit" &&
                     r.Status == "Reserved");
 
+            if (isSeller && reservation == null)
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "No reserved seller deposit was found."
+                });
+            }
+
             if (reservation != null)
             {
+                var sellerWallet = await _context.Wallets
+                    .FirstOrDefaultAsync(w => w.Id == reservation.WalletId);
+
+                if (sellerWallet == null)
+                {
+                    return BadRequest(new
+                    {
+                        status = 400,
+                        message = "Seller wallet not found."
+                    });
+                }
+
+                if (sellerWallet.ReservedBalance < reservation.Amount)
+                {
+                    return BadRequest(new
+                    {
+                        status = 400,
+                        message = "Insufficient reserved balance to process the deposit."
+                    });
+                }
+
                 if (isSeller)
                 {
-                    // Seller cancellation: forfeit the deposit.
+                    // Forfeit the entire deposit to the platform.
+                    if (sellerWallet.Balance < reservation.Amount)
+                    {
+                        return BadRequest(new
+                        {
+                            status = 400,
+                            message = "Insufficient wallet balance to forfeit the deposit."
+                        });
+                    }
+
+                    var platformUser = await _context.Users.FirstOrDefaultAsync(u => u.UserName == "platform-system-account");
+
+                    if (platformUser == null)
+                    {
+                        return BadRequest(new
+                        {
+                            status = 400,
+                            message = "The platform account was not found."
+                        });
+                    }
+
+                    var platformWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == platformUser.Id);
+
+                    if (platformWallet == null)
+                    {
+                        return BadRequest(new
+                        {
+                            status = 400,
+                            message = "The platform wallet was not found."
+                        });
+                    }
+
+                    var now = DateTime.UtcNow;
+
+                    sellerWallet.Balance -= reservation.Amount;
+                    sellerWallet.ReservedBalance -= reservation.Amount;
+
+                    platformWallet.Balance += reservation.Amount;
+
                     reservation.Status = "Forfeited";
+
+                    // Record the debit from the seller.
+                    _context.WalletTransactions.Add(new WalletTransaction
+                    {
+                        WalletId = sellerWallet.Id,
+                        Type = "Penalty",
+                        Amount = reservation.Amount,
+                        BalanceAfter = sellerWallet.Balance,
+                        Reference = $"Seller deposit forfeited for auction #{auction.Id}",
+                        CreatedAt = now
+                    });
+
+                    // Record the amount received by the platform.
+                    _context.WalletTransactions.Add(new WalletTransaction
+                    {
+                        WalletId = platformWallet.Id,
+                        Type = "Credit",
+                        Amount = reservation.Amount,
+                        BalanceAfter = platformWallet.Balance,
+                        Reference = $"Seller deposit forfeiture for auction #{auction.Id}",
+                        CreatedAt = now
+                    });
                 }
                 else
                 {
-                    // Admin abort: return the seller's deposit.
-                    var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.Id == reservation.WalletId);
-
-                    if (wallet == null)
-                    {
-                        return BadRequest(new
-                        {
-                            status = 400,
-                            message = "Seller wallet not found."
-                        });
-                    }
-
-                    if (wallet.ReservedBalance < reservation.Amount)
-                    {
-                        return BadRequest(new
-                        {
-                            status = 400,
-                            message = "Insufficient reserved balance to release the deposit."
-                        });
-                    }
-
-                    wallet.ReservedBalance -= reservation.Amount;
+                    // Admin cancellation: release the seller's deposit.
+                    sellerWallet.ReservedBalance -= reservation.Amount;
                     reservation.Status = "Released";
                 }
+            }
 
-                // TODO: When an admin aborts an active auction, return the buyer's
-                // reserved 25% deposit/funds and update the corresponding
-                // WalletReservation and Wallet balances.
-                // Handle all affected buyers and prevent duplicate refunds.
+            // Admin cancellation also releases buyer eligibility reservations.
+            // Seller cancellation is allowed only for Upcoming auctions.
+            if (isAdmin)
+            {
+                var buyerReservations = await _context.WalletReservations
+                    .Where(r =>
+                        r.AuctionId == auction.Id &&
+                        r.Type == "BuyerFunds" &&
+                        r.Status == "Reserved")
+                    .ToListAsync();
 
-                auction.Status = "Cancelled";
-                auction.CancellationReason = dto.Reason;
+                foreach (var buyerReservation in buyerReservations)
+                {
+                    var buyerWallet = await _context.Wallets.FirstOrDefaultAsync(w =>w.Id == buyerReservation.WalletId);
+
+                    if (buyerWallet == null)
+                    {
+                        return BadRequest(new
+                        {
+                            status = 400,
+                            message = "A buyer wallet associated with a reservation was not found."
+                        });
+                    }
+
+                    if (buyerWallet.ReservedBalance < buyerReservation.Amount)
+                    {
+                        return BadRequest(new
+                        {
+                            status = 400,
+                            message = "Insufficient reserved balance to release a buyer reservation."
+                        });
+                    }
+
+                    buyerWallet.ReservedBalance -= buyerReservation.Amount;
+                    buyerReservation.Status = "Released";
+                }
             }
 
             auction.Status = "Cancelled";
-            auction.CancellationReason = dto.Reason;
+            auction.CancellationReason = dto.Reason.Trim();
 
             await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
 
             return Ok(new
             {
                 status = 200,
                 message = isSeller
-                    ? "Auction cancelled. Your deposit has been forfeited."
-                    : "Auction aborted by admin. The seller's deposit has been returned.",
+                    ? "Auction cancelled. Your deposit has been forfeited to the platform."
+                    : "Auction cancelled by admin. Seller and buyer reservations have been released.",
                 data = new
                 {
                     auction.Id,
@@ -587,14 +708,5 @@ namespace ProductAuction.API.Controllers
             });
         }
 
-
-        // TODO: Implement automatic auction completion after the bidding workflow is ready.
-        // - Check auctions whose EndTime has passed.
-        // - Determine the winner based on the highest valid bid.
-        // - Set WinnerId and Result ("Sold" or "NoWinner").
-        // - Update Status to "Completed".
-        // - Create the Sale record and set the payment deadline.
-        // - Ensure the completion process cannot run twice for the same auction.
-        // - Coordinate with the bidding and sale/payment workflows.
     }
 }

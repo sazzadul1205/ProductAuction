@@ -34,14 +34,14 @@ namespace ProductAuction.API.Controllers
             _configuration = configuration;
         }
 
+
         // POST: api/auth/register
-        // Creates an account, assigns a role, and saves the profile.
+        // Creates an account, assigns a role, and saves the profile and wallet.
         [HttpPost("register")]
         public async Task<IActionResult> Register(RegisterDto dto)
         {
             // Check whether the email is already registered.
-            var existingUser =
-                await _userManager.FindByEmailAsync(dto.Email);
+            var existingUser = await _userManager.FindByEmailAsync(dto.Email);
 
             if (existingUser != null)
             {
@@ -54,7 +54,7 @@ namespace ProductAuction.API.Controllers
 
             // Public registration only allows Buyer or Seller.
             if (dto.Role != "Buyer" && dto.Role != "Seller")
-                {
+            {
                 return BadRequest(new
                 {
                     status = 400,
@@ -62,80 +62,91 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            //if (dto.Role != "Buyer" && dto.Role != "Seller" && dto.Role != "Admin")
-            //{
-            //    return BadRequest(new
-            //    {
-            //        status = 400,
-            //        message = "Only Buyer and Seller roles are allowed."
-            //    });
-            //}
-
-            // Create the user's Identity account.
+            // Create the Identity user object.
             var user = new IdentityUser
             {
                 UserName = dto.Email,
                 Email = dto.Email
             };
 
-            // Identity securely hashes the password before storing it.
-            var result = await _userManager.CreateAsync(user, dto.Password);
+            // Start a transaction so all database changes succeed or roll back together.
+            await using var transaction = await _context.Database.BeginTransactionAsync();
 
-            if (!result.Succeeded)
+            try
             {
-                return BadRequest(new
+                // Create the user's Identity account.
+                // Identity securely hashes the password.
+                var result = await _userManager.CreateAsync(user, dto.Password);
+
+                if (!result.Succeeded)
                 {
-                    status = 400,
-                    message = "Registration failed.",
-                    errors = result.Errors
+                    await transaction.RollbackAsync();
+
+                    return BadRequest(new
+                    {
+                        status = 400,
+                        message = "Registration failed.",
+                        errors = result.Errors
+                    });
+                }
+
+                // Assign the selected role to the new account.
+                var roleResult = await _userManager.AddToRoleAsync(user, dto.Role);
+
+                if (!roleResult.Succeeded)
+                {
+                    await transaction.RollbackAsync();
+
+                    return BadRequest(new
+                    {
+                        status = 400,
+                        message = "Role assignment failed.",
+                        errors = roleResult.Errors
+                    });
+                }
+
+                // Create the user's profile.
+                var profile = new UserProfile
+                {
+                    UserId = user.Id,
+                    FullName = dto.FullName,
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                // Create an empty wallet for the new user.
+                var wallet = new Wallet
+                {
+                    UserId = user.Id,
+                    Balance = 0,
+                    ReservedBalance = 0
+                };
+
+                _context.UserProfiles.Add(profile);
+                _context.Wallets.Add(wallet);
+
+                // Save the profile and wallet.
+                await _context.SaveChangesAsync();
+
+                // Commit only after every required operation succeeds.
+                await transaction.CommitAsync();
+
+                return Ok(new
+                {
+                    status = 200,
+                    message = "Registration successful.",
+                    email = user.Email,
+                    role = dto.Role
                 });
             }
-
-            // Assign the selected role to the new account.
-            var roleResult = await _userManager.AddToRoleAsync(user, dto.Role);
-
-            // Remove the account if role assignment fails.
-            if (!roleResult.Succeeded)
+            catch
             {
-                await _userManager.DeleteAsync(user);
+                // Undo the database changes if an unexpected error occurs.
+                await transaction.RollbackAsync();
 
-                return BadRequest(new
-                {
-                    status = 400,
-                    message = "Role assignment failed.",
-                    errors = roleResult.Errors
-                });
+                throw;
             }
-
-            // Save additional user information in UserProfiles.
-            var profile = new UserProfile
-            {
-                UserId = user.Id,
-                FullName = dto.FullName,
-                CreatedAt = DateTime.UtcNow
-            };
-
-            // Create an empty wallet for the new user.
-            var wallet = new Wallet
-            {
-                UserId = user.Id,
-                Balance = 0,
-                ReservedBalance = 0
-            };
-
-            _context.UserProfiles.Add(profile);
-            _context.Wallets.Add(wallet);
-            await _context.SaveChangesAsync();
-
-            // Return a successful registration response.
-            return Ok(new
-            {
-                status = 200,
-                message = "Registration successful.",
-                email = user.Email,
-                role = dto.Role
-            });
         }
+
 
         // POST: api/auth/login
         // Checks the credentials and returns a JWT token.
@@ -143,7 +154,7 @@ namespace ProductAuction.API.Controllers
         public async Task<IActionResult> Login(LoginDto dto)
         {
             // Find the account by email.
-            var user =await _userManager.FindByEmailAsync(dto.Email);
+            var user = await _userManager.FindByEmailAsync(dto.Email);
 
             // Do not reveal whether the email or password was incorrect.
             if (user == null)
@@ -156,7 +167,7 @@ namespace ProductAuction.API.Controllers
             }
 
             // Check the submitted password.
-            var passwordIsValid =await _userManager.CheckPasswordAsync(user, dto.Password);
+            var passwordIsValid = await _userManager.CheckPasswordAsync(user, dto.Password);
 
             if (!passwordIsValid)
             {
@@ -210,6 +221,7 @@ namespace ProductAuction.API.Controllers
             });
         }
 
+
         // GET: api/auth/test-token
         // Requires a valid JWT token.
         [Authorize]
@@ -225,6 +237,7 @@ namespace ProductAuction.API.Controllers
                 role = User.FindFirst(ClaimTypes.Role)?.Value
             });
         }
+
 
         // GET: api/auth/me
         // Returns the current user's account and profile information.
@@ -294,6 +307,7 @@ namespace ProductAuction.API.Controllers
             });
         }
 
+
         // PUT: api/auth/me
         // Updates the editable profile of the currently logged-in user.
         [Authorize]
@@ -344,6 +358,7 @@ namespace ProductAuction.API.Controllers
             });
         }
 
+
         // POST: api/auth/change-password
         // Changes the password of the currently logged-in user.
         [Authorize]
@@ -375,7 +390,7 @@ namespace ProductAuction.API.Controllers
             }
 
             // and apply its configured password rules.
-            var result = await _userManager.ChangePasswordAsync(user,dto.CurrentPassword,dto.NewPassword);
+            var result = await _userManager.ChangePasswordAsync(user, dto.CurrentPassword, dto.NewPassword);
 
             if (!result.Succeeded)
             {

@@ -23,7 +23,7 @@ namespace ProductAuction.API.Controllers
         [HttpGet]
         public async Task<IActionResult> GetCategories()
         {
-            var categories = _context.Categories.ToListAsync();
+            var categories = await _context.Categories.ToListAsync();
 
             return Ok(new
             {

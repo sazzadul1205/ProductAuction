@@ -1,6 +1,11 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using ProductAuction.API.Data;
 
+// TODO: Handle overdue auctions whose StartTime and EndTime have both passed
+// while the application or background service was stopped.
+// Consider activating overdue auctions even if EndTime has passed, so that
+
+// AuctionResultBackgroundService can process them and mark them Completed.
 namespace ProductAuction.API.Services
 {
     // Background service that runs continuously and keeps auction statuses up to date.
@@ -31,11 +36,6 @@ namespace ProductAuction.API.Services
                     var now = DateTime.UtcNow;
 
                     // Find scheduled auctions whose start time has arrived.
-                    // Conditions:
-                    //   - Status is still "Upcoming"
-                    //   - StartTime and EndTime are both set
-                    //   - StartTime has already passed
-                    //   - EndTime has not passed yet
                     var auctions = await context.Auctions
                         .Where(a =>
                             a.Status == "Upcoming" &&

@@ -535,6 +535,7 @@ namespace ProductAuction.API.Controllers
         }
 
 
+
         // POST: api/sale/{id}/confirm-receipt
         // The buyer confirms receipt and the system settles the sale.
         [HttpPost("{id}/confirm-receipt")]
@@ -542,6 +543,7 @@ namespace ProductAuction.API.Controllers
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
+            // No ID in the token means the caller isn't logged in.
             if (userId == null)
             {
                 return Unauthorized(new
@@ -552,12 +554,10 @@ namespace ProductAuction.API.Controllers
             }
 
             // Keep all financial changes in one database transaction.
-            await using var transaction = await _context.Database
-                .BeginTransactionAsync(
+            await using var transaction = await _context.Database.BeginTransactionAsync(
                     System.Data.IsolationLevel.Serializable);
 
-            var sale = await _context.Sales
-                .FirstOrDefaultAsync(s => s.Id == id);
+            var sale = await _context.Sales.FirstOrDefaultAsync(s => s.Id == id);
 
             if (sale == null)
             {
@@ -569,12 +569,14 @@ namespace ProductAuction.API.Controllers
             }
 
             // Only the winning buyer can confirm receipt.
+            // Forbid() = 403: the user is logged in but not allowed to do this.
             if (sale.BuyerId != userId)
             {
                 return Forbid();
             }
 
             // Prevent duplicate settlement and block sales not awaiting receipt.
+            // Once settled, the status becomes "Completed", so a second call fails here.
             if (sale.Status != "Paid")
             {
                 return BadRequest(new
@@ -585,8 +587,8 @@ namespace ProductAuction.API.Controllers
             }
 
             // The product must have been dispatched first.
-            var delivery = await _context.DeliveryRecords
-                .FirstOrDefaultAsync(d => d.SaleId == sale.Id);
+            // This stops the buyer from releasing money before the seller shipped.
+            var delivery = await _context.DeliveryRecords.FirstOrDefaultAsync(d => d.SaleId == sale.Id);
 
             if (delivery == null || delivery.Status != "Dispatched")
             {
@@ -597,7 +599,8 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Find the reserved sale payment.
+            // Find the reserved sale payment (the escrow holding the buyer's money).
+            // The amount check makes sure the held funds match the sale total.
             var escrow = await _context.WalletReservations
                 .FirstOrDefaultAsync(r =>
                     r.SaleId == sale.Id &&
@@ -614,9 +617,14 @@ namespace ProductAuction.API.Controllers
             }
 
             // Verify that the recorded amounts add up to the sale amount.
+            // Sanity check so we never pay out more or less than the buyer paid.
             var commission = sale.CommissionAmount;
             var sellerProceeds = sale.SellerProceeds;
 
+
+            // Both parts must be non-negative, and together they must equal exactly what
+            // the buyer paid. This catches bad data 
+            // so we never pay out more or less than the sale amount.
             if (commission < 0 ||
                 sellerProceeds < 0 ||
                 commission + sellerProceeds != sale.FinalAmount)
@@ -641,7 +649,7 @@ namespace ProductAuction.API.Controllers
             }
 
             // Find the dedicated platform system account.
-            var platformUser = await _context.Users.FirstOrDefaultAsync(u => u.UserName == "platform-system-account");
+            var platformUser = await _context.Users.FirstOrDefaultAsync(u =>u.UserName == "platform-system-account");
 
             if (platformUser == null)
             {
@@ -665,6 +673,7 @@ namespace ProductAuction.API.Controllers
             }
 
             // The platform wallet must not be the seller's wallet.
+            // Guards against misconfiguration where the seller is the platform account.
             if (platformWallet.Id == sellerWallet.Id)
             {
                 return BadRequest(new
@@ -674,9 +683,11 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
+            // One timestamp for every record, so all changes share the same time.
             var now = DateTime.UtcNow;
 
-            //  Credit the seller with their proceeds.
+            // Credit the seller with their proceeds.
+            // Each balance change gets a WalletTransaction row as an audit trail.
             sellerWallet.Balance += sellerProceeds;
 
             _context.WalletTransactions.Add(new WalletTransaction
@@ -689,7 +700,7 @@ namespace ProductAuction.API.Controllers
                 CreatedAt = now
             });
 
-            //  Credit the platform with its commission.
+            // Credit the platform with its commission.
             platformWallet.Balance += commission;
 
             _context.WalletTransactions.Add(new WalletTransaction
@@ -702,21 +713,21 @@ namespace ProductAuction.API.Controllers
                 CreatedAt = now
             });
 
-            //  Release the seller's product deposit, following the
-            // current policy that the deposit is refundable after a sale.
+            // Release the seller's product deposit after a successful sale.
+            // Match both the product and seller wallet to avoid releasing
+            // another user's reservation.
             var sellerDeposit = await _context.WalletReservations
                 .FirstOrDefaultAsync(r =>
                     r.ProductId == sale.ProductId &&
+                    r.WalletId == sellerWallet.Id &&
                     r.Type == "SellerDeposit" &&
                     r.Status == "Reserved");
 
+            // The deposit is optional: if none exists, skip this block.
             if (sellerDeposit != null)
             {
-                var depositWallet = await _context.Wallets
-                    .FirstOrDefaultAsync(w =>
-                        w.Id == sellerDeposit.WalletId);
-
-                if (depositWallet == null || depositWallet.ReservedBalance < sellerDeposit.Amount)
+                // Safety check: never let ReservedBalance go negative.
+                if (sellerWallet.ReservedBalance < sellerDeposit.Amount)
                 {
                     return BadRequest(new
                     {
@@ -725,21 +736,23 @@ namespace ProductAuction.API.Controllers
                     });
                 }
 
-                depositWallet.ReservedBalance -= sellerDeposit.Amount;
+                // Un-reserve the money (it stays in Balance, it's just spendable again).
+                sellerWallet.ReservedBalance -= sellerDeposit.Amount;
                 sellerDeposit.Status = "Released";
 
                 _context.WalletTransactions.Add(new WalletTransaction
                 {
-                    WalletId = depositWallet.Id,
+                    WalletId = sellerWallet.Id,
                     Type = "Release",
                     Amount = sellerDeposit.Amount,
-                    BalanceAfter = depositWallet.Balance,
+                    BalanceAfter = sellerWallet.Balance,
                     Reference = $"Seller deposit release for product #{sale.ProductId}",
                     CreatedAt = now
                 });
             }
 
-            // Release the buyer's remaining eligibility reservations
+            // Release the buyer's remaining eligibility reservations.
+            // These are the funds held to allow bidding on this auction.
             var buyerReservations = await _context.WalletReservations
                 .Where(r =>
                     r.AuctionId == sale.AuctionId &&
@@ -747,10 +760,13 @@ namespace ProductAuction.API.Controllers
                     r.Status == "Reserved")
                 .ToListAsync();
 
+            // Release every remaining "BuyerFunds" reservation for this auction.
             foreach (var reservation in buyerReservations)
             {
+                // Load the wallet that holds this reservation.
                 var buyerWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.Id == reservation.WalletId);
 
+                // Safety check: stop if the wallet is missing, or if releasing would push
                 if (buyerWallet == null || buyerWallet.ReservedBalance < reservation.Amount)
                 {
                     return BadRequest(new
@@ -760,9 +776,13 @@ namespace ProductAuction.API.Controllers
                     });
                 }
 
+                // Un-reserve the money. Balance is untouched; the funds simply become
+                // spendable again.
                 buyerWallet.ReservedBalance -= reservation.Amount;
                 reservation.Status = "Released";
 
+                // Audit trail: one "Release" row per reservation.
+                // BalanceAfter shows Balance (not ReservedBalance), which stays the same here.
                 _context.WalletTransactions.Add(new WalletTransaction
                 {
                     WalletId = buyerWallet.Id,
@@ -777,12 +797,14 @@ namespace ProductAuction.API.Controllers
             // Close the escrow reservation.
             escrow.Status = "Released";
 
-            //  Mark delivery and sale as completed.
+            // Mark delivery and sale as completed.
+            // "Completed" is what blocks a second settlement (see the "Paid" check above).
             delivery.Status = "ReceiptConfirmed";
             delivery.ReceiptConfirmedAt = now;
             sale.Status = "Completed";
 
             // Save all financial and status changes together.
+            // Nothing is permanent until CommitAsync succeeds.
             await _context.SaveChangesAsync();
             await transaction.CommitAsync();
 

@@ -70,13 +70,79 @@ namespace ProductAuction.API.Services
                                 .ThenBy(b => b.PlacedAt)
                                 .FirstOrDefaultAsync(stoppingToken);
 
-                            // If nobody placed a bid, complete without a winner.
+                            // If nobody placed a bid, complete the auction
+                            // without a winner and release the seller's deposit.
                             if (highestBid == null)
                             {
+                                // Find the product to identify its seller.
+                                var product = await context.Products
+                                    .FirstOrDefaultAsync(
+                                        p => p.Id == auction.ProductId,
+                                        stoppingToken);
+
+                                // If the product is missing, roll back and
+                                // retry when the background service runs again.
+                                if (product == null)
+                                {
+                                    await transaction.RollbackAsync(stoppingToken);
+                                    continue;
+                                }
+
+                                // Find the seller's wallet.
+                                var sellerWallet = await context.Wallets
+                                    .FirstOrDefaultAsync(
+                                        w => w.UserId == product.SellerId,
+                                        stoppingToken);
+
+                                // Find the reserved deposit belonging to this
+                                // seller and product, not another user's wallet.
+                                var sellerDeposit = sellerWallet == null
+                                    ? null
+                                    : await context.WalletReservations
+                                        .FirstOrDefaultAsync(r =>
+                                            r.ProductId == auction.ProductId &&
+                                            r.WalletId == sellerWallet.Id &&
+                                            r.Type == "SellerDeposit" &&
+                                            r.Status == "Reserved",
+                                            stoppingToken);
+
+                                // Do not complete the auction if the seller's
+                                // wallet is missing or its reserved balance
+                                // cannot cover the deposit being released.
+                                if (sellerWallet == null ||
+                                    (sellerDeposit != null &&
+                                     sellerWallet.ReservedBalance < sellerDeposit.Amount))
+                                {
+                                    await transaction.RollbackAsync(stoppingToken);
+                                    continue;
+                                }
+
+                                // Release the seller's deposit, if one exists.
+                                // This reduces reserved funds without changing
+                                // the seller's available wallet balance.
+                                if (sellerDeposit != null)
+                                {
+                                    sellerWallet.ReservedBalance -= sellerDeposit.Amount;
+                                    sellerDeposit.Status = "Released";
+
+                                    // Record the release in the wallet history.
+                                    context.WalletTransactions.Add(new WalletTransaction
+                                    {
+                                        WalletId = sellerWallet.Id,
+                                        Type = "Release",
+                                        Amount = sellerDeposit.Amount,
+                                        BalanceAfter = sellerWallet.Balance,
+                                        Reference = $"Seller deposit release for no-winner auction #{auction.Id}",
+                                        CreatedAt = now
+                                    });
+                                }
+
+                                // Mark the auction as completed without a winner.
                                 auction.Status = "Completed";
                                 auction.Result = "NoWinner";
                                 auction.WinnerId = null;
                             }
+
                             else
                             {
                                 // Find the product to identify its seller.
