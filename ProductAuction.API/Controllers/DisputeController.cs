@@ -26,7 +26,7 @@ namespace ProductAuction.API.Controllers
         // GET: api/dispute
         // Admin views all disputes.
         [HttpGet]
-         [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> GetAllDisputes()
         {
             var disputes = await _context.Disputes.OrderByDescending(d => d.CreatedAt).ToListAsync();
@@ -282,16 +282,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // A positive product value is required when applying a penalty.
-            if (dto.ApplyPenalty &&
-                (!dto.ProductValue.HasValue || dto.ProductValue.Value <= 0))
-            {
-                return BadRequest(new
-                {
-                    status = 400,
-                    message = "A positive ProductValue is required when applying a penalty."
-                });
-            }
+
 
             // Keep all database changes in one transaction.
             await using var transaction = await _context.Database.BeginTransactionAsync();
@@ -397,12 +388,13 @@ namespace ProductAuction.API.Controllers
             dispute.AdminDecision = dto.AdminDecision.Trim();
             dispute.DecidedBy = adminId;
 
-            // Calculate penalty amounts using the value supplied by the admin.
-            decimal productValue = dto.ProductValue ?? 0m;
-            decimal totalPenalty = Math.Round(productValue * 0.25m, 2);
-            decimal oppositePartyAmount = Math.Round(productValue * 0.20m, 2);
-            decimal platformAmount = totalPenalty - oppositePartyAmount;
-
+            // The deposit is 25% of the product's starting price.
+            // Distribute the entire deposit: 80% to the opposite party,
+            // and 20% to the platform.
+            decimal productValue = product.StartingPrice;
+            decimal totalPenalty = Math.Round(product.StartingPrice * 0.25m, 2);
+            decimal oppositePartyAmount = Math.Round(totalPenalty * 0.80m, 2);
+            decimal platformAmount =totalPenalty - oppositePartyAmount;
 
             // OPTION 1: SYSTEM FAULT
             // No penalty. Refund escrow and release the deposits.
