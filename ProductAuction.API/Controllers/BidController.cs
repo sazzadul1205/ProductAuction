@@ -24,9 +24,10 @@ namespace ProductAuction.API.Controllers
         // Place a bid on an active auction.
         [HttpPost]
         [Authorize(Roles = "Buyer")]
+
         public async Task<IActionResult> PlaceBid(PlaceBidDto dto)
         {
-            // Read the logged-in user's ID from the JWT.
+            // Get the logged-in user's ID.
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             if (userId == null)
@@ -39,8 +40,7 @@ namespace ProductAuction.API.Controllers
             }
 
             // Find the auction.
-            var auction = await _context.Auctions
-                .FirstOrDefaultAsync(a => a.Id == dto.AuctionId);
+            var auction = await _context.Auctions.FirstOrDefaultAsync(a => a.Id == dto.AuctionId);
 
             if (auction == null)
             {
@@ -51,9 +51,8 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Find the product associated with this auction.
-            var product = await _context.Products
-                .FirstOrDefaultAsync(p => p.Id == auction.ProductId);
+            // Find the product.
+            var product = await _context.Products.FirstOrDefaultAsync(p => p.Id == auction.ProductId);
 
             if (product == null)
             {
@@ -64,7 +63,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Bids can only be placed on active auctions.
+            // Check auction status and end time.
             if (auction.Status != "Active")
             {
                 return BadRequest(new
@@ -74,7 +73,6 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Make sure the auction has not passed its end time.
             if (auction.EndTime == null || auction.EndTime <= DateTime.UtcNow)
             {
                 return BadRequest(new
@@ -84,7 +82,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // The product must be approved and available before anyone can bid.
+            // Check product availability.
             if (product.ApprovalStatus != "Approved" || product.Status != "Available")
             {
                 return BadRequest(new
@@ -104,39 +102,47 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Bids at or above the buyout price must use the buyout endpoint.
+            // Bids at or above the buyout price must use buyout.
             if (product.BuyoutPrice > 0 && dto.Amount >= product.BuyoutPrice)
             {
                 return BadRequest(new
                 {
                     status = 400,
-                    message = "Your bid must be below the buyout price. Use the buyout endpoint to purchase immediately."
+                    message = "Your bid must be below the buyout price. Use the buyout endpoint."
                 });
             }
 
-            // The first bid must meet or exceed the starting price.
+            // The first bid must meet the starting price.
             if (dto.Amount < product.StartingPrice)
             {
                 return BadRequest(new
                 {
                     status = 400,
-                    message = "Your bid must meet or exceed the starting price."
+                    message = $"Minimum bid is {product.StartingPrice:F2}."
                 });
             }
 
-            // Each new bid must exceed the current highest bid.
-            if (auction.CurrentHighestBid.HasValue && dto.Amount <= auction.CurrentHighestBid.Value)
+            // Check the minimum increment for subsequent bids.
+            if (auction.CurrentHighestBid.HasValue)
             {
-                return BadRequest(new
-                {
-                    status = 400,
-                    message = "Your bid must exceed the current highest bid."
-                });
-            }
+                var highestBid = auction.CurrentHighestBid.Value;
 
-            // TODO: Implement the 3-tier bidding system.
-            // Clarify tier boundaries and minimum bid increments with the team.
-            // For now, only require each new bid to exceed the current highest bid.
+                var increment = GetBidIncrement(
+                    highestBid,
+                    product.StartingPrice,
+                    product.BuyoutPrice);
+
+                var minimumBid = highestBid + increment;
+
+                if (dto.Amount < minimumBid)
+                {
+                    return BadRequest(new
+                    {
+                        status = 400,
+                        message = $"Minimum bid is {minimumBid:F2}."
+                    });
+                }
+            }
 
             // Find the buyer's wallet.
             var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == userId);
@@ -150,7 +156,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Check whether this buyer already has a reservation for this auction.
+            // Check for an existing reservation.
             var reservation = await _context.WalletReservations
                 .FirstOrDefaultAsync(r =>
                     r.AuctionId == auction.Id &&
@@ -158,12 +164,10 @@ namespace ProductAuction.API.Controllers
                     r.Type == "BuyerFunds" &&
                     r.Status == "Reserved");
 
-            // Reserve 25% of the starting price once per auction.
+            // Reserve 25% of the starting price only once.
             if (reservation == null)
             {
                 var requiredAmount = product.StartingPrice * 0.25m;
-
-                // Reserved funds cannot be reused.
                 var availableBalance = wallet.Balance - wallet.ReservedBalance;
 
                 if (availableBalance < requiredAmount)
@@ -175,10 +179,8 @@ namespace ProductAuction.API.Controllers
                     });
                 }
 
-                // Add the required amount to the reserved balance.
                 wallet.ReservedBalance += requiredAmount;
 
-                // Record the buyer's reservation.
                 reservation = new WalletReservation
                 {
                     WalletId = wallet.Id,
@@ -192,7 +194,7 @@ namespace ProductAuction.API.Controllers
                 _context.WalletReservations.Add(reservation);
             }
 
-            // Create the bid record.
+            // Create the bid.
             var bid = new Bid
             {
                 AuctionId = auction.Id,
@@ -203,7 +205,7 @@ namespace ProductAuction.API.Controllers
 
             _context.Bids.Add(bid);
 
-            // Update the auction's highest-bid information.
+            // Update the highest bid.
             auction.CurrentHighestBid = dto.Amount;
             auction.CurrentHighestBidderId = userId;
             auction.BidCount++;
@@ -517,5 +519,34 @@ namespace ProductAuction.API.Controllers
                 }
             });
         }
+
+
+        // Determines the minimum bid increment based on the current highest bid.
+        // The price range between the starting price and buyout price is divided into three tiers:
+        // Tier 1: 20 increment
+        // Tier 2: 50 increment
+        // Tier 3: 100 increment
+        private decimal GetBidIncrement(decimal currentBid, decimal startingPrice, decimal buyoutPrice)
+        {
+            // Calculate the total price range between the starting price and buyout price.
+            var range = buyoutPrice - startingPrice;
+
+            // If the buyout price is not greater than the starting price,
+            // use the default Tier 1 increment.
+            if (range <= 0)
+                return 20m;
+
+            // Tier 1: The current highest bid is in the first third of the price range.
+            if (currentBid < startingPrice + range / 3m)
+                return 20m;
+
+            // Tier 2: The current highest bid is in the middle third of the price range.
+            if (currentBid < startingPrice + range * 2m / 3m)
+                return 50m;
+
+            // Tier 3: The current highest bid is in the final third of the price range.
+            return 100m;
+        }
+
     }
 }

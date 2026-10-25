@@ -3,6 +3,7 @@
 .vscode/
 *.user
 *.suo
+.kilo
 
 # Build output
 **/bin/
