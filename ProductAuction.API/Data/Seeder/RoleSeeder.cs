@@ -1,7 +1,7 @@
 ﻿
 using Microsoft.AspNetCore.Identity;
 
-namespace ProductAuction.API.Data
+namespace ProductAuction.API.Data.Seeder
 {
     public static class RoleSeeder
     {

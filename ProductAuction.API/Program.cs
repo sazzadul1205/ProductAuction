@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using ProductAuction.API.Data;
+using ProductAuction.API.Data.Seeder;
 using ProductAuction.API.Services;
 using ProductAuction.API.Services.Background;
 using System.Text;

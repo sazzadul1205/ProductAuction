@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using ProductAuction.API.Models;
 
-namespace ProductAuction.API.Data
+namespace ProductAuction.API.Data.Seeder
 {
     public static class PlatformAccountSeeder
     {
