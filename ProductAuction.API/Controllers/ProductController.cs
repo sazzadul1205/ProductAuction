@@ -172,6 +172,7 @@ namespace ProductAuction.API.Controllers
         // POST: api/product
         // Create a New Product (saved as a Draft — no wallet reservation yet).
         [HttpPost]
+        [Authorize(Roles = "Seller")]
         public async Task<IActionResult> CreateProduct([FromForm] CreateProductDto dto)
         {
             // Read the user's ID from the validated JWT token.

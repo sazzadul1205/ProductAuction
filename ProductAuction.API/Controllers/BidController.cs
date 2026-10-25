@@ -103,6 +103,16 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
+            // Bids at or above the buyout price must use the buyout endpoint.
+            if (product.BuyoutPrice > 0 && dto.Amount >= product.BuyoutPrice)
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "Your bid must be below the buyout price. Use the buyout endpoint to purchase immediately."
+                });
+            }
+
             // The first bid must meet or exceed the starting price.
             if (dto.Amount < product.StartingPrice)
             {
@@ -310,6 +320,16 @@ namespace ProductAuction.API.Controllers
                 {
                     status = 404,
                     message = "Product not found."
+                });
+            }
+
+            // Prevent sellers from buying their own products.
+            if (auction.SellerId == userId)
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "You cannot buy out your own product."
                 });
             }
 
