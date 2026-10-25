@@ -283,7 +283,7 @@ namespace ProductAuction.API.Controllers
             }
 
             // Keep all database changes in one transaction.
-            await using var transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+            await using var transaction = await _context.Database.BeginTransactionAsync();
 
             var dispute = await _context.Disputes.FirstOrDefaultAsync(d => d.Id == id);
 

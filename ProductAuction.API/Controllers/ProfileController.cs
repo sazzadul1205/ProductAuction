@@ -22,6 +22,7 @@ namespace ProductAuction.API.Controllers
         // GET: api/profile
         // Get all the Profiles
         [HttpGet]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> GetAllProfiles()
         {
             // Retrieve all profiles, newest first.
@@ -53,6 +54,7 @@ namespace ProductAuction.API.Controllers
         // GET: api/profile
         // Get the Profile by Its Id
         [HttpGet("{id}")]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> GetProfileById(int id)
         {
             // Find the profile using its database ID.
@@ -237,8 +239,9 @@ namespace ProductAuction.API.Controllers
 
 
         // GET api/profile/5/verify
-        // Update the Profile With Eithere Varified or not 
+        // Update the Profile With Either Verified or not 
         [HttpPut("{id}/verify")]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> VerifyProfile(int id, VerifyProfileDto dto)
         {
             // Accept only the two supported decisions.
@@ -251,7 +254,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // If Rejected it needs a Rejection Reasone
+            // If Rejected it needs a Rejection Reason
             if (dto.Status == "Rejected" && string.IsNullOrEmpty(dto.RejectionReason))
             {
                 return BadRequest(new

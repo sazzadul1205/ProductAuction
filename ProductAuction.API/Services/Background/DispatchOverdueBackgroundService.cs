@@ -2,7 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using ProductAuction.API.Data;
 
-namespace ProductAuction.API.Services
+namespace ProductAuction.API.Services.Background
 {
     // Background service that identifies deliveries not dispatched on time.
     public class DispatchOverdueBackgroundService : BackgroundService

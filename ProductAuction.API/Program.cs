@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using ProductAuction.API.Data;
 using ProductAuction.API.Services;
+using ProductAuction.API.Services.Background;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);

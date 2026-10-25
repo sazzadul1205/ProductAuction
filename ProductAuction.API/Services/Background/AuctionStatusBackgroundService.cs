@@ -6,7 +6,7 @@ using ProductAuction.API.Data;
 // Consider activating overdue auctions even if EndTime has passed, so that
 
 // AuctionResultBackgroundService can process them and mark them Completed.
-namespace ProductAuction.API.Services
+namespace ProductAuction.API.Services.Background
 {
     // Background service that runs continuously and keeps auction statuses up to date.
     public class AuctionStatusBackgroundService : BackgroundService

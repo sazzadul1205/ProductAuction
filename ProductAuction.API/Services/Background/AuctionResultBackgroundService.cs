@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using ProductAuction.API.Data;
 using ProductAuction.API.Models;
 
-namespace ProductAuction.API.Services
+namespace ProductAuction.API.Services.Background
 {
     // Background service that processes auctions after they end.
     public class AuctionResultBackgroundService : BackgroundService

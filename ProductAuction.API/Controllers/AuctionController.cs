@@ -333,6 +333,7 @@ namespace ProductAuction.API.Controllers
         // Put: api/auction/{id}/configure
         // Admin configures the auction schedule.
         [HttpPut("{id}/configure")]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> ConfigureAuction(int id, UpdateAuctionScheduleDto dto)
         {
             var auction = await _context.Auctions.FindAsync(id);
@@ -521,7 +522,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            await using var transaction = await _context.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable);
+            await using var transaction = await _context.Database.BeginTransactionAsync();
 
             var auction = await _context.Auctions.FirstOrDefaultAsync(a => a.Id == id);
 

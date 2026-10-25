@@ -24,6 +24,7 @@ namespace ProductAuction.API.Controllers
         // GET: api/sale
         // Admin views all sales.
         [HttpGet]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> GetSales()
         {
             var sales = await _context.Sales
@@ -275,7 +276,7 @@ namespace ProductAuction.API.Controllers
             }
 
             // Start a transaction so all payment changes succeed together.
-            await using var transaction = await _context.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable);
+            await using var transaction = await _context.Database.BeginTransactionAsync();
 
             var sale = await _context.Sales.FirstOrDefaultAsync(s => s.Id == id && s.BuyerId == userId);
 
@@ -554,8 +555,7 @@ namespace ProductAuction.API.Controllers
             }
 
             // Keep all financial changes in one database transaction.
-            await using var transaction = await _context.Database.BeginTransactionAsync(
-                    System.Data.IsolationLevel.Serializable);
+            await using var transaction = await _context.Database.BeginTransactionAsync();
 
             var sale = await _context.Sales.FirstOrDefaultAsync(s => s.Id == id);
 

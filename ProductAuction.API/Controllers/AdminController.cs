@@ -452,6 +452,16 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
+            // Prevent reviewing the same deposit request more than once to avoid crediting the wallet multiple times.
+            if (depositRequest.Status != "PendingVerification")
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "This deposit request has already been reviewed."
+                });
+            }
+
             // Only Approved or Rejected statuses are allowed.
             if (dto.Status != "Approved" && dto.Status != "Rejected")
             {
