@@ -34,10 +34,10 @@ namespace ProductAuction.API.DTOs.Product
 
         public string? KnownIssues { get; set; }
 
-        [Range(typeof(decimal), "0.01", "9999999999")]
+        [Range(typeof(decimal), "100", "9999999999")]
         public decimal StartingPrice { get; set; }
 
-        [Range(typeof(decimal), "0.01", "9999999999")]
+        [Range(typeof(decimal), "100", "9999999999")]
         public decimal BuyoutPrice { get; set; }
 
         [Required]

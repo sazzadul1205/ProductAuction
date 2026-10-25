@@ -211,6 +211,7 @@ namespace ProductAuction.API.Controllers
         // GET: api/profile/pending-verification
         // Get all the Pofiles that are Pending Varification
         [HttpGet("pending-verification")]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> GetPendingVerificationProfiles()
         {
             var profiles = await _context.UserProfiles

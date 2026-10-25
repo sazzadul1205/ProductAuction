@@ -166,6 +166,14 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
+            if (await _userManager.IsLockedOutAsync(user))
+            {
+                return Unauthorized(new
+                {
+                    status = 401,
+                    message = "Account is locked."
+                });
+            }
             // Check the submitted password.
             var passwordIsValid = await _userManager.CheckPasswordAsync(user, dto.Password);
 

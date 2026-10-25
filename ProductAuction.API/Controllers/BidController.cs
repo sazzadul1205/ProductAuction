@@ -23,6 +23,7 @@ namespace ProductAuction.API.Controllers
         // POST: api/bid
         // Place a bid on an active auction.
         [HttpPost]
+        [Authorize(Roles = "Buyer")]
         public async Task<IActionResult> PlaceBid(PlaceBidDto dto)
         {
             // Read the logged-in user's ID from the JWT.
@@ -265,6 +266,7 @@ namespace ProductAuction.API.Controllers
         // POST: api/bid/5/buyout
         // Allows a buyer to purchase a product immediately at its buyout price.
         [HttpPost("{auctionId}/buyout")]
+        [Authorize(Roles = "Buyer")]
         public async Task<IActionResult> Buyout(int auctionId)
         {
             // Get the logged-in user's ID.

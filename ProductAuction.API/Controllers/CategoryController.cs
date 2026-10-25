@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Http;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ProductAuction.API.Data;
@@ -36,6 +37,7 @@ namespace ProductAuction.API.Controllers
         // POST: api/category
         // Only an Admin can create a category.
         [HttpPost]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> CreateCategory(CreateCategoryDto dto)
         {
 
@@ -86,6 +88,7 @@ namespace ProductAuction.API.Controllers
         // DELETE: api/category/5
         // Only an Admin can delete a category.
         [HttpDelete("{id}")]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> DeleteCategory(int id)
         {
             var category = _context.Categories.FirstOrDefault(c => c.Id == id);
