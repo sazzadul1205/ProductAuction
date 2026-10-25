@@ -328,59 +328,44 @@ namespace ProductAuction.API.Controllers
         [HttpPut("me")]
         public async Task<IActionResult> UpdateMe([FromForm] UpdateProfileDto dto)
         {
-            // Get the current user's ID from the validated JWT.
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId)) return Unauthorized();
 
-            if (string.IsNullOrEmpty(userId))
-            {
-                return Unauthorized(new
-                {
-                    status = 401,
-                    message = "User identity was not found in the token."
-                });
-            }
+            var profile = await _context.UserProfiles.FirstOrDefaultAsync(p => p.UserId == userId);
+            if (profile == null) return NotFound(new { message = "User profile not found." });
 
-            // Find the current user's profile.
-            var profile = await _context.UserProfiles
-                .FirstOrDefaultAsync(p => p.UserId == userId);
-
-            if (profile == null)
-            {
-                return NotFound(new
-                {
-                    status = 404,
-                    message = "User profile not found."
-                });
-            }
-
-            // Update the normal profile fields.
+            // 1. Update the UserProfile table fields
             profile.FullName = dto.FullName;
             profile.ProfilePhotoUrl = dto.ProfilePhotoUrl;
             profile.Address = dto.Address;
             profile.City = dto.City;
             profile.NationalIdNumber = dto.NationalIdNumber;
 
-            // Upload the front NID image only if a new file was selected.
+            // NID Image uploads...
             if (dto.NationalIdFrontImage != null)
-            {
-                profile.NationalIdFrontImageUrl =await _imageUploadService.UploadImageAsync(dto.NationalIdFrontImage);
-            }
-
-            // Upload the back NID image only if a new file was selected.
+                profile.NationalIdFrontImageUrl = await _imageUploadService.UploadImageAsync(dto.NationalIdFrontImage);
             if (dto.NationalIdBackImage != null)
-            {
-                profile.NationalIdBackImageUrl =await _imageUploadService.UploadImageAsync(dto.NationalIdBackImage);
-            }
+                profile.NationalIdBackImageUrl = await _imageUploadService.UploadImageAsync(dto.NationalIdBackImage);
 
             profile.UpdatedAt = DateTime.UtcNow;
 
+            // 2. Update the IdentityUser table (Phone Number)
+            if (!string.IsNullOrWhiteSpace(dto.PhoneNumber))
+            {
+                var user = await _userManager.FindByIdAsync(userId);
+                if (user != null)
+                {
+                    var phoneResult = await _userManager.SetPhoneNumberAsync(user, dto.PhoneNumber);
+                    if (!phoneResult.Succeeded)
+                    {
+                        return BadRequest(new { message = "Failed to update phone number." });
+                    }
+                }
+            }
+
             await _context.SaveChangesAsync();
 
-            return Ok(new
-            {
-                status = 200,
-                message = "Profile updated successfully."
-            });
+            return Ok(new { status = 200, message = "Profile updated successfully." });
         }
 
 
