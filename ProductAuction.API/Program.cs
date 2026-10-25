@@ -73,6 +73,9 @@ var app = builder.Build();
 // Create the default roles when the API starts.
 await RoleSeeder.SeedRolesAsync(app.Services);
 
+// Create the admin account when the API starts.
+await AdminAccountSeeder.SeedAdminAccountAsync(app.Services);
+
 // Create the platform account and wallet when the API starts.
 await PlatformAccountSeeder.SeedPlatformAccountAsync(app.Services);
 
