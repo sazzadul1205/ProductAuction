@@ -850,6 +850,43 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
+            // An approved product must have its required seller deposit reserved.
+            if (dto.Status == "Approved")
+            {
+                var reservation = await _context.WalletReservations
+                    .FirstOrDefaultAsync(r =>
+                        r.ProductId == product.Id &&
+                        r.Type == "SellerDeposit" &&
+                        r.Status == "Reserved");
+
+                decimal requiredDeposit = product.StartingPrice * 0.25m;
+
+                if (reservation == null || reservation.Amount != requiredDeposit)
+                {
+                    return BadRequest(new
+                    {
+                        status = 400,
+                        message = "The required seller deposit has not been reserved."
+                    });
+                }
+
+                var wallet = await _context.Wallets
+                    .FirstOrDefaultAsync(w =>
+                        w.Id == reservation.WalletId &&
+                        w.UserId == product.SellerId);
+
+                if (wallet == null ||
+                    wallet.ReservedBalance < reservation.Amount ||
+                    wallet.Balance < reservation.Amount)
+                {
+                    return BadRequest(new
+                    {
+                        status = 400,
+                        message = "The seller's reserved deposit is invalid or insufficient."
+                    });
+                }
+            }
+
             // Update the product's approval status.
             product.ApprovalStatus = dto.Status;
 

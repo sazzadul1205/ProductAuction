@@ -13,5 +13,8 @@ namespace ProductAuction.API.DTOs.Dispute
 
         [Required]
         public bool ApplyPenalty { get; set; }
+
+        // Required when applying a penalty.
+        public decimal? ProductValue { get; set; }
     }
 }

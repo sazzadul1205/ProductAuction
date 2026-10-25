@@ -282,6 +282,17 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
+            // A positive product value is required when applying a penalty.
+            if (dto.ApplyPenalty &&
+                (!dto.ProductValue.HasValue || dto.ProductValue.Value <= 0))
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "A positive ProductValue is required when applying a penalty."
+                });
+            }
+
             // Keep all database changes in one transaction.
             await using var transaction = await _context.Database.BeginTransactionAsync();
 
@@ -386,8 +397,8 @@ namespace ProductAuction.API.Controllers
             dispute.AdminDecision = dto.AdminDecision.Trim();
             dispute.DecidedBy = adminId;
 
-            // Calculate penalty amounts only when the admin applies a penalty.
-            decimal productValue = product.StartingPrice;
+            // Calculate penalty amounts using the value supplied by the admin.
+            decimal productValue = dto.ProductValue ?? 0m;
             decimal totalPenalty = Math.Round(productValue * 0.25m, 2);
             decimal oppositePartyAmount = Math.Round(productValue * 0.20m, 2);
             decimal platformAmount = totalPenalty - oppositePartyAmount;

@@ -396,13 +396,14 @@ namespace ProductAuction.API.Controllers
             // The payment is complete; seller payout comes later.
             sale.Status = "Paid";
             sale.PaymentSubmittedAt = now;
+            sale.SellerNotifiedAt = now;
 
-            // Set the seller's dispatch deadline.
+            // Set the seller's dispatch deadline to five days after notification.
             _context.DeliveryRecords.Add(new DeliveryRecord
             {
                 SaleId = sale.Id,
                 Status = "AwaitingDispatch",
-                DispatchDeadline = now.AddDays(5)
+                DispatchDeadline = sale.SellerNotifiedAt.Value.AddDays(5)
             });
 
             await _context.SaveChangesAsync();
@@ -486,7 +487,16 @@ namespace ProductAuction.API.Controllers
             }
 
             var now = DateTime.UtcNow;
-            var dispatchDeadline = sale.PaymentSubmittedAt.Value.AddDays(5);
+            if (!sale.SellerNotifiedAt.HasValue)
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "Seller notification timestamp is missing."
+                });
+            }
+
+            var dispatchDeadline = sale.SellerNotifiedAt.Value.AddDays(5);
 
             if (now > dispatchDeadline)
             {
