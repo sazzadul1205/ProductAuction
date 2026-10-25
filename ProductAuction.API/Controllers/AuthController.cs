@@ -8,6 +8,7 @@ using ProductAuction.API.Data;
 using ProductAuction.API.DTOs.Auth;
 using ProductAuction.API.DTOs.Profile;
 using ProductAuction.API.Models;
+using ProductAuction.API.Services;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
@@ -21,17 +22,21 @@ namespace ProductAuction.API.Controllers
         private readonly UserManager<IdentityUser> _userManager;
         private readonly AppDbContext _context;
 
+        private readonly IImageUploadService _imageUploadService;
+
         // Reads JWT settings from appsettings.json.
         private readonly IConfiguration _configuration;
 
         public AuthController(
             UserManager<IdentityUser> userManager,
             AppDbContext context,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            IImageUploadService imageUploadService)
         {
             _userManager = userManager;
             _context = context;
             _configuration = configuration;
+            _imageUploadService = imageUploadService;
         }
 
 
@@ -317,10 +322,11 @@ namespace ProductAuction.API.Controllers
 
 
         // PUT: api/auth/me
-        // Updates the editable profile of the currently logged-in user.
+        // Updates the editable profile and optionally uploads NID images
+        // for the currently logged-in user.
         [Authorize]
         [HttpPut("me")]
-        public async Task<IActionResult> UpdateMe(UpdateProfileDto dto)
+        public async Task<IActionResult> UpdateMe([FromForm] UpdateProfileDto dto)
         {
             // Get the current user's ID from the validated JWT.
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -347,14 +353,25 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Update the fields allowed by UpdateProfileDto.
+            // Update the normal profile fields.
             profile.FullName = dto.FullName;
             profile.ProfilePhotoUrl = dto.ProfilePhotoUrl;
             profile.Address = dto.Address;
             profile.City = dto.City;
             profile.NationalIdNumber = dto.NationalIdNumber;
-            profile.NationalIdFrontImageUrl = dto.NationalIdFrontImageUrl;
-            profile.NationalIdBackImageUrl = dto.NationalIdBackImageUrl;
+
+            // Upload the front NID image only if a new file was selected.
+            if (dto.NationalIdFrontImage != null)
+            {
+                profile.NationalIdFrontImageUrl =await _imageUploadService.UploadImageAsync(dto.NationalIdFrontImage);
+            }
+
+            // Upload the back NID image only if a new file was selected.
+            if (dto.NationalIdBackImage != null)
+            {
+                profile.NationalIdBackImageUrl =await _imageUploadService.UploadImageAsync(dto.NationalIdBackImage);
+            }
+
             profile.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();

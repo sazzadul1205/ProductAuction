@@ -1,5 +1,6 @@
 ﻿
 using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.Http;
 
 namespace ProductAuction.API.DTOs.Profile
 {
@@ -21,10 +22,10 @@ namespace ProductAuction.API.DTOs.Profile
         [StringLength(50)]
         public string? NationalIdNumber { get; set; }
 
-        [StringLength(500)]
-        public string? NationalIdFrontImageUrl { get; set; }
+        // Optional NID front image upload.
+        public IFormFile? NationalIdFrontImage { get; set; }
 
-        [StringLength(500)]
-        public string? NationalIdBackImageUrl { get; set; }
+        // Optional NID back image upload.
+        public IFormFile? NationalIdBackImage { get; set; }
     }
 }

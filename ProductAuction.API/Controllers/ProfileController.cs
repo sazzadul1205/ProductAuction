@@ -92,60 +92,6 @@ namespace ProductAuction.API.Controllers
             });
         }
 
-
-        // PUT: api/profile/me
-        // Updates the editable fields of the current user's profile.
-        [HttpPut("me")]
-        public async Task<IActionResult> UpdateMyProfile(UpdateProfileDto dto)
-        {
-            // Read the user's ID from the validated JWT token.
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-
-            if (userId == null)
-            {
-                return Unauthorized(new
-                {
-                    status = 401,
-                    message = "User identity was not found in the token."
-                });
-            }
-
-            // Find the profile belonging to this user.
-            var profile = await _context.UserProfiles.FirstOrDefaultAsync(p => p.UserId == userId);
-
-            if (profile == null)
-            {
-                return NotFound(new
-                {
-                    status = 404,
-                    message = "Profile not found."
-                });
-            }
-
-            // Update only the fields users are allowed to edit.
-            profile.FullName = dto.FullName;
-            profile.ProfilePhotoUrl = dto.ProfilePhotoUrl;
-            profile.Address = dto.Address;
-            profile.City = dto.City;
-            profile.NationalIdNumber = dto.NationalIdNumber;
-            profile.NationalIdFrontImageUrl = dto.NationalIdFrontImageUrl;
-            profile.NationalIdBackImageUrl = dto.NationalIdBackImageUrl;
-
-            // Record when the profile was last updated.
-            profile.UpdatedAt = DateTime.UtcNow;
-
-            // Save the changes to the database.
-            await _context.SaveChangesAsync();
-
-            return Ok(new
-            {
-                status = 200,
-                message = "Profile updated successfully."
-            });
-
-        }
-
-
         // PUT: api/profile/submit-verification
         // Update the Profile so the Product is now Goint To Varification 
         [HttpPut("submit-verification")]
