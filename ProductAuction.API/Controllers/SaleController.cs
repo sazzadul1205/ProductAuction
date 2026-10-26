@@ -99,7 +99,11 @@ namespace ProductAuction.API.Controllers
 
                     Status = s.Status,
                     PaymentDeadline = s.PaymentDeadline,
-                    CreatedAt = s.CreatedAt
+                    CreatedAt = s.CreatedAt,
+                    MainImageUrl = _context.ProductImages
+                        .Where(i => i.ProductId == s.ProductId && i.IsMain)
+                        .Select(i => i.ImageUrl)
+                        .FirstOrDefault() ?? ""
                 })
                 .ToListAsync();
 
@@ -507,11 +511,23 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // PayForSale creates this record when payment succeeds.
-            var delivery = await _context.DeliveryRecords.FirstOrDefaultAsync(d => d.SaleId == sale.Id);
+            // PayForSale normally creates this record when payment succeeds.
+            // If it is missing (e.g. the sale was paid through an alternate flow),
+            // create it here so dispatch can still be recorded.
+            var delivery = await _context.DeliveryRecords
+                .FirstOrDefaultAsync(d => d.SaleId == sale.Id);
 
-            if (delivery == null ||
-                delivery.Status != "AwaitingDispatch")
+            if (delivery == null)
+            {
+                delivery = new DeliveryRecord
+                {
+                    SaleId = sale.Id,
+                    Status = "AwaitingDispatch",
+                    DispatchDeadline = dispatchDeadline
+                };
+                _context.DeliveryRecords.Add(delivery);
+            }
+            else if (delivery.Status != "AwaitingDispatch")
             {
                 return BadRequest(new
                 {
@@ -526,6 +542,11 @@ namespace ProductAuction.API.Controllers
             delivery.DispatchInfo = dto.DispatchInfo;
             delivery.TrackingEvidence = dto.TrackingEvidence;
             delivery.DispatchedAt = now;
+            
+            
+            // Reflect the dispatch on the Sale itself so the seller list
+            // shows Dispatched instead of still showing Dispatch Item.
+            sale.Status = "Dispatched";
 
             await _context.SaveChangesAsync();
 

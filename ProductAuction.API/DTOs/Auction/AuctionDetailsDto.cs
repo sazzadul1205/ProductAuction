@@ -12,4 +12,17 @@
     public decimal? CurrentHighestBid { get; set; }
     public int BidCount { get; set; }
     public string? Result { get; set; }
+    public string? MainImageUrl { get; set; }
+    // Only populated by the seller-only view endpoint.
+    public string? CancellationReason { get; set; }
+
+    // Enriched product metadata used to render a rich Item Details panel.
+    public string? Brand { get; set; }
+    public string? ModelNumber { get; set; }
+    public string? Condition { get; set; }
+    public string? CategoryName { get; set; }
+    public DateTime? PurchaseDate { get; set; }
+    public string? UsageHistory { get; set; }
+    public string? ReasonForSelling { get; set; }
+    public string? KnownIssues { get; set; }
 }

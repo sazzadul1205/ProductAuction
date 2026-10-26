@@ -18,5 +18,8 @@
 
         public DateTime PaymentDeadline { get; set; }
         public DateTime CreatedAt { get; set; }
+
+        // Main product image, used by the seller/buyer list pages.
+        public string? MainImageUrl { get; set; }
     }
 }

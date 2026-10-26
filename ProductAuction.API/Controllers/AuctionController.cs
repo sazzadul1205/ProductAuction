@@ -286,6 +286,9 @@ namespace ProductAuction.API.Controllers
 
         // GET: api/auction/{id}
         // View details of one auction.
+        // Anyone can view any auction — including Completed and Cancelled ones —
+        // so the public marketplace can show final results and cancellation
+        // notices. The cancellation reason itself stays seller-only.
         [HttpGet("{id}")]
         public async Task<IActionResult> GetAuctionById(int id)
         {
@@ -321,7 +324,154 @@ namespace ProductAuction.API.Controllers
                     Status = a.Status,
                     CurrentHighestBid = a.CurrentHighestBid,
                     BidCount = a.BidCount,
-                    Result = a.Result
+                    Result = a.Result,
+                    MainImageUrl = _context.ProductImages
+                        .Where(i => i.ProductId == a.ProductId && i.IsMain)
+                        .Select(i => i.ImageUrl)
+                        .FirstOrDefault() ?? "",
+
+                    Brand = _context.Products
+                        .Where(p => p.Id == a.ProductId)
+                        .Select(p => p.Brand)
+                        .FirstOrDefault(),
+                    ModelNumber = _context.Products
+                        .Where(p => p.Id == a.ProductId)
+                        .Select(p => p.ModelNumber)
+                        .FirstOrDefault(),
+                    Condition = _context.Products
+                        .Where(p => p.Id == a.ProductId)
+                        .Select(p => p.Condition)
+                        .FirstOrDefault(),
+                    CategoryName = _context.Products
+                        .Where(p => p.Id == a.ProductId)
+                        .Select(p => p.Category.Name)
+                        .FirstOrDefault(),
+                    PurchaseDate = _context.Products
+                        .Where(p => p.Id == a.ProductId)
+                        .Select(p => p.PurchaseDate)
+                        .FirstOrDefault(),
+                    UsageHistory = _context.Products
+                        .Where(p => p.Id == a.ProductId)
+                        .Select(p => p.UsageHistory)
+                        .FirstOrDefault(),
+                    ReasonForSelling = _context.Products
+                        .Where(p => p.Id == a.ProductId)
+                        .Select(p => p.ReasonForSelling)
+                        .FirstOrDefault(),
+                    KnownIssues = _context.Products
+                        .Where(p => p.Id == a.ProductId)
+                        .Select(p => p.KnownIssues)
+                        .FirstOrDefault(),
+                })
+                .FirstOrDefaultAsync();
+
+            if (auction == null)
+            {
+                return NotFound(new
+                {
+                    status = 404,
+                    message = "Auction not found."
+                });
+            }
+
+            return Ok(new
+            {
+                status = 200,
+                message = "Auction details retrieved successfully.",
+                data = auction
+            });
+        }
+
+        // GET: api/auction/{id}/seller
+        // Seller-only view of one auction. Unlike the public endpoint, this
+        // returns ALL statuses (including Completed and Cancelled) and exposes
+        // the cancellation reason, so sellers can review their own ended auctions.
+        [HttpGet("{id}/seller")]
+        [Authorize]
+        public async Task<IActionResult> GetAuctionByIdForSeller(int id)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                return Unauthorized(new
+                {
+                    status = 401,
+                    message = "User identity was not found in the token."
+                });
+            }
+
+            var auction = await _context.Auctions
+                .Where(a => a.Id == id && a.SellerId == userId)
+                .Select(a => new AuctionDetailsDto
+                {
+                    Id = a.Id,
+                    ProductId = a.ProductId,
+
+                    ProductTitle = _context.Products
+                        .Where(p => p.Id == a.ProductId)
+                        .Select(p => p.Title)
+                        .FirstOrDefault() ?? string.Empty,
+
+                    ProductDescription = _context.Products
+                        .Where(p => p.Id == a.ProductId)
+                        .Select(p => p.Description)
+                        .FirstOrDefault() ?? string.Empty,
+
+                    StartingPrice = _context.Products
+                        .Where(p => p.Id == a.ProductId)
+                        .Select(p => p.StartingPrice)
+                        .FirstOrDefault(),
+
+                    BuyoutPrice = _context.Products
+                        .Where(p => p.Id == a.ProductId)
+                        .Select(p => p.BuyoutPrice)
+                        .FirstOrDefault(),
+
+                    StartTime = a.StartTime,
+                    EndTime = a.EndTime,
+                    Status = a.Status,
+                    CurrentHighestBid = a.CurrentHighestBid,
+                    BidCount = a.BidCount,
+                    Result = a.Result,
+                    MainImageUrl = _context.ProductImages
+                        .Where(i => i.ProductId == a.ProductId && i.IsMain)
+                        .Select(i => i.ImageUrl)
+                        .FirstOrDefault() ?? "",
+                    CancellationReason = a.CancellationReason,
+
+                    Brand = _context.Products
+                        .Where(p => p.Id == a.ProductId)
+                        .Select(p => p.Brand)
+                        .FirstOrDefault(),
+                    ModelNumber = _context.Products
+                        .Where(p => p.Id == a.ProductId)
+                        .Select(p => p.ModelNumber)
+                        .FirstOrDefault(),
+                    Condition = _context.Products
+                        .Where(p => p.Id == a.ProductId)
+                        .Select(p => p.Condition)
+                        .FirstOrDefault(),
+                    CategoryName = _context.Products
+                        .Where(p => p.Id == a.ProductId)
+                        .Select(p => p.Category.Name)
+                        .FirstOrDefault(),
+                    PurchaseDate = _context.Products
+                        .Where(p => p.Id == a.ProductId)
+                        .Select(p => p.PurchaseDate)
+                        .FirstOrDefault(),
+                    UsageHistory = _context.Products
+                        .Where(p => p.Id == a.ProductId)
+                        .Select(p => p.UsageHistory)
+                        .FirstOrDefault(),
+                    ReasonForSelling = _context.Products
+                        .Where(p => p.Id == a.ProductId)
+                        .Select(p => p.ReasonForSelling)
+                        .FirstOrDefault(),
+                    KnownIssues = _context.Products
+                        .Where(p => p.Id == a.ProductId)
+                        .Select(p => p.KnownIssues)
+                        .FirstOrDefault(),
                 })
                 .FirstOrDefaultAsync();
 
