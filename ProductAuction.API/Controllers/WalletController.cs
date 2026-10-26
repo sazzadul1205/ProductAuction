@@ -131,6 +131,59 @@ namespace ProductAuction.API.Controllers
             });
         }
 
+        // GET: api/wallet/deposit-requests
+        // Returns the deposit requests submitted by the logged-in user.
+        [HttpGet("deposit-requests")]
+        public async Task<IActionResult> GetMyDepositRequests()
+        {
+            // Get the user's ID from the JWT token.
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (userId == null)
+            {
+                return Unauthorized(new
+                {
+                    status = 401,
+                    message = "User ID not found."
+                });
+            }
+
+            // Find the wallet linked to this user.
+            var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == userId);
+            if (wallet == null)
+            {
+                return NotFound(new
+                {
+                    status = 404,
+                    message = "Wallet not found."
+                });
+            }
+
+            // Return every deposit request this user submitted, newest first.
+            var requests = await _context.DepositRequests
+                .Where(d => d.WalletId == wallet.Id)
+                .OrderByDescending(d => d.CreatedAt)
+                .Select(d => new DepositRequestResponseDto
+                {
+                    Id = d.Id,
+                    WalletId = d.WalletId,
+                    Method = d.Method,
+                    Amount = d.Amount,
+                    TransactionReference = d.TransactionReference,
+                    ReceiptImageUrl = d.ReceiptImageUrl,
+                    Status = d.Status,
+                    RejectionReason = d.RejectionReason,
+                    CreatedAt = d.CreatedAt
+                })
+                .ToListAsync();
+
+            return Ok(new
+            {
+                status = 200,
+                message = "Deposit requests retrieved successfully.",
+                data = requests
+            });
+        }
+
         // GET: api/wallet/transactions
         // Returns the transaction history for the logged-in user's wallet.
         [HttpGet("transactions")]

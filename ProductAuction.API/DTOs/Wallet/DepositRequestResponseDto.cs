@@ -9,6 +9,7 @@
         public string TransactionReference { get; set; } = string.Empty;
         public string ReceiptImageUrl { get; set; } = string.Empty;
         public string Status { get; set; } = string.Empty;
+        public string? RejectionReason { get; set; }
         public DateTime CreatedAt { get; set; }
     }
 }
