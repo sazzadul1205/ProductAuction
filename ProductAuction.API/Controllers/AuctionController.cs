@@ -20,11 +20,13 @@ namespace ProductAuction.API.Controllers
         }
 
         // Get: api/auction
-        // View all auctions.
+        // View all auctions that are scheduled or live.
+        // Pending auctions (Upcoming with no schedule) are hidden from the public.
         [HttpGet]
         public async Task<IActionResult> GetAuctions()
         {
             var auctions = await _context.Auctions
+                .Where(a => a.Status != "Upcoming" || a.StartTime.HasValue)
                 .Select(a => new AuctionListDto
                 {
                     Id = a.Id,
@@ -33,6 +35,16 @@ namespace ProductAuction.API.Controllers
                         .Where(p => p.Id == a.ProductId)
                         .Select(p => p.Title)
                         .FirstOrDefault() ?? string.Empty,
+
+                    StartingPrice = _context.Products
+                        .Where(p => p.Id == a.ProductId)
+                        .Select(p => p.StartingPrice)
+                        .FirstOrDefault(),
+                    BuyoutPrice = _context.Products
+                        .Where(p => p.Id == a.ProductId)
+                        .Select(p => p.BuyoutPrice)
+                        .FirstOrDefault(),
+
                     StartTime = a.StartTime,
                     EndTime = a.EndTime,
                     Status = a.Status,
@@ -78,6 +90,15 @@ namespace ProductAuction.API.Controllers
                         .Select(p => p.Title)
                         .FirstOrDefault() ?? string.Empty,
 
+                    StartingPrice = _context.Products
+                        .Where(p => p.Id == a.ProductId)
+                        .Select(p => p.StartingPrice)
+                        .FirstOrDefault(),
+                    BuyoutPrice = _context.Products
+                        .Where(p => p.Id == a.ProductId)
+                        .Select(p => p.BuyoutPrice)
+                        .FirstOrDefault(),
+
                     StartTime = a.StartTime,
                     EndTime = a.EndTime,
                     Status = a.Status,
@@ -112,6 +133,15 @@ namespace ProductAuction.API.Controllers
                         .Select(p => p.Title)
                         .FirstOrDefault() ?? string.Empty,
 
+                    StartingPrice = _context.Products
+                        .Where(p => p.Id == a.ProductId)
+                        .Select(p => p.StartingPrice)
+                        .FirstOrDefault(),
+                    BuyoutPrice = _context.Products
+                        .Where(p => p.Id == a.ProductId)
+                        .Select(p => p.BuyoutPrice)
+                        .FirstOrDefault(),
+
                     StartTime = a.StartTime,
                     EndTime = a.EndTime,
                     Status = a.Status,
@@ -134,7 +164,7 @@ namespace ProductAuction.API.Controllers
         public async Task<IActionResult> GetUpcomingAuctions()
         {
             var auctions = await _context.Auctions
-                .Where(a => a.Status == "Upcoming")
+                .Where(a => a.Status == "Upcoming" && a.StartTime.HasValue)
                 .Select(a => new AuctionListDto
                 {
                     Id = a.Id,
@@ -144,6 +174,15 @@ namespace ProductAuction.API.Controllers
                         .Where(p => p.Id == a.ProductId)
                         .Select(p => p.Title)
                         .FirstOrDefault() ?? string.Empty,
+
+                    StartingPrice = _context.Products
+                        .Where(p => p.Id == a.ProductId)
+                        .Select(p => p.StartingPrice)
+                        .FirstOrDefault(),
+                    BuyoutPrice = _context.Products
+                        .Where(p => p.Id == a.ProductId)
+                        .Select(p => p.BuyoutPrice)
+                        .FirstOrDefault(),
 
                     StartTime = a.StartTime,
                     EndTime = a.EndTime,
@@ -178,6 +217,15 @@ namespace ProductAuction.API.Controllers
                         .Select(p => p.Title)
                         .FirstOrDefault() ?? string.Empty,
 
+                    StartingPrice = _context.Products
+                        .Where(p => p.Id == a.ProductId)
+                        .Select(p => p.StartingPrice)
+                        .FirstOrDefault(),
+                    BuyoutPrice = _context.Products
+                        .Where(p => p.Id == a.ProductId)
+                        .Select(p => p.BuyoutPrice)
+                        .FirstOrDefault(),
+
                     StartTime = a.StartTime,
                     EndTime = a.EndTime,
                     Status = a.Status,
@@ -210,6 +258,15 @@ namespace ProductAuction.API.Controllers
                         .Where(p => p.Id == a.ProductId)
                         .Select(p => p.Title)
                         .FirstOrDefault() ?? string.Empty,
+
+                    StartingPrice = _context.Products
+                        .Where(p => p.Id == a.ProductId)
+                        .Select(p => p.StartingPrice)
+                        .FirstOrDefault(),
+                    BuyoutPrice = _context.Products
+                        .Where(p => p.Id == a.ProductId)
+                        .Select(p => p.BuyoutPrice)
+                        .FirstOrDefault(),
 
                     StartTime = a.StartTime,
                     EndTime = a.EndTime,
@@ -313,6 +370,15 @@ namespace ProductAuction.API.Controllers
                         .Where(p => p.Id == a.ProductId)
                         .Select(p => p.Title)
                         .FirstOrDefault() ?? string.Empty,
+
+                    StartingPrice = _context.Products
+                        .Where(p => p.Id == a.ProductId)
+                        .Select(p => p.StartingPrice)
+                        .FirstOrDefault(),
+                    BuyoutPrice = _context.Products
+                        .Where(p => p.Id == a.ProductId)
+                        .Select(p => p.BuyoutPrice)
+                        .FirstOrDefault(),
 
                     StartTime = a.StartTime,
                     EndTime = a.EndTime,
