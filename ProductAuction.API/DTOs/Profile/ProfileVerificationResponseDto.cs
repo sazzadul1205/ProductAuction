@@ -5,6 +5,7 @@
         public int Id { get; set; }
         public string UserId { get; set; } = string.Empty;
         public string FullName { get; set; } = string.Empty;
+        public string? Role { get; set; }
         public string? PhoneNumber { get; set; }
         public string? City { get; set; }
         public string? Address { get; set; }

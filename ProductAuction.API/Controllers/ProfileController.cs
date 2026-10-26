@@ -33,6 +33,13 @@ namespace ProductAuction.API.Controllers
                     Id = p.Id,
                     UserId = p.UserId,
                     FullName = p.FullName,
+                    Role = _context.UserRoles
+                        .Where(ur => ur.UserId == p.UserId)
+                        .Join(_context.Roles,
+                            ur => ur.RoleId,
+                            r => r.Id,
+                            (ur, r) => r.Name)
+                        .FirstOrDefault(),
                     NationalIdNumber = p.NationalIdNumber,
                     NationalIdFrontImageUrl = p.NationalIdFrontImageUrl,
                     NationalIdBackImageUrl = p.NationalIdBackImageUrl,
@@ -174,6 +181,15 @@ namespace ProductAuction.API.Controllers
                     PhoneNumber = _context.Users
                         .Where(u => u.Id == p.UserId)
                         .Select(u => u.PhoneNumber)
+                        .FirstOrDefault(),
+
+                    // Fetch the user's assigned role (Buyer / Seller)
+                    Role = _context.UserRoles
+                        .Where(ur => ur.UserId == p.UserId)
+                        .Join(_context.Roles,
+                            ur => ur.RoleId,
+                            r => r.Id,
+                            (ur, r) => r.Name)
                         .FirstOrDefault(),
 
                     NationalIdNumber = p.NationalIdNumber,
