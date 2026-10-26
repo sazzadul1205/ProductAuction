@@ -151,7 +151,7 @@ namespace ProductAuction.API.Controllers
                     paymentStatus = _context.Sales
                         .Where(s => s.AuctionId == a.Id && s.BuyerId == buyerId)
                         .Select(s => s.Status)
-                        .FirstOrDefault()
+                        .FirstOrDefault() ?? "AwaitingPayment" ?? "AwaitingPayment"
                 })
                 .ToListAsync();
 

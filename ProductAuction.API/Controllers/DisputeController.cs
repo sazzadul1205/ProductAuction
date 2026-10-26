@@ -180,6 +180,29 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
+            // A completed sale cannot be disputed again.
+            if (sale.Status == "Completed")
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "A dispute cannot be raised for a completed sale."
+                });
+            }
+
+            // Sellers may only raise a dispute after the 3-day payment
+            // window has closed. This gives the buyer time to pay before
+            // the seller can accuse them of non-payment.
+            bool isSeller = sale.SellerId == userId;
+            if (isSeller && DateTime.UtcNow <= sale.PaymentDeadline)
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "The seller can only raise a dispute after the payment window has ended."
+                });
+            }
+
             // Prevent duplicate disputes for the same sale.
             var existingDispute = await _context.Disputes.AnyAsync(d => d.SaleId == sale.Id);
 
