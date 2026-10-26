@@ -207,6 +207,7 @@ namespace ProductAuction.API.Controllers
                     approvalStatus = p.ApprovalStatus,
                     status = p.Status,
                     rejectionReason = p.RejectionReason,
+                    condition = p.Condition,
                     createdAt = p.CreatedAt,
 
                     mainImageUrl = _context.ProductImages
@@ -242,6 +243,11 @@ namespace ProductAuction.API.Controllers
                         .Where(p => p.Id == a.ProductId)
                         .Select(p => p.Title)
                         .FirstOrDefault() ?? string.Empty,
+
+                    mainImageUrl = _context.ProductImages
+                        .Where(i => i.ProductId == a.ProductId && i.IsMain)
+                        .Select(i => i.ImageUrl)
+                        .FirstOrDefault() ?? "",
 
                     sellerId = a.SellerId,
                     startTime = a.StartTime,

@@ -101,6 +101,69 @@ namespace ProductAuction.API.Controllers
             });
         }
 
+
+        // GET: api/product/my-products/{id}
+        // Retrieve one product owned by the logged-in seller (any status).
+        [HttpGet("my-products/{id}")]
+        [Authorize(Roles = "Seller")]
+        public async Task<IActionResult> GetMyProductById(int id)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (userId == null) return Unauthorized();
+
+            var product = await _context.Products
+                .Where(p => p.Id == id && p.SellerId == userId)
+                .Select(p => new ProductResponseDto
+                {
+                    Id = p.Id,
+                    SellerId = p.SellerId,
+                    CategoryId = p.CategoryId,
+                    CategoryName = p.Category.Name,
+                    Title = p.Title,
+                    ShortSummary = p.ShortSummary,
+                    Description = p.Description,
+                    Brand = p.Brand,
+                    ModelNumber = p.ModelNumber,
+                    Condition = p.Condition,
+                    PurchaseDate = p.PurchaseDate,
+                    UsageHistory = p.UsageHistory,
+                    ReasonForSelling = p.ReasonForSelling,
+                    KnownIssues = p.KnownIssues,
+                    StartingPrice = p.StartingPrice,
+                    BuyoutPrice = p.BuyoutPrice,
+                    ApprovalStatus = p.ApprovalStatus,
+                    RejectionReason = p.RejectionReason,
+                    Status = p.Status,
+                    CreatedAt = p.CreatedAt,
+                    Images = _context.ProductImages
+                        .Where(i => i.ProductId == p.Id)
+                        .Select(i => new ProductImageResponseDto
+                        {
+                            Id = i.Id,
+                            ImageUrl = i.ImageUrl,
+                            IsMain = i.IsMain
+                        })
+                        .ToList()
+                })
+                .FirstOrDefaultAsync();
+
+            if (product == null)
+            {
+                return NotFound(new
+                {
+                    status = 404,
+                    message = "Product not found."
+                });
+            }
+
+            return Ok(new
+            {
+                status = 200,
+                message = "Product retrieved successfully.",
+                data = product
+            });
+        }
+
         // GET: api/product/{id}
         // Retrieve one approved product with its details and images.
         [HttpGet("{id}")]
@@ -723,6 +786,9 @@ namespace ProductAuction.API.Controllers
                     BuyoutPrice = p.BuyoutPrice,
                     Status = p.Status,
                     ApprovalStatus = p.ApprovalStatus,
+                    CategoryName = p.Category.Name,
+                    Condition = p.Condition,
+                    RejectionReason = p.RejectionReason,
 
                     MainImageUrl = _context.ProductImages
                         .Where(i => i.ProductId == p.Id && i.IsMain)

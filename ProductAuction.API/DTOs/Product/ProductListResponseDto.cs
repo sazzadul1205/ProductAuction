@@ -19,6 +19,11 @@ namespace ProductAuction.API.DTOs.Product
 
         public string? MainImageUrl { get; set; }
 
+        // Used by admin moderation pages to show category/condition/rejection
+        public string? CategoryName { get; set; }
+        public string? Condition { get; set; }
+        public string? RejectionReason { get; set; }
+
         public DateTime CreatedAt { get; set; }
     }
 }
