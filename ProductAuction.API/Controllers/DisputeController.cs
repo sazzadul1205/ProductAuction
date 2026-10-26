@@ -1,10 +1,11 @@
-﻿
+
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ProductAuction.API.Data;
 using ProductAuction.API.DTOs.Dispute;
 using ProductAuction.API.Models;
+using ProductAuction.API.Services;
 using System.Data;
 using System.Security.Claims;
 
@@ -16,10 +17,12 @@ namespace ProductAuction.API.Controllers
     public class DisputeController : ControllerBase
     {
         private readonly AppDbContext _context;
+        private readonly IImageUploadService _imageUploadService;
 
-        public DisputeController(AppDbContext context)
+        public DisputeController(AppDbContext context, IImageUploadService imageUploadService)
         {
             _context = context;
+            _imageUploadService = imageUploadService;
         }
 
 
@@ -216,15 +219,22 @@ namespace ProductAuction.API.Controllers
             }
 
             // Create the dispute record.
+            // Evidence is image-only. If the user supplied a photo, upload
+            // it to the shared image store and store the returned URL.
+            string? evidenceUrl = null;
+
+            if (dto.EvidenceImage != null)
+            {
+                evidenceUrl = await _imageUploadService.UploadImageAsync(dto.EvidenceImage);
+            }
+
             var dispute = new Dispute
             {
                 SaleId = sale.Id,
                 ProductId = sale.ProductId,
                 RaisedBy = userId,
                 Complaint = dto.Complaint,
-                EvidenceUrl = string.IsNullOrWhiteSpace(dto.EvidenceUrl)
-                    ? null
-                    : dto.EvidenceUrl,
+                EvidenceUrl = evidenceUrl,
                 Status = "Open",
                 CreatedAt = DateTime.UtcNow
             };
