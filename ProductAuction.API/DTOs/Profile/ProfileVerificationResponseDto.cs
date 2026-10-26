@@ -1,11 +1,14 @@
-﻿
-namespace ProductAuction.API.DTOs.Profile
+﻿namespace ProductAuction.API.DTOs.Profile
 {
     public class ProfileVerificationResponseDto
     {
         public int Id { get; set; }
         public string UserId { get; set; } = string.Empty;
         public string FullName { get; set; } = string.Empty;
+        public string? PhoneNumber { get; set; }
+        public string? City { get; set; }
+        public string? Address { get; set; }
+
         public string? NationalIdNumber { get; set; }
         public string? NationalIdFrontImageUrl { get; set; }
         public string? NationalIdBackImageUrl { get; set; }

@@ -122,7 +122,7 @@ namespace ProductAuction.API.Controllers
             }
 
             // Require all National ID details before submission.
-            if (string.IsNullOrEmpty(profile.NationalIdNumber) ||string.IsNullOrEmpty(profile.NationalIdFrontImageUrl) || string.IsNullOrEmpty(profile.NationalIdBackImageUrl))
+            if (string.IsNullOrEmpty(profile.NationalIdNumber) || string.IsNullOrEmpty(profile.NationalIdFrontImageUrl) || string.IsNullOrEmpty(profile.NationalIdBackImageUrl))
             {
                 return BadRequest(new
                 {
@@ -167,6 +167,15 @@ namespace ProductAuction.API.Controllers
                     Id = p.Id,
                     UserId = p.UserId,
                     FullName = p.FullName,
+                    City = p.City,
+                    Address = p.Address,
+
+                    // Fetch the phone number from the AspNetUsers (Identity) table
+                    PhoneNumber = _context.Users
+                        .Where(u => u.Id == p.UserId)
+                        .Select(u => u.PhoneNumber)
+                        .FirstOrDefault(),
+
                     NationalIdNumber = p.NationalIdNumber,
                     NationalIdFrontImageUrl = p.NationalIdFrontImageUrl,
                     NationalIdBackImageUrl = p.NationalIdBackImageUrl,
@@ -183,7 +192,6 @@ namespace ProductAuction.API.Controllers
                 data = profiles
             });
         }
-
 
         // GET api/profile/5/verify
         // Update the Profile With Either Verified or not 
@@ -212,7 +220,7 @@ namespace ProductAuction.API.Controllers
             }
 
             // Check if the Profile Exsisits 
-            var profile = await _context.UserProfiles.FirstOrDefaultAsync(p => p.Id  == id);
+            var profile = await _context.UserProfiles.FirstOrDefaultAsync(p => p.Id == id);
 
             if (profile == null)
             {
