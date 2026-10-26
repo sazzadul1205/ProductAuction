@@ -1,4 +1,4 @@
-﻿
+
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -567,11 +567,117 @@ namespace ProductAuction.API.Controllers
         }
 
 
+        // POST: api/sale/{id}/report-non-delivery
+        // The seller reports that the buyer never picked up the item after
+        // dispatch. Allowed only when the delivery is Dispatched and the
+        // 10-day pickup window (measured from DispatchedAt) has passed.
+        [HttpPost("{id}/report-non-delivery")]
+        public async Task<IActionResult> ReportNonDelivery(int id)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            if (userId == null)
+            {
+                return Unauthorized(new
+                {
+                    status = 401,
+                    message = "Please log in first."
+                });
+            }
+
+            var sale = await _context.Sales.FirstOrDefaultAsync(s => s.Id == id);
+
+            if (sale == null)
+            {
+                return NotFound(new
+                {
+                    status = 404,
+                    message = "Sale not found."
+                });
+            }
+
+            // Only the seller can report non-delivery.
+            if (sale.SellerId != userId)
+            {
+                return Forbid();
+            }
+
+            // The sale must be in the Dispatched state.
+            if (sale.Status != "Dispatched")
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "The sale must be dispatched before non-delivery can be reported."
+                });
+            }
+
+            var delivery = await _context.DeliveryRecords.FirstOrDefaultAsync(d => d.SaleId == sale.Id);
+
+            if (delivery == null || delivery.Status != "Dispatched" || !delivery.DispatchedAt.HasValue)
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "Delivery record is missing or dispatch has not been recorded."
+                });
+            }
+
+            var now = DateTime.UtcNow;
+            var pickupDeadline = delivery.DispatchedAt.Value.AddDays(10);
+
+            // The seller must wait the full 10-day pickup window before
+            // they can accuse the buyer of abandoning the item.
+            if (now <= pickupDeadline)
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "The 10-day pickup window has not yet passed. Please wait."
+                });
+            }
+
+            // Prevent duplicate reports.
+            if (delivery.Status == "NonDeliveryReported")
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "A non-delivery report has already been submitted for this sale."
+                });
+            }
+
+            // Mark the delivery as non-delivery reported and lock the sale
+            // so the buyer cannot confirm receipt anymore. The admin will
+            // review the dispute and decide the outcome.
+            delivery.Status = "NonDeliveryReported";
+            sale.Status = "Disputed";
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                status = 200,
+                message = "Non-delivery reported. Awaiting admin review.",
+                data = new
+                {
+                    SaleId = sale.Id,
+                    SaleStatus = sale.Status,
+                    DeliveryStatus = delivery.Status,
+                    delivery.DispatchedAt,
+                    PickupDeadline = pickupDeadline
+                }
+            });
+        }
+
+
 
         // POST: api/sale/{id}/confirm-receipt
         // The buyer confirms receipt and the system settles the sale.
+        // The buyer MUST supply proof (a photo, tracking screenshot, or
+        // URL) so the seller has evidence the item was received.
         [HttpPost("{id}/confirm-receipt")]
-        public async Task<IActionResult> ConfirmReceipt(int id)
+        public async Task<IActionResult> ConfirmReceipt(int id, ConfirmReceiptDto dto)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
@@ -582,6 +688,17 @@ namespace ProductAuction.API.Controllers
                 {
                     status = 401,
                     message = "Please log in first."
+                });
+            }
+
+            // Proof of receipt is mandatory. Without it the seller has no
+            // evidence the buyer actually received the item.
+            if (string.IsNullOrWhiteSpace(dto.ReceiptProofUrl))
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "Proof of receipt is required. Please provide a photo, tracking screenshot, or URL."
                 });
             }
 
@@ -832,6 +949,10 @@ namespace ProductAuction.API.Controllers
             // "Completed" is what blocks a second settlement (see the "Paid" check above).
             delivery.Status = "ReceiptConfirmed";
             delivery.ReceiptConfirmedAt = now;
+            delivery.ReceiptProofUrl = dto.ReceiptProofUrl.Trim();
+            delivery.ReceiptNotes = string.IsNullOrWhiteSpace(dto.ReceiptNotes)
+                ? null
+                : dto.ReceiptNotes.Trim();
             sale.Status = "Completed";
 
             // Save all financial and status changes together.
@@ -859,3 +980,5 @@ namespace ProductAuction.API.Controllers
         }
     }
 }
+
+

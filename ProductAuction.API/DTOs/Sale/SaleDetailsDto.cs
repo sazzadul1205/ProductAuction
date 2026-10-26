@@ -41,5 +41,10 @@
         public string? TrackingEvidence { get; set; }
         public DateTime? DispatchedAt { get; set; }
         public DateTime? ReceiptConfirmedAt { get; set; }
+
+        // Proof uploaded by the buyer when confirming receipt.
+        // Lets the seller verify the item was actually received.
+        public string? ReceiptProofUrl { get; set; }
+        public string? ReceiptNotes { get; set; }
     }
 }

@@ -270,6 +270,8 @@ namespace ProductAuction.API.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ProductId");
+
                     b.ToTable("Auctions");
                 });
 
@@ -299,6 +301,8 @@ namespace ProductAuction.API.Migrations
                         .HasColumnType("datetime2");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("AuctionId");
 
                     b.ToTable("Bids");
                 });
@@ -339,6 +343,12 @@ namespace ProductAuction.API.Migrations
 
                     b.Property<DateTime?>("ReceiptConfirmedAt")
                         .HasColumnType("datetime2");
+
+                    b.Property<string>("ReceiptNotes")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("ReceiptProofUrl")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<int>("SaleId")
                         .HasColumnType("int");
@@ -857,6 +867,28 @@ namespace ProductAuction.API.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("ProductAuction.API.Models.Auction", b =>
+                {
+                    b.HasOne("ProductAuction.API.Models.Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Product");
+                });
+
+            modelBuilder.Entity("ProductAuction.API.Models.Bid", b =>
+                {
+                    b.HasOne("ProductAuction.API.Models.Auction", "Auction")
+                        .WithMany()
+                        .HasForeignKey("AuctionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Auction");
                 });
 
             modelBuilder.Entity("ProductAuction.API.Models.Product", b =>
