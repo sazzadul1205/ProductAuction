@@ -1,5 +1,4 @@
-﻿
-namespace ProductAuction.API.DTOs.Product
+﻿namespace ProductAuction.API.DTOs.Product
 {
     public class ProductListResponseDto
     {
@@ -25,5 +24,15 @@ namespace ProductAuction.API.DTOs.Product
         public string? RejectionReason { get; set; }
 
         public DateTime CreatedAt { get; set; }
+
+        // Auction info (null when no auction exists for this product).
+        // Lets sellers see the live/cancelled/completed status of their auction.
+        public string? AuctionStatus { get; set; }
+        public DateTime? AuctionStartTime { get; set; }
+        public DateTime? AuctionEndTime { get; set; }
+        public int? AuctionId { get; set; }
+        public int? AuctionBidCount { get; set; }
+        public decimal? AuctionCurrentHighestBid { get; set; }
+        public string? AuctionCancellationReason { get; set; }
     }
 }

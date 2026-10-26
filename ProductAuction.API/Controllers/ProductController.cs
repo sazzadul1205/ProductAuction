@@ -90,7 +90,37 @@ namespace ProductAuction.API.Controllers
                         .Where(i => i.ProductId == p.Id && i.IsMain)
                         .Select(i => i.ImageUrl)
                         .FirstOrDefault(),
-                    CreatedAt = p.CreatedAt
+                    CreatedAt = p.CreatedAt,
+                    // Auction status (null when no auction exists for this product).
+                    // Lets sellers see the live/cancelled/completed status of their auction.
+                    AuctionStatus = _context.Auctions
+                        .Where(a => a.ProductId == p.Id)
+                        .Select(a => (string?)a.Status)
+                        .FirstOrDefault(),
+                    AuctionStartTime = _context.Auctions
+                        .Where(a => a.ProductId == p.Id)
+                        .Select(a => (DateTime?)a.StartTime)
+                        .FirstOrDefault(),
+                    AuctionEndTime = _context.Auctions
+                        .Where(a => a.ProductId == p.Id)
+                        .Select(a => (DateTime?)a.EndTime)
+                        .FirstOrDefault(),
+                    AuctionId = _context.Auctions
+                        .Where(a => a.ProductId == p.Id)
+                        .Select(a => (int?)a.Id)
+                        .FirstOrDefault(),
+                    AuctionBidCount = _context.Auctions
+                        .Where(a => a.ProductId == p.Id)
+                        .Select(a => (int?)a.BidCount)
+                        .FirstOrDefault(),
+                    AuctionCurrentHighestBid = _context.Auctions
+                        .Where(a => a.ProductId == p.Id)
+                        .Select(a => (decimal?)a.CurrentHighestBid)
+                        .FirstOrDefault(),
+                    AuctionCancellationReason = _context.Auctions
+                        .Where(a => a.ProductId == p.Id)
+                        .Select(a => (string?)a.CancellationReason)
+                        .FirstOrDefault(),
                 }).ToListAsync();
 
             return Ok(new

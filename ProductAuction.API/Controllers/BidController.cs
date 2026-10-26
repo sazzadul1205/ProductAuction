@@ -265,6 +265,62 @@ namespace ProductAuction.API.Controllers
             });
         }
 
+        // GET: api/bid/auction/5/bids/admin
+        // Admin-only view of a single auction's bid history, including
+        // bidder email, amount, timestamp, and whether it was a buyout.
+        [HttpGet("auction/{auctionId}/bids/admin")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> GetAuctionBidHistoryForAdmin(int auctionId)
+        {
+            var auction = await _context.Auctions
+                .Include(a => a.Product)
+                .FirstOrDefaultAsync(a => a.Id == auctionId);
+
+            if (auction == null)
+            {
+                return NotFound(new
+                {
+                    status = 404,
+                    message = "Auction not found."
+                });
+            }
+
+            var bids = await _context.Bids
+                .Where(b => b.AuctionId == auctionId)
+                .OrderByDescending(b => b.PlacedAt)
+                .Select(b => new
+                {
+                    bidId = b.Id,
+                    bidderId = b.BidderId,
+                    bidderEmail = _context.Users
+                        .Where(u => u.Id == b.BidderId)
+                        .Select(u => u.Email)
+                        .FirstOrDefault() ?? "",
+                    amount = b.Amount,
+                    isBuyout = b.IsBuyout,
+                    placedAt = b.PlacedAt,
+                    isHighest = b.Auction.CurrentHighestBidderId == b.BidderId
+                        && b.Auction.CurrentHighestBid == b.Amount
+                })
+                .ToListAsync();
+
+            return Ok(new
+            {
+                status = 200,
+                message = "Auction bid history retrieved successfully.",
+                data = new
+                {
+                    auctionId = auction.Id,
+                    productTitle = auction.Product?.Title,
+                    auctionStatus = auction.Status,
+                    currentHighestBid = auction.CurrentHighestBid,
+                    currentHighestBidderId = auction.CurrentHighestBidderId,
+                    bidCount = bids.Count,
+                    bids
+                }
+            });
+        }
+
         // POST: api/bid/5/buyout
         // Allows a buyer to purchase a product immediately at its buyout price.
         [HttpPost("{auctionId}/buyout")]

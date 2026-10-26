@@ -47,10 +47,16 @@ namespace ProductAuction.API.Controllers
                     auctionId = b.AuctionId,
                     productId = b.Auction.Product.Id,
                     productTitle = b.Auction.Product.Title,
+                    mainImageUrl = _context.ProductImages
+                        .Where(i => i.ProductId == b.Auction.Product.Id && i.IsMain)
+                        .Select(i => i.ImageUrl)
+                        .FirstOrDefault() ?? "",
                     bidAmount = b.Amount,
                     placedAt = b.PlacedAt,
                     auctionStatus = b.Auction.Status,
-                    auctionEndTime = b.Auction.EndTime
+                    auctionEndTime = b.Auction.EndTime,
+                    isHighest = b.Auction.CurrentHighestBidderId == buyerId
+                        && b.Auction.CurrentHighestBid == b.Amount
                 })
                 .ToListAsync();
 
@@ -127,6 +133,10 @@ namespace ProductAuction.API.Controllers
                     auctionId = a.Id,
                     productId = a.Product.Id,
                     productTitle = a.Product.Title,
+                    mainImageUrl = _context.ProductImages
+                        .Where(i => i.ProductId == a.Product.Id && i.IsMain)
+                        .Select(i => i.ImageUrl)
+                        .FirstOrDefault() ?? "",
                     winningAmount = a.CurrentHighestBid,
                     auctionStatus = a.Status,
                     result = a.Result,
