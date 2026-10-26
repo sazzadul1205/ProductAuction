@@ -543,5 +543,53 @@ namespace ProductAuction.API.Controllers
             });
         }
 
+        // GET: api/admin/platform-wallet
+        // Returns the platform system account wallet and its transaction history.
+        [HttpGet("platform-wallet")]
+        public async Task<IActionResult> GetPlatformWallet()
+        {
+            var platformUser = await _userManager.FindByNameAsync("platform-system-account");
+            if (platformUser == null)
+            {
+                return NotFound(new { status = 404, message = "Platform account not found." });
+            }
+
+            var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == platformUser.Id);
+            if (wallet == null)
+            {
+                return NotFound(new { status = 404, message = "Platform wallet not found." });
+            }
+
+            var transactions = await _context.WalletTransactions
+                .Where(t => t.WalletId == wallet.Id)
+                .OrderByDescending(t => t.CreatedAt)
+                .Select(t => new WalletTransactionResponseDto
+                {
+                    Id = t.Id,
+                    Type = t.Type,
+                    Amount = t.Amount,
+                    BalanceAfter = t.BalanceAfter,
+                    Reference = t.Reference,
+                    CreatedAt = t.CreatedAt
+                })
+                .ToListAsync();
+
+            return Ok(new
+            {
+                status = 200,
+                message = "Platform wallet retrieved successfully.",
+                data = new
+                {
+                    wallet = new WalletResponseDto
+                    {
+                        Id = wallet.Id,
+                        Balance = wallet.Balance,
+                        ReservedBalance = wallet.ReservedBalance
+                    },
+                    transactions
+                }
+            });
+        }
+
     }
 }
