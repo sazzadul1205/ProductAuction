@@ -1,5 +1,4 @@
-﻿
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -17,6 +16,50 @@ namespace ProductAuction.API.Controllers
         public BuyerController(AppDbContext context)
         {
             _context = context;
+        }
+
+        // GET: api/Buyer/dashboard
+        // Retrieves aggregated statistics for the buyer dashboard,
+        // including active bids, won auctions, total spent, and wallet balances.
+        [HttpGet("dashboard")]
+        public async Task<IActionResult> GetDashboard()
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId)) return Unauthorized();
+
+            // 1. Bid Statistics
+            // Retrieve all bids placed by the user, including their related auction details.
+            var bids = await _context.Bids
+                .Where(b => b.BidderId == userId)
+                .Include(b => b.Auction)
+                .ToListAsync();
+
+            // Count active bids and those where the user is currently the highest bidder.
+            var activeBids = bids.Count(b => b.Auction.Status == "Active");
+            var leadingBids = bids.Count(b => b.Auction.Status == "Active" && b.Auction.CurrentHighestBidderId == userId);
+
+            // 2. Sales & Won Auctions
+            // Retrieve all sales where the user is the buyer.
+            var sales = await _context.Sales
+                .Where(s => s.BuyerId == userId)
+                .ToListAsync();
+
+            var wonCount = sales.Count;
+            var awaitingPayment = sales.Count(s => s.Status == "AwaitingPayment" || s.Status == "PaymentOverdue");
+            var totalSpent = sales
+                .Where(s => s.Status == "Completed" || s.Status == "Paid")
+                .Sum(s => s.FinalAmount);
+
+            // 3. Wallet Statistics
+            var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == userId);
+            var availableBalance = wallet != null ? (wallet.Balance - wallet.ReservedBalance) : 0;
+            var reservedBalance = wallet?.ReservedBalance ?? 0;
+
+            return Ok(new
+            {
+                status = 200,
+                data = new { activeBids, leadingBids, wonCount, awaitingPayment, totalSpent, availableBalance, reservedBalance }
+            });
         }
 
         // GET: api/Buyer/my-bids
@@ -143,15 +186,17 @@ namespace ProductAuction.API.Controllers
                     startTime = a.StartTime,
                     endTime = a.EndTime,
 
+                    // Retrieve the specific sale ID linked to this auction and buyer.
                     saleId = _context.Sales
                         .Where(s => s.AuctionId == a.Id && s.BuyerId == buyerId)
                         .Select(s => (int?)s.Id)
                         .FirstOrDefault(),
 
+                    // Retrieve the payment status, defaulting to "AwaitingPayment" if no sale is found yet.
                     paymentStatus = _context.Sales
                         .Where(s => s.AuctionId == a.Id && s.BuyerId == buyerId)
                         .Select(s => s.Status)
-                        .FirstOrDefault() ?? "AwaitingPayment" ?? "AwaitingPayment"
+                        .FirstOrDefault() ?? "AwaitingPayment"
                 })
                 .ToListAsync();
 

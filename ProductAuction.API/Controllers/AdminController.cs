@@ -1,5 +1,4 @@
-﻿
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -24,6 +23,85 @@ namespace ProductAuction.API.Controllers
         {
             _userManager = userManager;
             _context = context;
+        }
+
+        // GET: api/Admin/dashboard
+        // Retrieves aggregated statistics for the admin dashboard,
+        // including user counts, pending moderation items, and platform wallet balance.
+        [HttpGet("dashboard")]
+        public async Task<IActionResult> GetDashboard()
+        {
+            // Count all registered users, excluding the system platform account.
+            var totalUsers = await _context.Users.CountAsync(u => u.UserName != "platform-system-account");
+
+            // Count items currently requiring admin review or action.
+            var pendingProducts = await _context.Products.CountAsync(p => p.ApprovalStatus == "PendingApproval");
+            var pendingDeposits = await _context.DepositRequests.CountAsync(d => d.Status == "PendingVerification");
+            var pendingVerifications = await _context.UserProfiles.CountAsync(p => p.VerificationStatus == "PendingReview");
+            var openDisputes = await _context.Disputes.CountAsync(d => d.Status == "Open" || d.Status == "UnderReview");
+
+            // Count currently active auctions.
+            var activeAuctions = await _context.Auctions.CountAsync(a => a.Status == "Active");
+
+            // Retrieve the platform's system account and its current wallet balance.
+            var platformUser = await _context.Users.FirstOrDefaultAsync(u => u.UserName == "platform-system-account");
+            var platformWallet = platformUser != null ? await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == platformUser.Id) : null;
+            var platformBalance = platformWallet?.Balance ?? 0;
+
+            return Ok(new
+            {
+                status = 200,
+                data = new { totalUsers, pendingProducts, pendingDeposits, pendingVerifications, activeAuctions, openDisputes, platformBalance }
+            });
+        }
+
+        // POST: api/Admin/create-admin
+        // Creates a new user account with the Admin role.
+        // Also generates the required UserProfile and Wallet records to maintain data integrity.
+        [HttpPost("create-admin")]
+        public async Task<IActionResult> CreateAdmin([FromBody] CreateAdminDto dto)
+        {
+            // Validate required fields.
+            if (string.IsNullOrWhiteSpace(dto.Email) || string.IsNullOrWhiteSpace(dto.Password) || string.IsNullOrWhiteSpace(dto.FullName))
+                return BadRequest(new { status = 400, message = "All fields are required." });
+
+            // Ensure the email is not already registered.
+            var existingUser = await _userManager.FindByEmailAsync(dto.Email);
+            if (existingUser != null)
+                return BadRequest(new { status = 400, message = "Email is already registered." });
+
+            // Start a transaction so all database changes succeed or roll back together.
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                // 1. Create the Identity account.
+                var user = new IdentityUser { UserName = dto.Email, Email = dto.Email, EmailConfirmed = true };
+                var result = await _userManager.CreateAsync(user, dto.Password);
+
+                if (!result.Succeeded)
+                {
+                    await transaction.RollbackAsync();
+                    return BadRequest(new { status = 400, message = "Failed to create admin account.", errors = result.Errors });
+                }
+
+                // 2. Assign the Admin role.
+                await _userManager.AddToRoleAsync(user, "Admin");
+
+                // 3. Create the UserProfile and Wallet (to maintain DB integrity).
+                _context.UserProfiles.Add(new UserProfile { UserId = user.Id, FullName = dto.FullName, CreatedAt = DateTime.UtcNow });
+                _context.Wallets.Add(new Wallet { UserId = user.Id, Balance = 0, ReservedBalance = 0 });
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                return Ok(new { status = 200, message = "Admin created successfully." });
+            }
+            catch (Exception)
+            {
+                // Undo the database changes if an unexpected error occurs.
+                await transaction.RollbackAsync();
+                return StatusCode(500, new { status = 500, message = "An error occurred while creating the admin." });
+            }
         }
 
         // GET: api/Admin
