@@ -122,6 +122,11 @@ namespace ProductAuction.API.Controllers
                 .Where(p => userIds.Contains(p.UserId))
                 .ToDictionaryAsync(p => p.UserId);
 
+            // Retrieve wallets for these users
+            var wallets = await _context.Wallets
+                .Where(w => userIds.Contains(w.UserId))
+                .ToDictionaryAsync(w => w.UserId);
+
             var userList = new List<object>();
 
             // Include the roles assigned to each user.
@@ -130,6 +135,7 @@ namespace ProductAuction.API.Controllers
                 var roles = await _userManager.GetRolesAsync(user);
 
                 profiles.TryGetValue(user.Id, out var profile);
+                wallets.TryGetValue(user.Id, out var wallet);
 
                 userList.Add(new
                 {
@@ -138,14 +144,26 @@ namespace ProductAuction.API.Controllers
                     emailConfirmed = user.EmailConfirmed,
                     phoneNumber = user.PhoneNumber,
                     roles,
+                    isLocked = await _userManager.IsLockedOutAsync(user),
+                    lockoutEnd = await _userManager.GetLockoutEndDateAsync(user),
 
                     profile = profile == null ? null : new
                     {
                         fullName = profile.FullName,
                         profilePhotoUrl = profile.ProfilePhotoUrl,
+                        address = profile.Address,
                         city = profile.City,
+                        nationalIdNumber = profile.NationalIdNumber,
                         verificationStatus = profile.VerificationStatus,
                         createdAt = profile.CreatedAt
+                    },
+
+                    // NEW: Include Wallet data
+                    wallet = wallet == null ? null : new
+                    {
+                        balance = wallet.Balance,
+                        reservedBalance = wallet.ReservedBalance,
+                        availableBalance = wallet.Balance - wallet.ReservedBalance
                     }
                 });
             }
@@ -157,7 +175,6 @@ namespace ProductAuction.API.Controllers
                 data = userList
             });
         }
-
         // PUT: api/Admin/user/{id}/lock
         // Locks a user permanently or for a specified duration.
         // Also allows an admin to unlock the account.
@@ -667,6 +684,79 @@ namespace ProductAuction.API.Controllers
                     transactions
                 }
             });
+        }
+
+        // GET: api/Admin/transactions
+        // Retrieves all wallet transactions globally for the admin.
+        [HttpGet("transactions")]
+        public async Task<IActionResult> GetAllTransactions()
+        {
+            var transactions = await _context.WalletTransactions
+                .OrderByDescending(t => t.CreatedAt)
+                .Select(t => new
+                {
+                    t.Id,
+                    t.Type,
+                    t.Amount,
+                    t.BalanceAfter,
+                    t.Reference,
+                    t.CreatedAt,
+
+                    //  Use a safe scalar subquery to avoid null reference exceptions in EF Core translation
+                    UserName = _context.UserProfiles
+                        .Where(p => p.UserId == _context.Wallets
+                            .Where(w => w.Id == t.WalletId)
+                            .Select(w => w.UserId)
+                            .FirstOrDefault())
+                        .Select(p => p.FullName)
+                        .FirstOrDefault() ?? "Unknown",
+
+                    UserEmail = _context.Users
+                        .Where(u => u.Id == _context.Wallets
+                            .Where(w => w.Id == t.WalletId)
+                            .Select(w => w.UserId)
+                            .FirstOrDefault())
+                        .Select(u => u.Email)
+                        .FirstOrDefault() ?? "Unknown"
+                })
+                .ToListAsync();
+
+            return Ok(new { status = 200, data = transactions });
+        }
+
+        // GET: api/Admin/reservations
+        // Retrieves all active wallet reservations globally for the admin.
+        [HttpGet("reservations")]
+        public async Task<IActionResult> GetAllReservations()
+        {
+            var reservations = await _context.WalletReservations
+                .OrderByDescending(r => r.Id)
+                .Select(r => new
+                {
+                    r.Id,
+                    r.Type,
+                    r.Amount,
+                    r.Status,
+                    r.ProductId,
+                    r.AuctionId,
+                    r.SaleId,
+
+                    // FIXED: Safe scalar subquery
+                    UserName = _context.UserProfiles
+                        .Where(p => p.UserId == _context.Wallets
+                            .Where(w => w.Id == r.WalletId)
+                            .Select(w => w.UserId)
+                            .FirstOrDefault())
+                        .Select(p => p.FullName)
+                        .FirstOrDefault() ?? "Unknown",
+
+                    ProductTitle = r.ProductId != null
+                        ? _context.Products.Where(p => p.Id == r.ProductId).Select(p => p.Title).FirstOrDefault()
+                        : null
+                })
+                .ToListAsync();
+
+            return Ok(new { status = 200, data = reservations });
         }
 
     }

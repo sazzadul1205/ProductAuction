@@ -5,9 +5,7 @@ namespace ProductAuction.API.DTOs.Sale
     public class ConfirmReceiptDto
     {
         [Required]
-        [Url]
-        [MaxLength(500)]
-        public string ReceiptProofUrl { get; set; } = string.Empty;
+        public IFormFile ReceiptProofImage { get; set; } = null!;
 
         [MaxLength(1000)]
         public string? ReceiptNotes { get; set; }

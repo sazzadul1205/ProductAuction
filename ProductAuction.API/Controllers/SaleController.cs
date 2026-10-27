@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using ProductAuction.API.Data;
 using ProductAuction.API.DTOs.Sale;
 using ProductAuction.API.Models;
+using ProductAuction.API.Services;
 using System.Security.Claims;
 
 namespace ProductAuction.API.Controllers
@@ -15,10 +16,12 @@ namespace ProductAuction.API.Controllers
     public class SaleController : ControllerBase
     {
         private readonly AppDbContext _context;
+        private readonly IImageUploadService _imageUploadService;
 
-        public SaleController(AppDbContext context)
+        public SaleController(AppDbContext context, IImageUploadService imageUploadService)
         {
             _context = context;
+            _imageUploadService = imageUploadService;
         }
 
         // GET: api/sale
@@ -33,7 +36,6 @@ namespace ProductAuction.API.Controllers
                 {
                     Id = s.Id,
                     ProductId = s.ProductId,
-
                     ProductTitle = _context.Products
                         .Where(p => p.Id == s.ProductId)
                         .Select(p => p.Title)
@@ -42,13 +44,35 @@ namespace ProductAuction.API.Controllers
                     BuyerId = s.BuyerId,
                     SellerId = s.SellerId,
 
+                    // Fetch Names
+                    BuyerName = _context.UserProfiles
+                        .Where(p => p.UserId == s.BuyerId)
+                        .Select(p => p.FullName)
+                        .FirstOrDefault() ?? "Unknown Buyer",
+                    SellerName = _context.UserProfiles
+                        .Where(p => p.UserId == s.SellerId)
+                        .Select(p => p.FullName)
+                        .FirstOrDefault() ?? "Unknown Seller",
+
                     FinalAmount = s.FinalAmount,
                     CommissionAmount = s.CommissionAmount,
                     SellerProceeds = s.SellerProceeds,
 
                     Status = s.Status,
+
+                    // Fetch Delivery Status
+                    DeliveryStatus = _context.DeliveryRecords
+                        .Where(d => d.SaleId == s.Id)
+                        .Select(d => d.Status)
+                        .FirstOrDefault() ?? "AwaitingDispatch",
+
                     PaymentDeadline = s.PaymentDeadline,
-                    CreatedAt = s.CreatedAt
+                    CreatedAt = s.CreatedAt,
+
+                    MainImageUrl = _context.ProductImages
+                        .Where(i => i.ProductId == s.ProductId && i.IsMain)
+                        .Select(i => i.ImageUrl)
+                        .FirstOrDefault() ?? ""
                 })
                 .ToListAsync();
 
@@ -59,7 +83,6 @@ namespace ProductAuction.API.Controllers
                 data = sales
             });
         }
-
 
         // GET: api/sale/my-sales
         // View sales where the logged-in user is buyer or seller.
@@ -701,167 +724,74 @@ namespace ProductAuction.API.Controllers
         // The buyer MUST supply proof (a photo, tracking screenshot, or
         // URL) so the seller has evidence the item was received.
         [HttpPost("{id}/confirm-receipt")]
-        public async Task<IActionResult> ConfirmReceipt(int id, ConfirmReceiptDto dto)
+        public async Task<IActionResult> ConfirmReceipt(int id, [FromForm] ConfirmReceiptDto dto)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-            // No ID in the token means the caller isn't logged in.
             if (userId == null)
             {
-                return Unauthorized(new
-                {
-                    status = 401,
-                    message = "Please log in first."
-                });
+                return Unauthorized(new { status = 401, message = "Please log in first." });
             }
 
-            // Proof of receipt is mandatory. Without it the seller has no
-            // evidence the buyer actually received the item.
-            if (string.IsNullOrWhiteSpace(dto.ReceiptProofUrl))
+            // Proof of receipt is mandatory.
+            if (dto.ReceiptProofImage == null || dto.ReceiptProofImage.Length == 0)
             {
-                return BadRequest(new
-                {
-                    status = 400,
-                    message = "Proof of receipt is required. Please provide a photo, tracking screenshot, or URL."
-                });
+                return BadRequest(new { status = 400, message = "Proof of receipt image is required." });
             }
 
-            // Keep all financial changes in one database transaction.
             await using var transaction = await _context.Database.BeginTransactionAsync();
 
             var sale = await _context.Sales.FirstOrDefaultAsync(s => s.Id == id);
 
-            if (sale == null)
-            {
-                return NotFound(new
-                {
-                    status = 404,
-                    message = "Sale not found."
-                });
-            }
+            if (sale == null) return NotFound(new { status = 404, message = "Sale not found." });
+            if (sale.BuyerId != userId) return Forbid();
 
-            // Only the winning buyer can confirm receipt.
-            // Forbid() = 403: the user is logged in but not allowed to do this.
-            if (sale.BuyerId != userId)
-            {
-                return Forbid();
-            }
-
-            // Prevent duplicate settlement and block sales not awaiting receipt.
-            // Once settled, the status becomes "Completed", so a second call fails here.
             if (sale.Status != "Paid")
             {
-                return BadRequest(new
-                {
-                    status = 400,
-                    message = "The sale is not awaiting receipt confirmation."
-                });
+                return BadRequest(new { status = 400, message = "The sale is not awaiting receipt confirmation." });
             }
 
-            // The product must have been dispatched first.
-            // This stops the buyer from releasing money before the seller shipped.
             var delivery = await _context.DeliveryRecords.FirstOrDefaultAsync(d => d.SaleId == sale.Id);
 
             if (delivery == null || delivery.Status != "Dispatched")
             {
-                return BadRequest(new
-                {
-                    status = 400,
-                    message = "The product must be dispatched before receipt can be confirmed."
-                });
+                return BadRequest(new { status = 400, message = "The product must be dispatched before receipt can be confirmed." });
             }
 
-            // Find the reserved sale payment (the escrow holding the buyer's money).
-            // The amount check makes sure the held funds match the sale total.
             var escrow = await _context.WalletReservations
-                .FirstOrDefaultAsync(r =>
-                    r.SaleId == sale.Id &&
-                    r.Type == "SaleEscrow" &&
-                    r.Status == "Reserved");
+                .FirstOrDefaultAsync(r => r.SaleId == sale.Id && r.Type == "SaleEscrow" && r.Status == "Reserved");
 
             if (escrow == null || escrow.Amount != sale.FinalAmount)
             {
-                return BadRequest(new
-                {
-                    status = 400,
-                    message = "The sale escrow could not be verified."
-                });
+                return BadRequest(new { status = 400, message = "The sale escrow could not be verified." });
             }
 
-            // Verify that the recorded amounts add up to the sale amount.
-            // Sanity check so we never pay out more or less than the buyer paid.
             var commission = sale.CommissionAmount;
             var sellerProceeds = sale.SellerProceeds;
 
-
-            // Both parts must be non-negative, and together they must equal exactly what
-            // the buyer paid. This catches bad data 
-            // so we never pay out more or less than the sale amount.
-            if (commission < 0 ||
-                sellerProceeds < 0 ||
-                commission + sellerProceeds != sale.FinalAmount)
+            if (commission < 0 || sellerProceeds < 0 || commission + sellerProceeds != sale.FinalAmount)
             {
-                return BadRequest(new
-                {
-                    status = 400,
-                    message = "The sale amounts do not match."
-                });
+                return BadRequest(new { status = 400, message = "The sale amounts do not match." });
             }
 
-            // Find the seller's wallet.
             var sellerWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == sale.SellerId);
+            if (sellerWallet == null) return BadRequest(new { status = 400, message = "The seller's wallet was not found." });
 
-            if (sellerWallet == null)
-            {
-                return BadRequest(new
-                {
-                    status = 400,
-                    message = "The seller's wallet was not found."
-                });
-            }
-
-            // Find the dedicated platform system account.
             var platformUser = await _context.Users.FirstOrDefaultAsync(u => u.UserName == "platform-system-account");
+            if (platformUser == null) return BadRequest(new { status = 400, message = "The platform system account was not found." });
 
-            if (platformUser == null)
-            {
-                return BadRequest(new
-                {
-                    status = 400,
-                    message = "The platform system account was not found. Check that PlatformAccountSeeder has run."
-                });
-            }
-
-            // Find the platform's wallet.
             var platformWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == platformUser.Id);
+            if (platformWallet == null) return BadRequest(new { status = 400, message = "The platform wallet was not found." });
 
-            if (platformWallet == null)
-            {
-                return BadRequest(new
-                {
-                    status = 400,
-                    message = "The platform wallet was not found. Check that PlatformAccountSeeder has run."
-                });
-            }
+            if (platformWallet.Id == sellerWallet.Id) return BadRequest(new { status = 400, message = "The platform wallet configuration is invalid." });
 
-            // The platform wallet must not be the seller's wallet.
-            // Guards against misconfiguration where the seller is the platform account.
-            if (platformWallet.Id == sellerWallet.Id)
-            {
-                return BadRequest(new
-                {
-                    status = 400,
-                    message = "The platform wallet configuration is invalid."
-                });
-            }
+            // Upload the image!
+            var receiptImageUrl = await _imageUploadService.UploadImageAsync(dto.ReceiptProofImage);
 
-            // One timestamp for every record, so all changes share the same time.
             var now = DateTime.UtcNow;
 
-            // Credit the seller with their proceeds.
-            // Each balance change gets a WalletTransaction row as an audit trail.
+            // Credit seller and platform
             sellerWallet.Balance += sellerProceeds;
-
             _context.WalletTransactions.Add(new WalletTransaction
             {
                 WalletId = sellerWallet.Id,
@@ -872,9 +802,7 @@ namespace ProductAuction.API.Controllers
                 CreatedAt = now
             });
 
-            // Credit the platform with its commission.
             platformWallet.Balance += commission;
-
             _context.WalletTransactions.Add(new WalletTransaction
             {
                 WalletId = platformWallet.Id,
@@ -885,30 +813,17 @@ namespace ProductAuction.API.Controllers
                 CreatedAt = now
             });
 
-            // Release the seller's product deposit after a successful sale.
-            // Match both the product and seller wallet to avoid releasing
-            // another user's reservation.
+            // Release seller deposit
             var sellerDeposit = await _context.WalletReservations
-                .FirstOrDefaultAsync(r =>
-                    r.ProductId == sale.ProductId &&
-                    r.WalletId == sellerWallet.Id &&
-                    r.Type == "SellerDeposit" &&
-                    r.Status == "Reserved");
+                .FirstOrDefaultAsync(r => r.ProductId == sale.ProductId && r.WalletId == sellerWallet.Id && r.Type == "SellerDeposit" && r.Status == "Reserved");
 
-            // The deposit is optional: if none exists, skip this block.
             if (sellerDeposit != null)
             {
-                // Safety check: never let ReservedBalance go negative.
                 if (sellerWallet.ReservedBalance < sellerDeposit.Amount)
                 {
-                    return BadRequest(new
-                    {
-                        status = 400,
-                        message = "The seller deposit could not be safely released."
-                    });
+                    return BadRequest(new { status = 400, message = "The seller deposit could not be safely released." });
                 }
 
-                // Un-reserve the money (it stays in Balance, it's just spendable again).
                 sellerWallet.ReservedBalance -= sellerDeposit.Amount;
                 sellerDeposit.Status = "Released";
 
@@ -923,38 +838,23 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Release the buyer's remaining eligibility reservations.
-            // These are the funds held to allow bidding on this auction.
+            // Release buyer reservations
             var buyerReservations = await _context.WalletReservations
-                .Where(r =>
-                    r.AuctionId == sale.AuctionId &&
-                    r.Type == "BuyerFunds" &&
-                    r.Status == "Reserved")
+                .Where(r => r.AuctionId == sale.AuctionId && r.Type == "BuyerFunds" && r.Status == "Reserved")
                 .ToListAsync();
 
-            // Release every remaining "BuyerFunds" reservation for this auction.
             foreach (var reservation in buyerReservations)
             {
-                // Load the wallet that holds this reservation.
                 var buyerWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.Id == reservation.WalletId);
 
-                // Safety check: stop if the wallet is missing, or if releasing would push
                 if (buyerWallet == null || buyerWallet.ReservedBalance < reservation.Amount)
                 {
-                    return BadRequest(new
-                    {
-                        status = 400,
-                        message = "A buyer reservation could not be safely released."
-                    });
+                    return BadRequest(new { status = 400, message = "A buyer reservation could not be safely released." });
                 }
 
-                // Un-reserve the money. Balance is untouched; the funds simply become
-                // spendable again.
                 buyerWallet.ReservedBalance -= reservation.Amount;
                 reservation.Status = "Released";
 
-                // Audit trail: one "Release" row per reservation.
-                // BalanceAfter shows Balance (not ReservedBalance), which stays the same here.
                 _context.WalletTransactions.Add(new WalletTransaction
                 {
                     WalletId = buyerWallet.Id,
@@ -966,42 +866,21 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Close the escrow reservation.
+            // Complete the sale
             escrow.Status = "Released";
-
-            // Mark delivery and sale as completed.
-            // "Completed" is what blocks a second settlement (see the "Paid" check above).
             delivery.Status = "ReceiptConfirmed";
             delivery.ReceiptConfirmedAt = now;
-            delivery.ReceiptProofUrl = dto.ReceiptProofUrl.Trim();
-            delivery.ReceiptNotes = string.IsNullOrWhiteSpace(dto.ReceiptNotes)
-                ? null
-                : dto.ReceiptNotes.Trim();
+            delivery.ReceiptProofUrl = receiptImageUrl; // Save the uploaded image path
+            delivery.ReceiptNotes = string.IsNullOrWhiteSpace(dto.ReceiptNotes) ? null : dto.ReceiptNotes.Trim();
             sale.Status = "Completed";
 
-            // Save all financial and status changes together.
-            // Nothing is permanent until CommitAsync succeeds.
             await _context.SaveChangesAsync();
             await transaction.CommitAsync();
 
-            return Ok(new
-            {
-                status = 200,
-                message = "Receipt confirmed. Seller proceeds and platform commission have been credited.",
-                data = new
-                {
-                    SaleId = sale.Id,
-                    SaleStatus = sale.Status,
-                    DeliveryStatus = delivery.Status,
-                    SellerProceeds = sellerProceeds,
-                    PlatformCommission = commission,
-                    SellerWalletBalance = sellerWallet.Balance,
-                    PlatformWalletBalance = platformWallet.Balance,
-                    SellerDepositReleased = sellerDeposit != null,
-                    BuyerReservationsReleased = buyerReservations.Count
-                }
-            });
+            return Ok(new { status = 200, message = "Receipt confirmed successfully." });
         }
+
+
     }
 }
 

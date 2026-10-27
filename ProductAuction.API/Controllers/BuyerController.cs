@@ -161,11 +161,7 @@ namespace ProductAuction.API.Controllers
 
             if (buyerId == null)
             {
-                return Unauthorized(new
-                {
-                    status = 401,
-                    message = "Please log in first."
-                });
+                return Unauthorized(new { status = 401, message = "Please log in first." });
             }
 
             var auctions = await _context.Auctions
@@ -196,7 +192,24 @@ namespace ProductAuction.API.Controllers
                         .Select(s => s.Status)
                         .FirstOrDefault() ?? "AwaitingPayment",
 
-                    // Fetch the full dispute details if one exists for this sale
+                    //  Fetch the Delivery Status
+                    deliveryStatus = _context.DeliveryRecords
+                        .Where(d => d.SaleId == _context.Sales
+                            .Where(s => s.AuctionId == a.Id && s.BuyerId == buyerId)
+                            .Select(s => s.Id)
+                            .FirstOrDefault())
+                        .Select(d => d.Status)
+                        .FirstOrDefault() ?? "AwaitingDispatch",
+
+                    //  Fetch Dispatch info so buyer can see it
+                    dispatchInfo = _context.DeliveryRecords
+                        .Where(d => d.SaleId == _context.Sales
+                            .Where(s => s.AuctionId == a.Id && s.BuyerId == buyerId)
+                            .Select(s => s.Id)
+                            .FirstOrDefault())
+                        .Select(d => d.DispatchInfo)
+                        .FirstOrDefault(),
+
                     dispute = _context.Disputes
                         .Where(d => _context.Sales.Any(s => s.AuctionId == a.Id && s.BuyerId == buyerId && s.Id == d.SaleId))
                         .Select(d => new
@@ -219,5 +232,6 @@ namespace ProductAuction.API.Controllers
                 data = auctions
             });
         }
+
     }
 }

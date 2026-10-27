@@ -252,6 +252,11 @@ namespace ProductAuction.API.Controllers
                 .Select(b => new BidHistoryDto
                 {
                     BidderId = b.BidderId,
+                    // Fetch the FullName from UserProfiles
+                    BidderName = _context.UserProfiles
+                        .Where(p => p.UserId == b.BidderId)
+                        .Select(p => p.FullName)
+                        .FirstOrDefault() ?? "Unknown User",
                     Amount = b.Amount,
                     PlacedAt = b.PlacedAt
                 })
@@ -296,6 +301,11 @@ namespace ProductAuction.API.Controllers
                         .Where(u => u.Id == b.BidderId)
                         .Select(u => u.Email)
                         .FirstOrDefault() ?? "",
+                    // Fetch the Bidder's Name
+                    bidderName = _context.UserProfiles
+                        .Where(p => p.UserId == b.BidderId)
+                        .Select(p => p.FullName)
+                        .FirstOrDefault() ?? "Unknown User",
                     amount = b.Amount,
                     isBuyout = b.IsBuyout,
                     placedAt = b.PlacedAt,
@@ -320,7 +330,7 @@ namespace ProductAuction.API.Controllers
                 }
             });
         }
-
+        
         // POST: api/bid/5/buyout
         // Allows a buyer to purchase a product immediately at its buyout price.
         [HttpPost("{auctionId}/buyout")]
