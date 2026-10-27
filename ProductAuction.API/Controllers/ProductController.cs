@@ -668,7 +668,7 @@ namespace ProductAuction.API.Controllers
             }
 
             // find the product
-            var product = await _context.Productss.FirstOrDefaultAsync(p => p.Id == id);
+            var product = await _context.Products.FirstOrDefaultAsync(p => p.Id == id);
 
             if (product == null)
             {
