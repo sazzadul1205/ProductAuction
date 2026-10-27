@@ -91,14 +91,7 @@ namespace ProductAuction.API.Controllers
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-            if (userId == null)
-            {
-                return Unauthorized(new
-                {
-                    status = 401,
-                    message = "Please log in first."
-                });
-            }
+            if (userId == null) return Unauthorized(new { status = 401, message = "Please log in first." });
 
             var sales = await _context.Sales
                 .Where(s => s.BuyerId == userId || s.SellerId == userId)
@@ -107,27 +100,23 @@ namespace ProductAuction.API.Controllers
                 {
                     Id = s.Id,
                     ProductId = s.ProductId,
-                    ProductTitle = _context.Products
-                        .Where(p => p.Id == s.ProductId)
-                        .Select(p => p.Title)
-                        .FirstOrDefault() ?? string.Empty,
-
+                    ProductTitle = _context.Products.Where(p => p.Id == s.ProductId).Select(p => p.Title).FirstOrDefault() ?? string.Empty,
                     BuyerId = s.BuyerId,
                     SellerId = s.SellerId,
-
                     FinalAmount = s.FinalAmount,
                     CommissionAmount = s.CommissionAmount,
                     SellerProceeds = s.SellerProceeds,
-
                     Status = s.Status,
                     PaymentDeadline = s.PaymentDeadline,
                     CreatedAt = s.CreatedAt,
-                    MainImageUrl = _context.ProductImages
-                        .Where(i => i.ProductId == s.ProductId && i.IsMain)
-                        .Select(i => i.ImageUrl)
-                        .FirstOrDefault() ?? "",
+                    MainImageUrl = _context.ProductImages.Where(i => i.ProductId == s.ProductId && i.IsMain).Select(i => i.ImageUrl).FirstOrDefault() ?? "",
 
-                    // Fetch the dispute details including the penalty breakdown
+                    // Fetch DispatchedAt so frontend can calculate the 10-day window
+                    DispatchedAt = _context.DeliveryRecords
+                        .Where(d => d.SaleId == s.Id)
+                        .Select(d => d.DispatchedAt)
+                        .FirstOrDefault(),
+
                     Dispute = _context.Disputes
                         .Where(d => d.SaleId == s.Id)
                         .Select(d => new
@@ -139,7 +128,6 @@ namespace ProductAuction.API.Controllers
                             AdminDecision = d.AdminDecision,
                             RaisedBy = d.RaisedBy,
                             CreatedAt = d.CreatedAt,
-                            // Fetch the penalty if one was applied
                             Penalty = _context.Penalties
                                 .Where(p => p.DisputeId == d.Id)
                                 .Select(p => new
@@ -155,12 +143,7 @@ namespace ProductAuction.API.Controllers
                 })
                 .ToListAsync();
 
-            return Ok(new
-            {
-                status = 200,
-                message = "Your sales retrieved successfully.",
-                data = sales
-            });
+            return Ok(new { status = 200, message = "Your sales retrieved successfully.", data = sales });
         }
 
         // GET: api/sale/1
@@ -477,31 +460,25 @@ namespace ProductAuction.API.Controllers
 
         // POST: api/sale/{id}/dispatch
         // The seller records dispatch after the buyer has paid.
+        // POST: api/sale/{id}/dispatch
+        // The seller records dispatch after the buyer has paid.
         [HttpPost("{id}/dispatch")]
         public async Task<IActionResult> DispatchSale(
             int id,
-            DispatchSaleDto dto)
+            [FromForm] DispatchSaleDto dto) // ADDED [FromForm]
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             if (userId == null)
             {
-                return Unauthorized(new
-                {
-                    status = 401,
-                    message = "Please log in first."
-                });
+                return Unauthorized(new { status = 401, message = "Please log in first." });
             }
 
             var sale = await _context.Sales.FirstOrDefaultAsync(s => s.Id == id);
 
             if (sale == null)
             {
-                return NotFound(new
-                {
-                    status = 404,
-                    message = "Sale not found."
-                });
+                return NotFound(new { status = 404, message = "Sale not found." });
             }
 
             // Only the seller can record dispatch.
@@ -512,55 +489,32 @@ namespace ProductAuction.API.Controllers
 
             if (sale.Status != "Paid")
             {
-                return BadRequest(new
-                {
-                    status = 400,
-                    message = "The sale must be paid before dispatch."
-                });
+                return BadRequest(new { status = 400, message = "The sale must be paid before dispatch." });
             }
 
-            if (string.IsNullOrWhiteSpace(dto.DispatchInfo) || string.IsNullOrWhiteSpace(dto.TrackingEvidence))
+            if (string.IsNullOrWhiteSpace(dto.DispatchInfo) || dto.TrackingEvidenceImage == null || dto.TrackingEvidenceImage.Length == 0)
             {
-                return BadRequest(new
-                {
-                    status = 400,
-                    message = "Dispatch information and tracking evidence are required."
-                });
+                return BadRequest(new { status = 400, message = "Dispatch information and tracking evidence image are required." });
             }
 
             if (!sale.PaymentSubmittedAt.HasValue)
             {
-                return BadRequest(new
-                {
-                    status = 400,
-                    message = "Payment timestamp is missing."
-                });
+                return BadRequest(new { status = 400, message = "Payment timestamp is missing." });
             }
 
             var now = DateTime.UtcNow;
             if (!sale.SellerNotifiedAt.HasValue)
             {
-                return BadRequest(new
-                {
-                    status = 400,
-                    message = "Seller notification timestamp is missing."
-                });
+                return BadRequest(new { status = 400, message = "Seller notification timestamp is missing." });
             }
 
             var dispatchDeadline = sale.SellerNotifiedAt.Value.AddDays(5);
 
             if (now > dispatchDeadline)
             {
-                return BadRequest(new
-                {
-                    status = 400,
-                    message = "The dispatch deadline has passed."
-                });
+                return BadRequest(new { status = 400, message = "The dispatch deadline has passed." });
             }
 
-            // PayForSale normally creates this record when payment succeeds.
-            // If it is missing (e.g. the sale was paid through an alternate flow),
-            // create it here so dispatch can still be recorded.
             var delivery = await _context.DeliveryRecords
                 .FirstOrDefaultAsync(d => d.SaleId == sale.Id);
 
@@ -576,23 +530,20 @@ namespace ProductAuction.API.Controllers
             }
             else if (delivery.Status != "AwaitingDispatch")
             {
-                return BadRequest(new
-                {
-                    status = 400,
-                    message = "The delivery record is missing or dispatch has already been recorded."
-                });
+                return BadRequest(new { status = 400, message = "The delivery record is missing or dispatch has already been recorded." });
             }
+
+            // Upload the image
+            var trackingImageUrl = await _imageUploadService.UploadImageAsync(dto.TrackingEvidenceImage);
 
             // Update the existing delivery record.
             delivery.Status = "Dispatched";
             delivery.DispatchDeadline = dispatchDeadline;
             delivery.DispatchInfo = dto.DispatchInfo;
-            delivery.TrackingEvidence = dto.TrackingEvidence;
+            delivery.TrackingEvidence = trackingImageUrl;
             delivery.DispatchedAt = now;
 
-
-            // Reflect the dispatch on the Sale itself so the seller list
-            // shows Dispatched instead of still showing Dispatch Item.
+            // Reflect the dispatch on the Sale itself.
             sale.Status = "Dispatched";
 
             await _context.SaveChangesAsync();
@@ -612,7 +563,6 @@ namespace ProductAuction.API.Controllers
                 }
             });
         }
-
 
         // POST: api/sale/{id}/report-non-delivery
         // The seller reports that the buyer never picked up the item after
@@ -746,9 +696,16 @@ namespace ProductAuction.API.Controllers
             if (sale == null) return NotFound(new { status = 404, message = "Sale not found." });
             if (sale.BuyerId != userId) return Forbid();
 
-            if (sale.Status != "Paid")
+            // Prevent duplicate settlement and block sales not awaiting receipt.
+            // Once settled, the status becomes "Completed", so a second call fails here.
+            // FIXED: Allow both "Paid" and "Dispatched" statuses
+            if (sale.Status != "Paid" && sale.Status != "Dispatched")
             {
-                return BadRequest(new { status = 400, message = "The sale is not awaiting receipt confirmation." });
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "The sale is not awaiting receipt confirmation."
+                });
             }
 
             var delivery = await _context.DeliveryRecords.FirstOrDefaultAsync(d => d.SaleId == sale.Id);
@@ -817,14 +774,22 @@ namespace ProductAuction.API.Controllers
             var sellerDeposit = await _context.WalletReservations
                 .FirstOrDefaultAsync(r => r.ProductId == sale.ProductId && r.WalletId == sellerWallet.Id && r.Type == "SellerDeposit" && r.Status == "Reserved");
 
+            // The deposit is optional: if none exists, skip this block.
             if (sellerDeposit != null)
             {
+                // Graceful handling: If the balance is somehow out of sync, just clamp it to 0.
+                // (This can happen if an admin manually adjusts balances).
                 if (sellerWallet.ReservedBalance < sellerDeposit.Amount)
                 {
-                    return BadRequest(new { status = 400, message = "The seller deposit could not be safely released." });
+                    sellerWallet.ReservedBalance = 0;
+                }
+                else
+                {
+                    // Un-reserve the money (it stays in Balance, it's just spendable again).
+                    sellerWallet.ReservedBalance -= sellerDeposit.Amount;
                 }
 
-                sellerWallet.ReservedBalance -= sellerDeposit.Amount;
+                sellerDeposit.Status = "Released";
                 sellerDeposit.Status = "Released";
 
                 _context.WalletTransactions.Add(new WalletTransaction

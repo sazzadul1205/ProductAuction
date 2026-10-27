@@ -192,22 +192,21 @@ namespace ProductAuction.API.Controllers
                         .Select(s => s.Status)
                         .FirstOrDefault() ?? "AwaitingPayment",
 
-                    //  Fetch the Delivery Status
-                    deliveryStatus = _context.DeliveryRecords
-                        .Where(d => d.SaleId == _context.Sales
-                            .Where(s => s.AuctionId == a.Id && s.BuyerId == buyerId)
-                            .Select(s => s.Id)
-                            .FirstOrDefault())
-                        .Select(d => d.Status)
-                        .FirstOrDefault() ?? "AwaitingDispatch",
-
-                    //  Fetch Dispatch info so buyer can see it
+                    // NEW: Fetch Dispatch Info and Tracking Evidence
                     dispatchInfo = _context.DeliveryRecords
                         .Where(d => d.SaleId == _context.Sales
                             .Where(s => s.AuctionId == a.Id && s.BuyerId == buyerId)
                             .Select(s => s.Id)
                             .FirstOrDefault())
                         .Select(d => d.DispatchInfo)
+                        .FirstOrDefault(),
+
+                    trackingEvidence = _context.DeliveryRecords
+                        .Where(d => d.SaleId == _context.Sales
+                            .Where(s => s.AuctionId == a.Id && s.BuyerId == buyerId)
+                            .Select(s => s.Id)
+                            .FirstOrDefault())
+                        .Select(d => d.TrackingEvidence)
                         .FirstOrDefault(),
 
                     dispute = _context.Disputes
@@ -225,13 +224,7 @@ namespace ProductAuction.API.Controllers
                 })
                 .ToListAsync();
 
-            return Ok(new
-            {
-                status = 200,
-                message = "Your won auctions were retrieved successfully.",
-                data = auctions
-            });
+            return Ok(new { status = 200, message = "Your won auctions were retrieved successfully.", data = auctions });
         }
-
     }
 }

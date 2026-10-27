@@ -8,6 +8,6 @@ namespace ProductAuction.API.DTOs.Sale
         public string DispatchInfo { get; set; } = string.Empty;
 
         [Required]
-        public string TrackingEvidence { get; set; } = string.Empty;
+        public IFormFile TrackingEvidenceImage { get; set; } = null!;
     }
 }
