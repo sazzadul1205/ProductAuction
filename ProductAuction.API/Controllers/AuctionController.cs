@@ -38,16 +38,21 @@ namespace ProductAuction.API.Controllers
                     Status = a.Status,
                     CurrentHighestBid = a.CurrentHighestBid,
                     BidCount = a.BidCount,
-                    // NEW: Populate Image
-                    MainImageUrl = _context.ProductImages.Where(i => i.ProductId == a.ProductId && i.IsMain).Select(i => i.ImageUrl).FirstOrDefault() ?? ""
+                    MainImageUrl = _context.ProductImages.Where(i => i.ProductId == a.ProductId && i.IsMain).Select(i => i.ImageUrl).FirstOrDefault() ?? "",
+                    CategoryId = a.Product.CategoryId,
+                    CategoryName = a.Product.Category.Name
                 })
                 .ToListAsync();
 
-            return Ok(new { status = 200, message = "Auctions retrieved successfully.", data = auctions });
+            return Ok(new
+            {
+                status = 200,
+                message = "Auctions retrieved successfully.",
+                data = auctions
+            });
         }
 
         // Get: api/auction/my-auctions
-        // View auctions created by the logged-in user.
         [HttpGet("my-auctions")]
         public async Task<IActionResult> GetMyAuctions()
         {
@@ -55,11 +60,7 @@ namespace ProductAuction.API.Controllers
 
             if (userId == null)
             {
-                return Unauthorized(new
-                {
-                    status = 401,
-                    message = "Please log in first."
-                });
+                return Unauthorized(new { status = 401, message = "Please log in first." });
             }
 
             var auctions = await _context.Auctions
@@ -68,26 +69,17 @@ namespace ProductAuction.API.Controllers
                 {
                     Id = a.Id,
                     ProductId = a.ProductId,
-
-                    ProductTitle = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.Title)
-                        .FirstOrDefault() ?? string.Empty,
-
-                    StartingPrice = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.StartingPrice)
-                        .FirstOrDefault(),
-                    BuyoutPrice = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.BuyoutPrice)
-                        .FirstOrDefault(),
-
+                    ProductTitle = a.Product.Title,
+                    StartingPrice = a.Product.StartingPrice,
+                    BuyoutPrice = a.Product.BuyoutPrice,
                     StartTime = a.StartTime,
                     EndTime = a.EndTime,
                     Status = a.Status,
                     CurrentHighestBid = a.CurrentHighestBid,
-                    BidCount = a.BidCount
+                    BidCount = a.BidCount,
+                    MainImageUrl = _context.ProductImages.Where(i => i.ProductId == a.ProductId && i.IsMain).Select(i => i.ImageUrl).FirstOrDefault() ?? "",
+                    CategoryId = a.Product.CategoryId,
+                    CategoryName = a.Product.Category.Name
                 })
                 .ToListAsync();
 
@@ -101,7 +93,6 @@ namespace ProductAuction.API.Controllers
 
 
         // Get: api/auction/active
-        // View active auctions.
         [HttpGet("active")]
         public async Task<IActionResult> GetActiveAuctions()
         {
@@ -111,26 +102,17 @@ namespace ProductAuction.API.Controllers
                 {
                     Id = a.Id,
                     ProductId = a.ProductId,
-
-                    ProductTitle = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.Title)
-                        .FirstOrDefault() ?? string.Empty,
-
-                    StartingPrice = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.StartingPrice)
-                        .FirstOrDefault(),
-                    BuyoutPrice = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.BuyoutPrice)
-                        .FirstOrDefault(),
-
+                    ProductTitle = a.Product.Title,
+                    StartingPrice = a.Product.StartingPrice,
+                    BuyoutPrice = a.Product.BuyoutPrice,
                     StartTime = a.StartTime,
                     EndTime = a.EndTime,
                     Status = a.Status,
                     CurrentHighestBid = a.CurrentHighestBid,
-                    BidCount = a.BidCount
+                    BidCount = a.BidCount,
+                    MainImageUrl = _context.ProductImages.Where(i => i.ProductId == a.ProductId && i.IsMain).Select(i => i.ImageUrl).FirstOrDefault() ?? "",
+                    CategoryId = a.Product.CategoryId,
+                    CategoryName = a.Product.Category.Name
                 })
                 .ToListAsync();
 
@@ -143,7 +125,6 @@ namespace ProductAuction.API.Controllers
         }
 
         // Get: api/auction/upcoming
-        // View upcoming auctions.
         [HttpGet("upcoming")]
         public async Task<IActionResult> GetUpcomingAuctions()
         {
@@ -153,26 +134,17 @@ namespace ProductAuction.API.Controllers
                 {
                     Id = a.Id,
                     ProductId = a.ProductId,
-
-                    ProductTitle = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.Title)
-                        .FirstOrDefault() ?? string.Empty,
-
-                    StartingPrice = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.StartingPrice)
-                        .FirstOrDefault(),
-                    BuyoutPrice = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.BuyoutPrice)
-                        .FirstOrDefault(),
-
+                    ProductTitle = a.Product.Title,
+                    StartingPrice = a.Product.StartingPrice,
+                    BuyoutPrice = a.Product.BuyoutPrice,
                     StartTime = a.StartTime,
                     EndTime = a.EndTime,
                     Status = a.Status,
                     CurrentHighestBid = a.CurrentHighestBid,
-                    BidCount = a.BidCount
+                    BidCount = a.BidCount,
+                    MainImageUrl = _context.ProductImages.Where(i => i.ProductId == a.ProductId && i.IsMain).Select(i => i.ImageUrl).FirstOrDefault() ?? "",
+                    CategoryId = a.Product.CategoryId,
+                    CategoryName = a.Product.Category.Name
                 })
                 .ToListAsync();
 
@@ -185,7 +157,6 @@ namespace ProductAuction.API.Controllers
         }
 
         // Get: api/auction/completed
-        // View completed auctions.
         [HttpGet("completed")]
         public async Task<IActionResult> GetCompletedAuctions()
         {
@@ -195,26 +166,17 @@ namespace ProductAuction.API.Controllers
                 {
                     Id = a.Id,
                     ProductId = a.ProductId,
-
-                    ProductTitle = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.Title)
-                        .FirstOrDefault() ?? string.Empty,
-
-                    StartingPrice = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.StartingPrice)
-                        .FirstOrDefault(),
-                    BuyoutPrice = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.BuyoutPrice)
-                        .FirstOrDefault(),
-
+                    ProductTitle = a.Product.Title,
+                    StartingPrice = a.Product.StartingPrice,
+                    BuyoutPrice = a.Product.BuyoutPrice,
                     StartTime = a.StartTime,
                     EndTime = a.EndTime,
                     Status = a.Status,
                     CurrentHighestBid = a.CurrentHighestBid,
-                    BidCount = a.BidCount
+                    BidCount = a.BidCount,
+                    MainImageUrl = _context.ProductImages.Where(i => i.ProductId == a.ProductId && i.IsMain).Select(i => i.ImageUrl).FirstOrDefault() ?? "",
+                    CategoryId = a.Product.CategoryId,
+                    CategoryName = a.Product.Category.Name
                 })
                 .ToListAsync();
 
@@ -227,7 +189,6 @@ namespace ProductAuction.API.Controllers
         }
 
         // Get: api/auction/cancelled
-        // View cancelled auctions.
         [HttpGet("cancelled")]
         public async Task<IActionResult> GetCancelledAuctions()
         {
@@ -237,26 +198,17 @@ namespace ProductAuction.API.Controllers
                 {
                     Id = a.Id,
                     ProductId = a.ProductId,
-
-                    ProductTitle = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.Title)
-                        .FirstOrDefault() ?? string.Empty,
-
-                    StartingPrice = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.StartingPrice)
-                        .FirstOrDefault(),
-                    BuyoutPrice = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.BuyoutPrice)
-                        .FirstOrDefault(),
-
+                    ProductTitle = a.Product.Title,
+                    StartingPrice = a.Product.StartingPrice,
+                    BuyoutPrice = a.Product.BuyoutPrice,
                     StartTime = a.StartTime,
                     EndTime = a.EndTime,
                     Status = a.Status,
                     CurrentHighestBid = a.CurrentHighestBid,
-                    BidCount = a.BidCount
+                    BidCount = a.BidCount,
+                    MainImageUrl = _context.ProductImages.Where(i => i.ProductId == a.ProductId && i.IsMain).Select(i => i.ImageUrl).FirstOrDefault() ?? "",
+                    CategoryId = a.Product.CategoryId,
+                    CategoryName = a.Product.Category.Name
                 })
                 .ToListAsync();
 
@@ -268,11 +220,50 @@ namespace ProductAuction.API.Controllers
             });
         }
 
+        // Get: api/auction/product/{productId}
+        [HttpGet("product/{productId}")]
+        public async Task<IActionResult> GetAuctionsByProduct(int productId)
+        {
+            var productExists = await _context.Products.AnyAsync(p => p.Id == productId);
+
+            if (!productExists)
+            {
+                return NotFound(new
+                {
+                    status = 404,
+                    message = "Product not found."
+                });
+            }
+
+            var auctions = await _context.Auctions
+                .Where(a => a.ProductId == productId)
+                .Select(a => new AuctionListDto
+                {
+                    Id = a.Id,
+                    ProductId = a.ProductId,
+                    ProductTitle = a.Product.Title,
+                    StartingPrice = a.Product.StartingPrice,
+                    BuyoutPrice = a.Product.BuyoutPrice,
+                    StartTime = a.StartTime,
+                    EndTime = a.EndTime,
+                    Status = a.Status,
+                    CurrentHighestBid = a.CurrentHighestBid,
+                    BidCount = a.BidCount,
+                    MainImageUrl = _context.ProductImages.Where(i => i.ProductId == a.ProductId && i.IsMain).Select(i => i.ImageUrl).FirstOrDefault() ?? "",
+                    CategoryId = a.Product.CategoryId,
+                    CategoryName = a.Product.Category.Name
+                })
+                .ToListAsync();
+
+            return Ok(new
+            {
+                status = 200,
+                message = "Product auctions retrieved successfully.",
+                data = auctions
+            });
+        }
+
         // GET: api/auction/{id}
-        // View details of one auction.
-        // Anyone can view any auction — including Completed and Cancelled ones —
-        // so the public marketplace can show final results and cancellation
-        // notices. The cancellation reason itself stays seller-only.
         [HttpGet("{id}")]
         public async Task<IActionResult> GetAuctionById(int id)
         {
@@ -300,8 +291,6 @@ namespace ProductAuction.API.Controllers
                     UsageHistory = a.Product.UsageHistory,
                     ReasonForSelling = a.Product.ReasonForSelling,
                     KnownIssues = a.Product.KnownIssues,
-
-                    // NEW: Populate Main Image and Images list
                     MainImageUrl = _context.ProductImages.Where(i => i.ProductId == a.ProductId && i.IsMain).Select(i => i.ImageUrl).FirstOrDefault() ?? "",
                     Images = _context.ProductImages
                         .Where(i => i.ProductId == a.ProductId)
@@ -314,15 +303,22 @@ namespace ProductAuction.API.Controllers
                 })
                 .FirstOrDefaultAsync();
 
-            if (auction == null) return NotFound(new { status = 404, message = "Auction not found." });
+            if (auction == null)
+                return NotFound(new
+                {
+                    status = 404,
+                    message = "Auction not found."
+                });
 
-            return Ok(new { status = 200, message = "Auction details retrieved successfully.", data = auction });
+            return Ok(new
+            {
+                status = 200,
+                message = "Auction details retrieved successfully.",
+                data = auction
+            });
         }
 
         // GET: api/auction/{id}/seller
-        // Seller-only view of one auction. Unlike the public endpoint, this
-        // returns ALL statuses (including Completed and Cancelled) and exposes
-        // the cancellation reason, so sellers can review their own ended auctions.
         [HttpGet("{id}/seller")]
         [Authorize]
         public async Task<IActionResult> GetAuctionByIdForSeller(int id)
@@ -344,82 +340,35 @@ namespace ProductAuction.API.Controllers
                 {
                     Id = a.Id,
                     ProductId = a.ProductId,
-
-                    ProductTitle = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.Title)
-                        .FirstOrDefault() ?? string.Empty,
-
-                    ProductDescription = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.Description)
-                        .FirstOrDefault() ?? string.Empty,
-
-                    StartingPrice = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.StartingPrice)
-                        .FirstOrDefault(),
-
-                    BuyoutPrice = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.BuyoutPrice)
-                        .FirstOrDefault(),
-
+                    ProductTitle = a.Product.Title,
+                    ProductDescription = a.Product.Description,
+                    StartingPrice = a.Product.StartingPrice,
+                    BuyoutPrice = a.Product.BuyoutPrice,
                     StartTime = a.StartTime,
                     EndTime = a.EndTime,
                     Status = a.Status,
                     CurrentHighestBid = a.CurrentHighestBid,
                     BidCount = a.BidCount,
                     Result = a.Result,
-                    MainImageUrl = _context.ProductImages
-                        .Where(i => i.ProductId == a.ProductId && i.IsMain)
-                        .Select(i => i.ImageUrl)
-                        .FirstOrDefault() ?? "",
+                    MainImageUrl = _context.ProductImages.Where(i => i.ProductId == a.ProductId && i.IsMain).Select(i => i.ImageUrl).FirstOrDefault() ?? "",
                     CancellationReason = a.CancellationReason,
-
-                    Brand = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.Brand)
-                        .FirstOrDefault(),
-                    ModelNumber = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.ModelNumber)
-                        .FirstOrDefault(),
-                    Condition = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.Condition)
-                        .FirstOrDefault(),
-                    CategoryName = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.Category.Name)
-                        .FirstOrDefault(),
-                    PurchaseDate = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.PurchaseDate)
-                        .FirstOrDefault(),
-                    UsageHistory = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.UsageHistory)
-                        .FirstOrDefault(),
-                    ReasonForSelling = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.ReasonForSelling)
-                        .FirstOrDefault(),
-                    KnownIssues = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.KnownIssues)
-                        .FirstOrDefault(),
+                    Brand = a.Product.Brand,
+                    ModelNumber = a.Product.ModelNumber,
+                    Condition = a.Product.Condition,
+                    CategoryName = a.Product.Category.Name,
+                    PurchaseDate = a.Product.PurchaseDate,
+                    UsageHistory = a.Product.UsageHistory,
+                    ReasonForSelling = a.Product.ReasonForSelling,
+                    KnownIssues = a.Product.KnownIssues,
                 })
                 .FirstOrDefaultAsync();
 
             if (auction == null)
-            {
                 return NotFound(new
                 {
                     status = 404,
                     message = "Auction not found."
                 });
-            }
 
             return Ok(new
             {
@@ -429,62 +378,7 @@ namespace ProductAuction.API.Controllers
             });
         }
 
-
-        // Get: api/auction/product/{productId}
-        // View auctions for a specific product.
-        [HttpGet("product/{productId}")]
-        public async Task<IActionResult> GetAuctionsByProduct(int productId)
-        {
-            var productExists = await _context.Products.AnyAsync(p => p.Id == productId);
-
-            if (!productExists)
-            {
-                return NotFound(new
-                {
-                    status = 404,
-                    message = "Product not found."
-                });
-            }
-
-            var auctions = await _context.Auctions
-                .Where(a => a.ProductId == productId)
-                .Select(a => new AuctionListDto
-                {
-                    Id = a.Id,
-                    ProductId = a.ProductId,
-
-                    ProductTitle = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.Title)
-                        .FirstOrDefault() ?? string.Empty,
-
-                    StartingPrice = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.StartingPrice)
-                        .FirstOrDefault(),
-                    BuyoutPrice = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.BuyoutPrice)
-                        .FirstOrDefault(),
-
-                    StartTime = a.StartTime,
-                    EndTime = a.EndTime,
-                    Status = a.Status,
-                    CurrentHighestBid = a.CurrentHighestBid,
-                    BidCount = a.BidCount
-                })
-                .ToListAsync();
-
-            return Ok(new
-            {
-                status = 200,
-                message = "Product auctions retrieved successfully.",
-                data = auctions
-            });
-        }
-
         // Put: api/auction/{id}/configure
-        // Admin configures the auction schedule.
         [HttpPut("{id}/configure")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> ConfigureAuction(int id, UpdateAuctionScheduleDto dto)
@@ -501,155 +395,51 @@ namespace ProductAuction.API.Controllers
             }
 
             if (auction.Status != "Upcoming")
-            {
                 return BadRequest(new
                 {
                     status = 400,
                     message = "Only upcoming auctions can be configured."
                 });
-            }
-
             if (dto.StartTime <= DateTime.UtcNow)
-            {
-                return BadRequest(new
-                {
-                    status = 400,
-                    message = "Start time must be in the future."
-                });
-            }
-
-            if (dto.EndTime <= dto.StartTime)
-            {
-                return BadRequest(new
-                {
-                    status = 400,
-                    message = "End time must be after the start time."
-                });
-            }
+                return BadRequest(new { status = 400, message = "Start time must be in the future." });
+            if (dto.EndTime <= dto.StartTime) return BadRequest(new { status = 400, message = "End time must be after the start time." });
 
             auction.StartTime = dto.StartTime;
             auction.EndTime = dto.EndTime;
 
             await _context.SaveChangesAsync();
-
-            return Ok(new
-            {
-                status = 200,
-                message = "Auction schedule configured successfully."
-            });
+            return Ok(new { status = 200, message = "Auction schedule configured successfully." });
         }
 
         // PUT: api/auction/1/schedule
-        // Update an upcoming auction's schedule.
         [HttpPut("{id}/schedule")]
         public async Task<IActionResult> UpdateAuctionSchedule(int id, UpdateAuctionScheduleDto dto)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-
-
-            if (userId == null)
-            {
-                return Unauthorized(new
-                {
-                    status = 401,
-                    message = "Please log in first."
-                });
-            }
+            if (userId == null) return Unauthorized(new { status = 401, message = "Please log in first." });
 
             var auction = await _context.Auctions.FirstOrDefaultAsync(a => a.Id == id);
+            if (auction == null) return NotFound(new { status = 404, message = "Auction not found." });
 
-            if (auction == null)
-            {
-                return NotFound(new
-                {
-                    status = 404,
-                    message = "Auction not found."
-                });
-            }
+            if (auction.SellerId != userId) return Forbid();
 
-            // Only the user who created the auction can update it for now.
-            if (auction.SellerId != userId)
-            {
-                return Forbid();
-            }
+            if (auction.Status != "Upcoming") return BadRequest(new { status = 400, message = "Only upcoming auctions can be rescheduled." });
 
-            // Once an auction has started or ended, its schedule is locked.
-            if (auction.Status != "Upcoming")
-            {
-                return BadRequest(new
-                {
-                    status = 400,
-                    message = "Only upcoming auctions can be rescheduled."
-                });
-            }
-
-            // An unavailable product must not have its auction scheduled.
             var product = await _context.Products.FirstOrDefaultAsync(p => p.Id == auction.ProductId);
+            if (product == null) return NotFound(new { status = 404, message = "Auction product not found." });
+            if (product.Status != "Available" || product.ApprovalStatus != "Approved") return BadRequest(new { status = 400, message = "The product must be approved and available to configure its auction." });
+            if (dto.StartTime >= dto.EndTime) return BadRequest(new { status = 400, message = "Start time must be earlier than end time." });
+            if (dto.StartTime <= DateTime.UtcNow) return BadRequest(new { status = 400, message = "Auction start time must be in the future." });
 
-            if (product == null)
-            {
-                return NotFound(new
-                {
-                    status = 404,
-                    message = "Auction product not found."
-                });
-            }
-
-            // The product must still be approved by an admin and not sold/withdrawn.
-            if (product.Status != "Available" || product.ApprovalStatus != "Approved")
-            {
-                return BadRequest(new
-                {
-                    status = 400,
-                    message = "The product must be approved and available to configure its auction."
-                });
-            }
-
-            // The auction must end after it starts.
-            if (dto.StartTime >= dto.EndTime)
-            {
-                return BadRequest(new
-                {
-                    status = 400,
-                    message = "Start time must be earlier than end time."
-                });
-            }
-
-            // The new start time can't be in the past.
-            if (dto.StartTime <= DateTime.UtcNow)
-            {
-                return BadRequest(new
-                {
-                    status = 400,
-                    message = "Auction start time must be in the future."
-                });
-            }
-
-            // All checks passed, so apply the new schedule.
             auction.StartTime = dto.StartTime;
             auction.EndTime = dto.EndTime;
 
             await _context.SaveChangesAsync();
 
-            return Ok(new
-            {
-                status = 200,
-                message = "Auction schedule updated successfully.",
-                data = new
-                {
-                    auction.Id,
-                    auction.StartTime,
-                    auction.EndTime,
-                    auction.Status
-                }
-            });
+            return Ok(new { status = 200, message = "Auction schedule updated successfully.", data = new { auction.Id, auction.StartTime, auction.EndTime, auction.Status } });
         }
 
-
-
         // PUT: api/auction/{id}/cancel
-        // Sellers can cancel upcoming auctions and forfeit their deposit.
-        // Admins can cancel upcoming or active auctions and release reservations.
         [HttpPut("{id}/cancel")]
         [Authorize]
         public async Task<IActionResult> CancelAuction(int id, CancelAuctionDto dto)
@@ -657,211 +447,70 @@ namespace ProductAuction.API.Controllers
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             var isAdmin = User.IsInRole("Admin");
 
-            if (string.IsNullOrWhiteSpace(userId))
-            {
-                return Unauthorized(new
-                {
-                    status = 401,
-                    message = "User identity was not found in the token."
-                });
-            }
-
-            if (string.IsNullOrWhiteSpace(dto.Reason))
-            {
-                return BadRequest(new
-                {
-                    status = 400,
-                    message = "A cancellation reason is required."
-                });
-            }
+            if (string.IsNullOrWhiteSpace(userId)) return Unauthorized(new { status = 401, message = "User identity was not found in the token." });
+            if (string.IsNullOrWhiteSpace(dto.Reason)) return BadRequest(new { status = 400, message = "A cancellation reason is required." });
 
             await using var transaction = await _context.Database.BeginTransactionAsync();
 
             var auction = await _context.Auctions.FirstOrDefaultAsync(a => a.Id == id);
-
-            if (auction == null)
-            {
-                return NotFound(new
-                {
-                    status = 404,
-                    message = "Auction not found."
-                });
-            }
+            if (auction == null) return NotFound(new { status = 404, message = "Auction not found." });
 
             var isSeller = auction.SellerId == userId;
+            if (!isSeller && !isAdmin) return Forbid();
 
-            if (!isSeller && !isAdmin)
-            {
-                return Forbid();
-            }
+            if (auction.Status != "Upcoming" && auction.Status != "Active") return BadRequest(new { status = 400, message = "Only upcoming or active auctions can be cancelled." });
+            if (isSeller && auction.Status != "Upcoming") return BadRequest(new { status = 400, message = "Sellers can only cancel upcoming auctions." });
 
-            if (auction.Status != "Upcoming" && auction.Status != "Active")
-            {
-                return BadRequest(new
-                {
-                    status = 400,
-                    message = "Only upcoming or active auctions can be cancelled."
-                });
-            }
-
-            // Sellers can cancel only upcoming auctions.
-            if (isSeller && auction.Status != "Upcoming")
-            {
-                return BadRequest(new
-                {
-                    status = 400,
-                    message = "Sellers can only cancel upcoming auctions."
-                });
-            }
-
-            // Find this seller's reserved deposit for this product.
             var reservation = await _context.WalletReservations
                 .FirstOrDefaultAsync(r =>
                     r.ProductId == auction.ProductId &&
-                    r.WalletId == _context.Wallets
-                        .Where(w => w.UserId == auction.SellerId)
-                        .Select(w => w.Id)
-                        .FirstOrDefault() &&
+                    r.WalletId == _context.Wallets.Where(w => w.UserId == auction.SellerId).Select(w => w.Id).FirstOrDefault() &&
                     r.Type == "SellerDeposit" &&
                     r.Status == "Reserved");
 
-            if (isSeller && reservation == null)
-            {
-                return BadRequest(new
-                {
-                    status = 400,
-                    message = "No reserved seller deposit was found."
-                });
-            }
+            if (isSeller && reservation == null) return BadRequest(new { status = 400, message = "No reserved seller deposit was found." });
 
             if (reservation != null)
             {
-                var sellerWallet = await _context.Wallets
-                    .FirstOrDefaultAsync(w => w.Id == reservation.WalletId);
-
-                if (sellerWallet == null)
-                {
-                    return BadRequest(new
-                    {
-                        status = 400,
-                        message = "Seller wallet not found."
-                    });
-                }
-
-                if (sellerWallet.ReservedBalance < reservation.Amount)
-                {
-                    return BadRequest(new
-                    {
-                        status = 400,
-                        message = "Insufficient reserved balance to process the deposit."
-                    });
-                }
+                var sellerWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.Id == reservation.WalletId);
+                if (sellerWallet == null) return BadRequest(new { status = 400, message = "Seller wallet not found." });
+                if (sellerWallet.ReservedBalance < reservation.Amount) return BadRequest(new { status = 400, message = "Insufficient reserved balance to process the deposit." });
 
                 if (isSeller)
                 {
-                    // Forfeit the entire deposit to the platform.
-                    if (sellerWallet.Balance < reservation.Amount)
-                    {
-                        return BadRequest(new
-                        {
-                            status = 400,
-                            message = "Insufficient wallet balance to forfeit the deposit."
-                        });
-                    }
+                    if (sellerWallet.Balance < reservation.Amount) return BadRequest(new { status = 400, message = "Insufficient wallet balance to forfeit the deposit." });
 
                     var platformUser = await _context.Users.FirstOrDefaultAsync(u => u.UserName == "platform-system-account");
-
-                    if (platformUser == null)
-                    {
-                        return BadRequest(new
-                        {
-                            status = 400,
-                            message = "The platform account was not found."
-                        });
-                    }
+                    if (platformUser == null) return BadRequest(new { status = 400, message = "The platform account was not found." });
 
                     var platformWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == platformUser.Id);
-
-                    if (platformWallet == null)
-                    {
-                        return BadRequest(new
-                        {
-                            status = 400,
-                            message = "The platform wallet was not found."
-                        });
-                    }
+                    if (platformWallet == null) return BadRequest(new { status = 400, message = "The platform wallet was not found." });
 
                     var now = DateTime.UtcNow;
 
                     sellerWallet.Balance -= reservation.Amount;
                     sellerWallet.ReservedBalance -= reservation.Amount;
-
                     platformWallet.Balance += reservation.Amount;
-
                     reservation.Status = "Forfeited";
 
-                    // Record the debit from the seller.
-                    _context.WalletTransactions.Add(new WalletTransaction
-                    {
-                        WalletId = sellerWallet.Id,
-                        Type = "Penalty",
-                        Amount = reservation.Amount,
-                        BalanceAfter = sellerWallet.Balance,
-                        Reference = $"Seller deposit forfeited for auction #{auction.Id}",
-                        CreatedAt = now
-                    });
-
-                    // Record the amount received by the platform.
-                    _context.WalletTransactions.Add(new WalletTransaction
-                    {
-                        WalletId = platformWallet.Id,
-                        Type = "Credit",
-                        Amount = reservation.Amount,
-                        BalanceAfter = platformWallet.Balance,
-                        Reference = $"Seller deposit forfeiture for auction #{auction.Id}",
-                        CreatedAt = now
-                    });
+                    _context.WalletTransactions.Add(new WalletTransaction { WalletId = sellerWallet.Id, Type = "Penalty", Amount = reservation.Amount, BalanceAfter = sellerWallet.Balance, Reference = $"Seller deposit forfeited for auction #{auction.Id}", CreatedAt = now });
+                    _context.WalletTransactions.Add(new WalletTransaction { WalletId = platformWallet.Id, Type = "Credit", Amount = reservation.Amount, BalanceAfter = platformWallet.Balance, Reference = $"Seller deposit forfeiture for auction #{auction.Id}", CreatedAt = now });
                 }
                 else
                 {
-                    // Admin cancellation: release the seller's deposit.
                     sellerWallet.ReservedBalance -= reservation.Amount;
                     reservation.Status = "Released";
                 }
             }
 
-            // Admin cancellation also releases buyer eligibility reservations.
-            // Seller cancellation is allowed only for Upcoming auctions.
             if (isAdmin)
             {
-                var buyerReservations = await _context.WalletReservations
-                    .Where(r =>
-                        r.AuctionId == auction.Id &&
-                        r.Type == "BuyerFunds" &&
-                        r.Status == "Reserved")
-                    .ToListAsync();
-
+                var buyerReservations = await _context.WalletReservations.Where(r => r.AuctionId == auction.Id && r.Type == "BuyerFunds" && r.Status == "Reserved").ToListAsync();
                 foreach (var buyerReservation in buyerReservations)
                 {
                     var buyerWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.Id == buyerReservation.WalletId);
-
-                    if (buyerWallet == null)
-                    {
-                        return BadRequest(new
-                        {
-                            status = 400,
-                            message = "A buyer wallet associated with a reservation was not found."
-                        });
-                    }
-
-                    if (buyerWallet.ReservedBalance < buyerReservation.Amount)
-                    {
-                        return BadRequest(new
-                        {
-                            status = 400,
-                            message = "Insufficient reserved balance to release a buyer reservation."
-                        });
-                    }
+                    if (buyerWallet == null) return BadRequest(new { status = 400, message = "A buyer wallet associated with a reservation was not found." });
+                    if (buyerWallet.ReservedBalance < buyerReservation.Amount) return BadRequest(new { status = 400, message = "Insufficient reserved balance to release a buyer reservation." });
 
                     buyerWallet.ReservedBalance -= buyerReservation.Amount;
                     buyerReservation.Status = "Released";
@@ -877,9 +526,7 @@ namespace ProductAuction.API.Controllers
             return Ok(new
             {
                 status = 200,
-                message = isSeller
-                    ? "Auction cancelled. Your deposit has been forfeited to the platform."
-                    : "Auction cancelled by admin. Seller and buyer reservations have been released.",
+                message = isSeller ? "Auction cancelled. Your deposit has been forfeited to the platform." : "Auction cancelled by admin. Seller and buyer reservations have been released.",
                 data = new
                 {
                     auction.Id,
@@ -888,6 +535,5 @@ namespace ProductAuction.API.Controllers
                 }
             });
         }
-
     }
 }

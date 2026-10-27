@@ -25,14 +25,11 @@ namespace ProductAuction.API.Controllers
         }
 
         // GET: api/product
-        // Public list of Approved products.
         [HttpGet]
         public async Task<IActionResult> GetAllProducts()
         {
             var products = await _context.Products
-                 .Where(p =>
-                 p.ApprovalStatus == "Approved" &&
-                 p.Status == "Available")
+                 .Where(p => p.ApprovalStatus == "Approved" && p.Status == "Available")
                  .OrderByDescending(p => p.CreatedAt)
                  .Select(p => new ProductListResponseDto
                  {
@@ -46,7 +43,9 @@ namespace ProductAuction.API.Controllers
                          .Where(i => i.ProductId == p.Id && i.IsMain)
                          .Select(i => i.ImageUrl)
                          .FirstOrDefault(),
-                     CreatedAt = p.CreatedAt
+                     CreatedAt = p.CreatedAt,
+                     CategoryId = p.CategoryId, 
+                     CategoryName = p.Category.Name,
                  }).ToListAsync();
 
             return Ok(new

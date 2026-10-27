@@ -20,6 +20,8 @@
 
         // Used by admin moderation pages to show category/condition/rejection
         public string? CategoryName { get; set; }
+        public int CategoryId { get; set; }
+
         public string? Condition { get; set; }
         public string? RejectionReason { get; set; }
 
