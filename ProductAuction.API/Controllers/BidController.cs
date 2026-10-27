@@ -517,6 +517,9 @@ namespace ProductAuction.API.Controllers
             auction.CurrentHighestBidderId = userId;
             auction.BidCount++;
 
+            // Mark product as unavailable after sale
+            product.Status = "Unavailable";
+
             // platform takes 10%, seller gets the rest
             decimal commissionAmount = Math.Round(product.BuyoutPrice * 0.10m, 2);
             decimal sellerProceeds = product.BuyoutPrice - commissionAmount;

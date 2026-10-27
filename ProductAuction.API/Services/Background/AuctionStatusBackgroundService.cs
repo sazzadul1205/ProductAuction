@@ -39,9 +39,7 @@ namespace ProductAuction.API.Services.Background
                         .Where(a =>
                             a.Status == "Upcoming" &&
                             a.StartTime.HasValue &&
-                            a.EndTime.HasValue &&
-                            a.StartTime.Value <= now &&
-                            a.EndTime.Value > now)
+                            a.StartTime.Value <= now)
                         .ToListAsync(stoppingToken);
 
                     // Flip each matching auction to "Active".

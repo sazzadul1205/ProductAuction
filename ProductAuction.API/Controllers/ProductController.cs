@@ -1038,6 +1038,7 @@ namespace ProductAuction.API.Controllers
             {
                 // approved — reservation stays in place, and we spin up an auction
                 product.RejectionReason = null;
+                product.Status = "Available";
 
                 var auctionExists = await _context.Auctions.AnyAsync(a => a.ProductId == product.Id);
 

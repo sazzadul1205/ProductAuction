@@ -165,6 +165,9 @@ namespace ProductAuction.API.Services.Background
                                 auction.CurrentHighestBid = highestBid.Amount;
                                 auction.CurrentHighestBidderId = highestBid.BidderId;
 
+                                // Mark product as unavailable after sale
+                                product.Status = "Unavailable";
+
                                 // Calculate the platform commission (10%).
                                 decimal commissionAmount = Math.Round(highestBid.Amount * 0.10m, 2);
 
