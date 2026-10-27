@@ -1,5 +1,4 @@
-﻿
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -21,10 +20,9 @@ namespace ProductAuction.API.Controllers
     {
         private readonly UserManager<IdentityUser> _userManager;
         private readonly AppDbContext _context;
-
         private readonly IImageUploadService _imageUploadService;
 
-        // Reads JWT settings from appsettings.json.
+        // reads JWT settings from appsettings.json
         private readonly IConfiguration _configuration;
 
         public AuthController(
@@ -45,7 +43,7 @@ namespace ProductAuction.API.Controllers
         [HttpPost("register")]
         public async Task<IActionResult> Register(RegisterDto dto)
         {
-            // Check whether the email is already registered.
+            // check if this email is already taken
             var existingUser = await _userManager.FindByEmailAsync(dto.Email);
 
             if (existingUser != null)
@@ -57,7 +55,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Public registration only allows Buyer or Seller.
+            // public registration only allows Buyer or Seller
             if (dto.Role != "Buyer" && dto.Role != "Seller")
             {
                 return BadRequest(new
@@ -67,89 +65,67 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Create the Identity user object.
+            // create the Identity user object
             var user = new IdentityUser
             {
                 UserName = dto.Email,
                 Email = dto.Email
             };
 
-            // Start a transaction so all database changes succeed or roll back together.
-            await using var transaction = await _context.Database.BeginTransactionAsync();
+            // create the account (Identity hashes the password for us)
+            var result = await _userManager.CreateAsync(user, dto.Password);
 
-            try
+            if (!result.Succeeded)
             {
-                // Create the user's Identity account.
-                // Identity securely hashes the password.
-                var result = await _userManager.CreateAsync(user, dto.Password);
-
-                if (!result.Succeeded)
+                return BadRequest(new
                 {
-                    await transaction.RollbackAsync();
-
-                    return BadRequest(new
-                    {
-                        status = 400,
-                        message = "Registration failed.",
-                        errors = result.Errors
-                    });
-                }
-
-                // Assign the selected role to the new account.
-                var roleResult = await _userManager.AddToRoleAsync(user, dto.Role);
-
-                if (!roleResult.Succeeded)
-                {
-                    await transaction.RollbackAsync();
-
-                    return BadRequest(new
-                    {
-                        status = 400,
-                        message = "Role assignment failed.",
-                        errors = roleResult.Errors
-                    });
-                }
-
-                // Create the user's profile.
-                var profile = new UserProfile
-                {
-                    UserId = user.Id,
-                    FullName = dto.FullName,
-                    CreatedAt = DateTime.UtcNow
-                };
-
-                // Create an empty wallet for the new user.
-                var wallet = new Wallet
-                {
-                    UserId = user.Id,
-                    Balance = 0,
-                    ReservedBalance = 0
-                };
-
-                _context.UserProfiles.Add(profile);
-                _context.Wallets.Add(wallet);
-
-                // Save the profile and wallet.
-                await _context.SaveChangesAsync();
-
-                // Commit only after every required operation succeeds.
-                await transaction.CommitAsync();
-
-                return Ok(new
-                {
-                    status = 200,
-                    message = "Registration successful.",
-                    email = user.Email,
-                    role = dto.Role
+                    status = 400,
+                    message = "Registration failed.",
+                    errors = result.Errors
                 });
             }
-            catch
-            {
-                // Undo the database changes if an unexpected error occurs.
-                await transaction.RollbackAsync();
 
-                throw;
+            // assign the selected role
+            var roleResult = await _userManager.AddToRoleAsync(user, dto.Role);
+
+            if (!roleResult.Succeeded)
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "Role assignment failed.",
+                    errors = roleResult.Errors
+                });
             }
+
+            // create the user's profile
+            var profile = new UserProfile
+            {
+                UserId = user.Id,
+                FullName = dto.FullName,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            // and an empty wallet
+            var wallet = new Wallet
+            {
+                UserId = user.Id,
+                Balance = 0,
+                ReservedBalance = 0
+            };
+
+            _context.UserProfiles.Add(profile);
+            _context.Wallets.Add(wallet);
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                status = 200,
+                message = "Registration successful.",
+                email = user.Email,
+                role = dto.Role
+            });
         }
 
 
@@ -158,10 +134,10 @@ namespace ProductAuction.API.Controllers
         [HttpPost("login")]
         public async Task<IActionResult> Login(LoginDto dto)
         {
-            // Find the account by email.
+            // find the account by email
             var user = await _userManager.FindByEmailAsync(dto.Email);
 
-            // Do not reveal whether the email or password was incorrect.
+            // don't reveal whether the email or password was wrong
             if (user == null)
             {
                 return Unauthorized(new
@@ -171,6 +147,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
+            // locked accounts can't log in even with the right password
             if (await _userManager.IsLockedOutAsync(user))
             {
                 return Unauthorized(new
@@ -179,7 +156,8 @@ namespace ProductAuction.API.Controllers
                     message = "Account is locked."
                 });
             }
-            // Check the submitted password.
+
+            // check the submitted password
             var passwordIsValid = await _userManager.CheckPasswordAsync(user, dto.Password);
 
             if (!passwordIsValid)
@@ -191,10 +169,10 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Get the roles assigned to this user.
+            // get the roles assigned to this user
             var roles = await _userManager.GetRolesAsync(user);
 
-            // Add the user's ID, email, and roles to the token.
+            // put the user's id, email, and roles into the token
             var claims = new List<Claim>
             {
                 new Claim(ClaimTypes.NameIdentifier, user.Id),
@@ -206,13 +184,13 @@ namespace ProductAuction.API.Controllers
                 claims.Add(new Claim(ClaimTypes.Role, role));
             }
 
-            // Read the signing key from configuration.
+            // signing key comes from config
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]!));
 
-            // Choose the algorithm used to sign the token.
+            // pick the signing algorithm
             var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
-            // Create a token that expires in two hours.
+            // token lasts 2 hours
             var token = new JwtSecurityToken(
                 issuer: _configuration["Jwt:Issuer"],
                 audience: _configuration["Jwt:Audience"],
@@ -220,10 +198,9 @@ namespace ProductAuction.API.Controllers
                 expires: DateTime.UtcNow.AddHours(2),
                 signingCredentials: credentials);
 
-            // Convert the token into a string for the client.
+            // turn it into a string for the client
             var tokenString = new JwtSecurityTokenHandler().WriteToken(token);
 
-            // Return the token and account information.
             return Ok(new
             {
                 status = 200,
@@ -236,7 +213,7 @@ namespace ProductAuction.API.Controllers
 
 
         // GET: api/auth/test-token
-        // Requires a valid JWT token.
+        // Requires a valid JWT token — just to confirm auth is working.
         [Authorize]
         [HttpGet("test-token")]
         public IActionResult TestToken()
@@ -253,12 +230,12 @@ namespace ProductAuction.API.Controllers
 
 
         // GET: api/auth/me
-        // Returns the current user's account and profile information.
+        // Returns the current user's account and profile info.
         [Authorize]
         [HttpGet("me")]
         public async Task<IActionResult> Me()
         {
-            // Get the user ID from the validated JWT.
+            // grab the user id from the validated JWT
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             if (string.IsNullOrEmpty(userId))
@@ -270,7 +247,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Find the Identity account.
+            // find the Identity account
             var user = await _userManager.FindByIdAsync(userId);
 
             if (user == null)
@@ -282,11 +259,10 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Find the profile linked to this account.
-            var profile = await _context.UserProfiles
-                .FirstOrDefaultAsync(p => p.UserId == user.Id);
+            // find the profile linked to this account
+            var profile = await _context.UserProfiles.FirstOrDefaultAsync(p => p.UserId == user.Id);
 
-            // Get all roles assigned to this account.
+            // get all roles for this account
             var roles = await _userManager.GetRolesAsync(user);
 
             return Ok(new
@@ -322,60 +298,82 @@ namespace ProductAuction.API.Controllers
 
 
         // PUT: api/auth/me
-        // Updates the editable profile and optionally uploads NID images
-        // for the currently logged-in user.
+        // Updates the editable profile fields (and optionally uploads NID images).
         [Authorize]
         [HttpPut("me")]
         public async Task<IActionResult> UpdateMe([FromForm] UpdateProfileDto dto)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (string.IsNullOrEmpty(userId)) return Unauthorized();
+
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized();
 
             var profile = await _context.UserProfiles.FirstOrDefaultAsync(p => p.UserId == userId);
-            if (profile == null) return NotFound(new { message = "User profile not found." });
 
-            // 1. Update the UserProfile table fields
+            if (profile == null)
+            {
+                return NotFound(new
+                {
+                    message = "User profile not found."
+                });
+            }
+
+            // 1. update the UserProfile fields
             profile.FullName = dto.FullName;
             profile.ProfilePhotoUrl = dto.ProfilePhotoUrl;
             profile.Address = dto.Address;
             profile.City = dto.City;
             profile.NationalIdNumber = dto.NationalIdNumber;
 
-            // NID Image uploads...
+            // upload new NID images if any were sent
             if (dto.NationalIdFrontImage != null)
+            {
                 profile.NationalIdFrontImageUrl = await _imageUploadService.UploadImageAsync(dto.NationalIdFrontImage);
+            }
+
             if (dto.NationalIdBackImage != null)
+            {
                 profile.NationalIdBackImageUrl = await _imageUploadService.UploadImageAsync(dto.NationalIdBackImage);
+            }
 
             profile.UpdatedAt = DateTime.UtcNow;
 
-            // 2. Update the IdentityUser table (Phone Number)
-            if (!string.IsNullOrWhiteSpace(dto.PhoneNumber))
+            // 2. update the phone number on the Identity side
+            if (!string.IsNullOrEmpty(dto.PhoneNumber))
             {
                 var user = await _userManager.FindByIdAsync(userId);
+
                 if (user != null)
                 {
                     var phoneResult = await _userManager.SetPhoneNumberAsync(user, dto.PhoneNumber);
+
                     if (!phoneResult.Succeeded)
                     {
-                        return BadRequest(new { message = "Failed to update phone number." });
+                        return BadRequest(new
+                        {
+                            message = "Failed to update phone number."
+                        });
                     }
                 }
             }
 
             await _context.SaveChangesAsync();
 
-            return Ok(new { status = 200, message = "Profile updated successfully." });
+            return Ok(new
+            {
+                status = 200,
+                message = "Profile updated successfully."
+            });
         }
 
 
         // POST: api/auth/change-password
-        // Changes the password of the currently logged-in user.
+        // Changes the password of the logged-in user.
         [Authorize]
         [HttpPost("change-password")]
         public async Task<IActionResult> ChangePassword(ChangePasswordDto dto)
         {
-            // Get the current user's ID from the validated JWT.
+            // grab the user id from the validated JWT
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             if (string.IsNullOrEmpty(userId))
@@ -387,7 +385,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Find the current Identity account.
+            // find the current Identity account
             var user = await _userManager.FindByIdAsync(userId);
 
             if (user == null)
@@ -399,7 +397,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // and apply its configured password rules.
+            // Identity validates the current password and applies the password rules
             var result = await _userManager.ChangePasswordAsync(user, dto.CurrentPassword, dto.NewPassword);
 
             if (!result.Succeeded)

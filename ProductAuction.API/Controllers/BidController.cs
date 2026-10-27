@@ -20,14 +20,14 @@ namespace ProductAuction.API.Controllers
             _context = context;
         }
 
+
         // POST: api/bid
-        // Place a bid on an active auction.
+        // Places a bid on an active auction.
         [HttpPost]
         [Authorize(Roles = "Buyer")]
-
         public async Task<IActionResult> PlaceBid(PlaceBidDto dto)
         {
-            // Get the logged-in user's ID.
+            // get the logged-in user's id
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             if (userId == null)
@@ -39,7 +39,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Find the auction.
+            // find the auction
             var auction = await _context.Auctions.FirstOrDefaultAsync(a => a.Id == dto.AuctionId);
 
             if (auction == null)
@@ -51,7 +51,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Find the product.
+            // find the product
             var product = await _context.Products.FirstOrDefaultAsync(p => p.Id == auction.ProductId);
 
             if (product == null)
@@ -63,7 +63,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Check auction status and end time.
+            // only active auctions accept bids
             if (auction.Status != "Active")
             {
                 return BadRequest(new
@@ -82,7 +82,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Check product availability.
+            // product has to be approved and available
             if (product.ApprovalStatus != "Approved" || product.Status != "Available")
             {
                 return BadRequest(new
@@ -92,7 +92,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Sellers cannot bid on their own products.
+            // sellers can't bid on their own stuff
             if (auction.SellerId == userId)
             {
                 return BadRequest(new
@@ -102,7 +102,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Bids at or above the buyout price must use buyout.
+            // bids at or above the buyout price should use the buyout endpoint instead
             if (product.BuyoutPrice > 0 && dto.Amount >= product.BuyoutPrice)
             {
                 return BadRequest(new
@@ -112,7 +112,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // The first bid must meet the starting price.
+            // first bid has to meet the starting price
             if (dto.Amount < product.StartingPrice)
             {
                 return BadRequest(new
@@ -122,7 +122,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Check the minimum increment for subsequent bids.
+            // subsequent bids need to clear the minimum increment
             if (auction.CurrentHighestBid.HasValue)
             {
                 var highestBid = auction.CurrentHighestBid.Value;
@@ -144,7 +144,7 @@ namespace ProductAuction.API.Controllers
                 }
             }
 
-            // Find the buyer's wallet.
+            // find the buyer's wallet
             var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == userId);
 
             if (wallet == null)
@@ -156,7 +156,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Check for an existing reservation.
+            // see if the buyer already has funds locked for this auction
             var reservation = await _context.WalletReservations
                 .FirstOrDefaultAsync(r =>
                     r.AuctionId == auction.Id &&
@@ -164,7 +164,7 @@ namespace ProductAuction.API.Controllers
                     r.Type == "BuyerFunds" &&
                     r.Status == "Reserved");
 
-            // Reserve 25% of the starting price only once.
+            // reserve 25% of the starting price, but only once per auction
             if (reservation == null)
             {
                 var requiredAmount = product.StartingPrice * 0.25m;
@@ -194,7 +194,7 @@ namespace ProductAuction.API.Controllers
                 _context.WalletReservations.Add(reservation);
             }
 
-            // Create the bid.
+            // create the bid
             var bid = new Bid
             {
                 AuctionId = auction.Id,
@@ -205,7 +205,7 @@ namespace ProductAuction.API.Controllers
 
             _context.Bids.Add(bid);
 
-            // Update the highest bid.
+            // bump the auction's highest bid info
             auction.CurrentHighestBid = dto.Amount;
             auction.CurrentHighestBidderId = userId;
             auction.BidCount++;
@@ -228,12 +228,13 @@ namespace ProductAuction.API.Controllers
             });
         }
 
-        // GET: api/bid/auction/5/bids
-        // Gets the bid history for a specific auction.
+
+        // GET: api/bid/auction/{auctionId}/bids
+        // Returns the bid history for a specific auction, newest first.
         [HttpGet("auction/{auctionId}/bids")]
         public async Task<IActionResult> GetAuctionBidHistory(int auctionId)
         {
-            // Check whether the auction exists.
+            // make sure the auction exists
             var auction = await _context.Auctions.FirstOrDefaultAsync(a => a.Id == auctionId);
 
             if (auction == null)
@@ -245,18 +246,19 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Retrieve bids for this auction, newest first.
             var bids = await _context.Bids
                 .Where(b => b.AuctionId == auctionId)
                 .OrderByDescending(b => b.PlacedAt)
                 .Select(b => new BidHistoryDto
                 {
                     BidderId = b.BidderId,
-                    // Fetch the FullName from UserProfiles
+
+                    // pull the bidder's name from their profile
                     BidderName = _context.UserProfiles
                         .Where(p => p.UserId == b.BidderId)
                         .Select(p => p.FullName)
                         .FirstOrDefault() ?? "Unknown User",
+
                     Amount = b.Amount,
                     PlacedAt = b.PlacedAt
                 })
@@ -270,9 +272,9 @@ namespace ProductAuction.API.Controllers
             });
         }
 
-        // GET: api/bid/auction/5/bids/admin
-        // Admin-only view of a single auction's bid history, including
-        // bidder email, amount, timestamp, and whether it was a buyout.
+
+        // GET: api/bid/auction/{auctionId}/bids/admin
+        // Admin view of an auction's bid history, including bidder email and buyout flag.
         [HttpGet("auction/{auctionId}/bids/admin")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> GetAuctionBidHistoryForAdmin(int auctionId)
@@ -297,18 +299,24 @@ namespace ProductAuction.API.Controllers
                 {
                     bidId = b.Id,
                     bidderId = b.BidderId,
+
+                    // bidder email from the Identity users table
                     bidderEmail = _context.Users
                         .Where(u => u.Id == b.BidderId)
                         .Select(u => u.Email)
                         .FirstOrDefault() ?? "",
-                    // Fetch the Bidder's Name
+
+                    // bidder name from their profile
                     bidderName = _context.UserProfiles
                         .Where(p => p.UserId == b.BidderId)
                         .Select(p => p.FullName)
                         .FirstOrDefault() ?? "Unknown User",
+
                     amount = b.Amount,
                     isBuyout = b.IsBuyout,
                     placedAt = b.PlacedAt,
+
+                    // is this bid still the current highest?
                     isHighest = b.Auction.CurrentHighestBidderId == b.BidderId
                         && b.Auction.CurrentHighestBid == b.Amount
                 })
@@ -330,14 +338,15 @@ namespace ProductAuction.API.Controllers
                 }
             });
         }
-        
-        // POST: api/bid/5/buyout
-        // Allows a buyer to purchase a product immediately at its buyout price.
+
+
+        // POST: api/bid/{auctionId}/buyout
+        // Lets a buyer immediately buy the product at its buyout price.
         [HttpPost("{auctionId}/buyout")]
         [Authorize(Roles = "Buyer")]
         public async Task<IActionResult> Buyout(int auctionId)
         {
-            // Get the logged-in user's ID.
+            // get the logged-in user's id
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             if (userId == null)
@@ -349,8 +358,9 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Find the auction.
-            var auction = await _context.Auctions.FirstOrDefaultAsync(a => a.Id == auctionId);
+            // find the auction
+            var auction = await _context.Auctions
+                .FirstOrDefaultAsync(a => a.Id == auctionId);
 
             if (auction == null)
             {
@@ -361,7 +371,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // The auction must currently be active.
+            // auction has to be active and not past its end time
             if (auction.Status != "Active")
             {
                 return BadRequest(new
@@ -371,7 +381,6 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // The auction must not have passed its end time.
             if (!auction.EndTime.HasValue || auction.EndTime.Value <= DateTime.UtcNow)
             {
                 return BadRequest(new
@@ -381,7 +390,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Find the product being auctioned.
+            // find the product
             var product = await _context.Products.FirstOrDefaultAsync(p => p.Id == auction.ProductId);
 
             if (product == null)
@@ -393,7 +402,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Prevent sellers from buying their own products.
+            // sellers can't buy their own product
             if (auction.SellerId == userId)
             {
                 return BadRequest(new
@@ -403,7 +412,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Only approved and available products can be purchased.
+            // product has to be approved and available
             if (product.ApprovalStatus != "Approved" || product.Status != "Available")
             {
                 return BadRequest(new
@@ -413,7 +422,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // A valid buyout price must be configured.
+            // and it actually needs a buyout price
             if (product.BuyoutPrice <= 0)
             {
                 return BadRequest(new
@@ -423,7 +432,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Prevent creating another sale for the same auction.
+            // don't let the same auction be sold twice
             var existingSale = await _context.Sales.AnyAsync(s => s.AuctionId == auctionId);
 
             if (existingSale)
@@ -435,10 +444,10 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Start a transaction so all changes succeed or fail together.
+            // all the wallet + sale changes below need to succeed together
             await using var transaction = await _context.Database.BeginTransactionAsync();
 
-            // Find the buyer's wallet.
+            // find the buyer's wallet
             var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == userId);
 
             if (wallet == null)
@@ -450,7 +459,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Check whether the buyer already has a reservation for this auction.
+            // check if the buyer already has funds locked for this auction
             var reservation = await _context.WalletReservations
                 .FirstOrDefaultAsync(r =>
                     r.WalletId == wallet.Id &&
@@ -458,11 +467,10 @@ namespace ProductAuction.API.Controllers
                     r.Type == "BuyerFunds" &&
                     r.Status == "Reserved");
 
-            // If the buyer has not participated before, reserve 25% of the starting price.
+            // first time participating? reserve 25% of the starting price
             if (reservation == null)
             {
                 decimal requiredAmount = product.StartingPrice * 0.25m;
-
                 decimal availableBalance = wallet.Balance - wallet.ReservedBalance;
 
                 if (availableBalance < requiredAmount)
@@ -474,10 +482,8 @@ namespace ProductAuction.API.Controllers
                     });
                 }
 
-                // Reserve the required amount.
                 wallet.ReservedBalance += requiredAmount;
 
-                // Record the reservation.
                 reservation = new WalletReservation
                 {
                     WalletId = wallet.Id,
@@ -491,7 +497,7 @@ namespace ProductAuction.API.Controllers
                 _context.WalletReservations.Add(reservation);
             }
 
-            // Record the buyout as a bid.
+            // record the buyout as a bid
             var buyoutBid = new Bid
             {
                 AuctionId = auction.Id,
@@ -503,7 +509,7 @@ namespace ProductAuction.API.Controllers
 
             _context.Bids.Add(buyoutBid);
 
-            // Complete the auction and assign the buyer as winner.
+            // mark the auction as sold and assign the winner
             auction.Status = "Completed";
             auction.Result = "Sold";
             auction.WinnerId = userId;
@@ -511,15 +517,13 @@ namespace ProductAuction.API.Controllers
             auction.CurrentHighestBidderId = userId;
             auction.BidCount++;
 
-            // Calculate the platform commission (10%).
+            // platform takes 10%, seller gets the rest
             decimal commissionAmount = Math.Round(product.BuyoutPrice * 0.10m, 2);
-
-            // Calculate the seller's proceeds.
             decimal sellerProceeds = product.BuyoutPrice - commissionAmount;
 
-            // Create the sale record.
             var now = DateTime.UtcNow;
 
+            // create the sale record
             var sale = new Sale
             {
                 AuctionId = auction.Id,
@@ -536,7 +540,7 @@ namespace ProductAuction.API.Controllers
 
             _context.Sales.Add(sale);
 
-            // Find all buyer reservations still locked for this auction.
+            // release reserved funds for every bidder except the winner
             var reservations = await _context.WalletReservations
                 .Where(r =>
                     r.AuctionId == auction.Id &&
@@ -546,27 +550,24 @@ namespace ProductAuction.API.Controllers
 
             foreach (var buyerReservation in reservations)
             {
-                // Keep the buyout winner's reservation locked.
+                // skip the winner — their funds stay locked until payment
                 if (buyerReservation.WalletId == wallet.Id)
                 {
                     continue;
                 }
 
-                // Find the non-winner's wallet.
                 var otherWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.Id == buyerReservation.WalletId);
 
-                // Skip if the wallet no longer exists.
                 if (otherWallet == null)
                 {
                     continue;
                 }
 
-                // Release the non-winner's reserved funds.
                 otherWallet.ReservedBalance -= buyerReservation.Amount;
                 buyerReservation.Status = "Released";
             }
 
-            // Save the bid, auction, sale, and reservation changes together.
+            // save the bid, auction, sale, and reservation changes together
             await _context.SaveChangesAsync();
 
             await transaction.CommitAsync();
@@ -587,32 +588,28 @@ namespace ProductAuction.API.Controllers
         }
 
 
-        // Determines the minimum bid increment based on the current highest bid.
-        // The price range between the starting price and buyout price is divided into three tiers:
-        // Tier 1: 20 increment
-        // Tier 2: 50 increment
-        // Tier 3: 100 increment
+        // Works out the minimum bid increment based on where the current bid sits
+        // within the price range (starting → buyout). Range is split into thirds:
+        // first third = 20, middle third = 50, last third = 100.
         private decimal GetBidIncrement(decimal currentBid, decimal startingPrice, decimal buyoutPrice)
         {
-            // Calculate the total price range between the starting price and buyout price.
+            // total range between starting and buyout price
             var range = buyoutPrice - startingPrice;
 
-            // If the buyout price is not greater than the starting price,
-            // use the default Tier 1 increment.
+            // if buyout isn't above starting, just use the smallest tier
             if (range <= 0)
                 return 20m;
 
-            // Tier 1: The current highest bid is in the first third of the price range.
+            // first third of the range
             if (currentBid < startingPrice + range / 3m)
                 return 20m;
 
-            // Tier 2: The current highest bid is in the middle third of the price range.
+            // middle third
             if (currentBid < startingPrice + range * 2m / 3m)
                 return 50m;
 
-            // Tier 3: The current highest bid is in the final third of the price range.
+            // last third
             return 100m;
         }
-
     }
 }

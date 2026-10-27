@@ -31,18 +31,19 @@ namespace ProductAuction.API.Controllers
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> GetAllDisputes()
         {
-            // 1. Fetch base dispute data
+            // fetch base dispute data
             var disputes = await _context.Disputes
                 .OrderByDescending(d => d.CreatedAt)
                 .ToListAsync();
 
-            // 2. Fetch all related Sales for these disputes
+            // fetch all the sales these disputes point to
             var saleIds = disputes.Select(d => d.SaleId).Distinct().ToList();
+
             var sales = await _context.Sales
                 .Where(s => saleIds.Contains(s.Id))
                 .ToDictionaryAsync(s => s.Id);
 
-            // 3. Fetch all relevant User IDs (RaisedBy and Against)
+            // collect every user id involved (both sides of each sale)
             var raisedByIds = disputes.Select(d => d.RaisedBy).Distinct().ToList();
             var againstUserIds = new List<string>();
 
@@ -51,12 +52,15 @@ namespace ProductAuction.API.Controllers
                 if (sales.TryGetValue(d.SaleId, out var sale))
                 {
                     var againstId = sale.BuyerId == d.RaisedBy ? sale.SellerId : sale.BuyerId;
-                    if (!string.IsNullOrEmpty(againstId)) againstUserIds.Add(againstId);
+
+                    if (!string.IsNullOrEmpty(againstId))
+                        againstUserIds.Add(againstId);
                 }
             }
+
             var allUserIds = raisedByIds.Concat(againstUserIds).Distinct().ToList();
 
-            // 4. Fetch Profiles and Roles for these users
+            // fetch profiles and roles for those users
             var profiles = await _context.UserProfiles
                 .Where(p => allUserIds.Contains(p.UserId))
                 .ToDictionaryAsync(p => p.UserId, p => p.FullName);
@@ -68,8 +72,9 @@ namespace ProductAuction.API.Controllers
                 .Select(g => new { UserId = g.Key, RoleName = g.First().RoleName })
                 .ToDictionaryAsync(x => x.UserId, x => x.RoleName);
 
-            // 5. Fetch Penalties
+            // fetch penalties for these disputes
             var disputeIds = disputes.Select(d => d.Id).ToList();
+
             var penalties = await _context.Penalties
                 .Where(p => disputeIds.Contains(p.DisputeId))
                 .ToDictionaryAsync(p => p.DisputeId, p => new
@@ -80,11 +85,15 @@ namespace ProductAuction.API.Controllers
                     p.AgainstUserId
                 });
 
-            // 6. Combine in memory safely
+            // combine everything in memory
             var result = disputes.Select(d =>
             {
                 sales.TryGetValue(d.SaleId, out var sale);
-                var againstUserId = sale != null ? (sale.BuyerId == d.RaisedBy ? sale.SellerId : sale.BuyerId) : null;
+
+                var againstUserId = sale != null
+                    ? (sale.BuyerId == d.RaisedBy ? sale.SellerId : sale.BuyerId)
+                    : null;
+
                 penalties.TryGetValue(d.Id, out var penalty);
 
                 return new
@@ -99,12 +108,21 @@ namespace ProductAuction.API.Controllers
                     d.AdminDecision,
                     d.DecidedBy,
                     d.CreatedAt,
+
                     RaisedByName = profiles.TryGetValue(d.RaisedBy, out var rName) ? rName : "Unknown",
                     RaisedByRole = roles.TryGetValue(d.RaisedBy, out var rRole) ? rRole : "User",
+
                     AgainstUserId = againstUserId,
-                    AgainstName = !string.IsNullOrEmpty(againstUserId) && profiles.TryGetValue(againstUserId, out var aName) ? aName : "Unknown",
-                    AgainstRole = !string.IsNullOrEmpty(againstUserId) && roles.TryGetValue(againstUserId, out var aRole) ? aRole : "User",
-                    Penalty = penalty 
+
+                    AgainstName = !string.IsNullOrEmpty(againstUserId) && profiles.TryGetValue(againstUserId, out var aName)
+                        ? aName
+                        : "Unknown",
+
+                    AgainstRole = !string.IsNullOrEmpty(againstUserId) && roles.TryGetValue(againstUserId, out var aRole)
+                        ? aRole
+                        : "User",
+
+                    Penalty = penalty
                 };
             }).ToList();
 
@@ -116,8 +134,9 @@ namespace ProductAuction.API.Controllers
             });
         }
 
+
         // GET: api/dispute/my-disputes
-        // Returns all disputes related to the currently logged-in user.
+        // Returns all disputes related to the logged-in user.
         [HttpGet("my-disputes")]
         public async Task<IActionResult> GetMyDisputes()
         {
@@ -132,14 +151,10 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Find disputes where the logged-in user is either
-            // the buyer or the seller of the related sale.
+            // find disputes where the user is either the buyer or seller of the related sale
             var disputes = await _context.Disputes
                 .Where(d => _context.Sales.Any(s =>
-                    // Match the sale with the dispute using SaleId.
                     s.Id == d.SaleId &&
-
-                    // Only include sales involving the logged-in user.
                     (s.BuyerId == userId || s.SellerId == userId)))
                 .OrderByDescending(d => d.CreatedAt)
                 .ToListAsync();
@@ -153,7 +168,7 @@ namespace ProductAuction.API.Controllers
         }
 
 
-        // GET: api/dispute/1
+        // GET: api/dispute/{id}
         // Admin, buyer, or seller views a specific dispute.
         [HttpGet("{id}")]
         public async Task<IActionResult> GetDisputeById(int id)
@@ -170,8 +185,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            var dispute = await _context.Disputes
-                .FirstOrDefaultAsync(d => d.Id == id);
+            var dispute = await _context.Disputes.FirstOrDefaultAsync(d => d.Id == id);
 
             if (dispute == null)
             {
@@ -182,7 +196,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Find the related sale to check who is involved.
+            // find the related sale so we can check who's involved
             var sale = await _context.Sales.FirstOrDefaultAsync(s => s.Id == dispute.SaleId);
 
             if (sale == null)
@@ -194,13 +208,9 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Only the buyer, seller, or admin can view this dispute.
-            if (!isAdmin &&
-                sale.BuyerId != userId &&
-                sale.SellerId != userId)
-            {
+            // only the buyer, seller, or admin can view this
+            if (!isAdmin && sale.BuyerId != userId && sale.SellerId != userId)
                 return Forbid();
-            }
 
             return Ok(new
             {
@@ -210,12 +220,13 @@ namespace ProductAuction.API.Controllers
             });
         }
 
+
         // POST: api/dispute
         // Buyer or seller submits a dispute for a sale.
         [HttpPost]
         public async Task<IActionResult> CreateDispute([FromForm] CreateDisputeDto dto)
         {
-            // Get the ID of the logged-in user.
+            // get the logged-in user's id
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             if (userId == null)
@@ -227,7 +238,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Find the sale related to this dispute.
+            // find the sale this dispute is about
             var sale = await _context.Sales.FirstOrDefaultAsync(s => s.Id == dto.SaleId);
 
             if (sale == null)
@@ -239,14 +250,11 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Only the buyer or seller involved in this sale can dispute it.
+            // only the buyer or seller involved can dispute it
             if (sale.BuyerId != userId && sale.SellerId != userId)
-            {
                 return Forbid();
-            }
 
-            // Do not allow disputes for sales that have not reached
-            // a stage where a transaction or delivery issue can occur.
+            // can't dispute before payment — nothing has gone wrong yet
             if (sale.Status == "AwaitingPayment")
             {
                 return BadRequest(new
@@ -256,7 +264,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // A completed sale cannot be disputed again.
+            // can't dispute something that's already done
             if (sale.Status == "Completed")
             {
                 return BadRequest(new
@@ -266,10 +274,9 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Sellers may only raise a dispute after the 3-day payment
-            // window has closed. This gives the buyer time to pay before
-            // the seller can accuse them of non-payment.
+            // sellers have to wait until the payment window closes before accusing the buyer
             bool isSeller = sale.SellerId == userId;
+
             if (isSeller && DateTime.UtcNow <= sale.PaymentDeadline)
             {
                 return BadRequest(new
@@ -279,7 +286,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Prevent duplicate disputes for the same sale.
+            // one dispute per sale, no duplicates
             var existingDispute = await _context.Disputes.AnyAsync(d => d.SaleId == sale.Id);
 
             if (existingDispute)
@@ -291,9 +298,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Create the dispute record.
-            // Evidence is image-only. If the user supplied a photo, upload
-            // it to the shared image store and store the returned URL.
+            // evidence is image-only — upload it if the user attached one
             string? evidenceUrl = null;
 
             if (dto.EvidenceImage != null)
@@ -301,6 +306,7 @@ namespace ProductAuction.API.Controllers
                 evidenceUrl = await _imageUploadService.UploadImageAsync(dto.EvidenceImage);
             }
 
+            // create the dispute
             var dispute = new Dispute
             {
                 SaleId = sale.Id,
@@ -312,8 +318,7 @@ namespace ProductAuction.API.Controllers
                 CreatedAt = DateTime.UtcNow
             };
 
-            // Mark the sale as disputed so normal completion
-            // cannot proceed while the admin reviews the complaint.
+            // mark the sale as disputed so it can't complete while under review
             sale.Status = "Disputed";
 
             _context.Disputes.Add(dispute);
@@ -339,9 +344,8 @@ namespace ProductAuction.API.Controllers
         }
 
 
-
         // PUT: api/dispute/{id}/resolve
-        // Admin decides the responsible party and resolves the dispute.
+        // Admin decides who's at fault and resolves the dispute.
         [HttpPut("{id}/resolve")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> ResolveDispute(int id, ResolveDisputeDto dto)
@@ -357,10 +361,8 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Validate the admin's decision.
-            if (dto.FaultType != "Buyer" &&
-                dto.FaultType != "Seller" &&
-                dto.FaultType != "System")
+            // fault type has to be one of the three expected values
+            if (dto.FaultType != "Buyer" && dto.FaultType != "Seller" && dto.FaultType != "System")
             {
                 return BadRequest(new
                 {
@@ -369,7 +371,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            if (string.IsNullOrWhiteSpace(dto.AdminDecision))
+            if (string.IsNullOrEmpty(dto.AdminDecision))
             {
                 return BadRequest(new
                 {
@@ -378,7 +380,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // System fault cannot result in a buyer or seller penalty.
+            // system fault can't get a penalty — nobody's fault
             if (dto.FaultType == "System" && dto.ApplyPenalty)
             {
                 return BadRequest(new
@@ -388,9 +390,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-
-
-            // Keep all database changes in one transaction.
+            // all the wallet + status changes below need to happen together
             await using var transaction = await _context.Database.BeginTransactionAsync();
 
             var dispute = await _context.Disputes.FirstOrDefaultAsync(d => d.Id == id);
@@ -404,8 +404,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // STRICT VALIDATION: A dispute must be UnderReview before it can be resolved.
-            // This prevents admins from skipping the review step entirely.
+            // dispute has to be under review first
             if (dispute.Status != "UnderReview")
             {
                 return BadRequest(new
@@ -415,10 +414,9 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Load the sale this dispute belongs to.
+            // load the related sale
             var sale = await _context.Sales.FirstOrDefaultAsync(s => s.Id == dispute.SaleId);
 
-            // A dispute pointing to a missing sale means inconsistent data
             if (sale == null)
             {
                 return NotFound(new
@@ -428,10 +426,9 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Load the product that was sold in this sale.
+            // load the product that was sold
             var product = await _context.Products.FirstOrDefaultAsync(p => p.Id == sale.ProductId);
 
-            // A sale pointing to a missing product means inconsistent data.
             if (product == null)
             {
                 return NotFound(new
@@ -441,7 +438,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Prevent duplicate penalty records.
+            // don't create two penalty records for the same dispute
             if (await _context.Penalties.AnyAsync(p => p.DisputeId == dispute.Id))
             {
                 return BadRequest(new
@@ -451,14 +448,14 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Find any active sale escrow.
+            // find any active sale escrow
             var escrow = await _context.WalletReservations
                 .FirstOrDefaultAsync(r =>
                     r.SaleId == sale.Id &&
                     r.Type == "SaleEscrow" &&
                     r.Status == "Reserved");
 
-            // A submitted payment must have its corresponding active escrow.
+            // if payment was submitted, escrow must exist 
             if (sale.PaymentSubmittedAt.HasValue && escrow == null)
             {
                 return BadRequest(new
@@ -468,7 +465,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Sanity check on the escrow, only if one exists.
+            //  escrow amount should match the sale amount
             if (escrow != null && escrow.Amount != sale.FinalAmount)
             {
                 return BadRequest(new
@@ -478,10 +475,8 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Buyer-fault penalty with sale money in escrow needs manual review.
-            if (dto.FaultType == "Buyer" &&
-                dto.ApplyPenalty &&
-                escrow != null)
+            // buyer-fault penalty with money in escrow needs manual handling
+            if (dto.FaultType == "Buyer" && dto.ApplyPenalty && escrow != null)
             {
                 return BadRequest(new
                 {
@@ -490,23 +485,21 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Save the admin's decision.
+            // save the admin's decision
             dispute.AdminDecision = dto.AdminDecision.Trim();
             dispute.DecidedBy = adminId;
 
-            // The deposit is 25% of the product's starting price.
-            // Distribute the entire deposit: 80% to the opposite party,
-            // and 20% to the platform.
+            // deposit is 25% of the starting price, split 80/20 between
+            // the opposite party and the platform
             decimal productValue = product.StartingPrice;
             decimal totalPenalty = Math.Round(product.StartingPrice * 0.25m, 2);
             decimal oppositePartyAmount = Math.Round(totalPenalty * 0.80m, 2);
             decimal platformAmount = totalPenalty - oppositePartyAmount;
 
-            // OPTION 1: SYSTEM FAULT
-            // No penalty. Refund escrow and release the deposits.
+            // OPTION 1: system fault 
+            // no penalty, just refund escrow and release deposits
             if (dto.FaultType == "System")
             {
-                // Refund sale escrow, if one exists.
                 if (escrow != null)
                 {
                     var buyerWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == sale.BuyerId);
@@ -535,14 +528,14 @@ namespace ProductAuction.API.Controllers
                 }
             }
 
-
-            // OPTION 2: BUYER FAULT, NO PENALTY
-            // Do not forfeit the buyer's deposit. Refund escrow if present.
+            // OPTION 2: buyer fault, no penalty
+            // don't forfeit the buyer's deposit, just refund escrow
             else if (dto.FaultType == "Buyer" && !dto.ApplyPenalty)
             {
                 if (escrow != null)
                 {
-                    var buyerWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == sale.BuyerId);
+                    var buyerWallet = await _context.Wallets
+                        .FirstOrDefaultAsync(w => w.UserId == sale.BuyerId);
 
                     if (buyerWallet == null)
                     {
@@ -568,9 +561,8 @@ namespace ProductAuction.API.Controllers
                 }
             }
 
-
-            // OPTION 3: SELLER FAULT, NO PENALTY
-            // Do not forfeit the seller's deposit. Refund escrow if present.
+            // OPTION 3: seller fault, no penalty
+            // don't forfeit the seller's deposit, just refund escrow
             else if (dto.FaultType == "Seller" && !dto.ApplyPenalty)
             {
                 if (escrow != null)
@@ -601,11 +593,10 @@ namespace ProductAuction.API.Controllers
                 }
             }
 
-            // OPTION 4: BUYER FAULT, PENALTY APPLIED
-            // Forfeit the buyer's deposit and distribute the penalty.
+            // OPTION 4: buyer fault, penalty applied
+            // forfeit the buyer's deposit and split it 80/20
             else if (dto.FaultType == "Buyer" && dto.ApplyPenalty)
             {
-                // Find the buyer's wallet.
                 var buyerWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == sale.BuyerId);
 
                 if (buyerWallet == null)
@@ -617,7 +608,7 @@ namespace ProductAuction.API.Controllers
                     });
                 }
 
-                // Find the buyer's one eligibility deposit for this auction.
+                // find the buyer's eligibility deposit for this auction
                 var buyerDeposit = await _context.WalletReservations
                     .FirstOrDefaultAsync(r =>
                         r.WalletId == buyerWallet.Id &&
@@ -637,7 +628,7 @@ namespace ProductAuction.API.Controllers
                     });
                 }
 
-                // Find the seller's wallet to receive the 80% compensation.
+                // seller gets the 80%
                 var sellerWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == sale.SellerId);
 
                 if (sellerWallet == null)
@@ -649,7 +640,7 @@ namespace ProductAuction.API.Controllers
                     });
                 }
 
-                // Find the platform wallet for the remaining 20%.
+                // platform gets the 20%
                 var platformUser = await _context.Users.FirstOrDefaultAsync(u => u.UserName == "platform-system-account");
 
                 if (platformUser == null)
@@ -672,12 +663,12 @@ namespace ProductAuction.API.Controllers
                     });
                 }
 
-                // Forfeit the buyer's deposit. Do not deduct the penalty twice.
+                // forfeit the buyer's deposit
                 buyerWallet.Balance -= totalPenalty;
                 buyerWallet.ReservedBalance -= buyerDeposit.Amount;
                 buyerDeposit.Status = "Forfeited";
 
-                // Distribute the forfeited amount.
+                // split it
                 sellerWallet.Balance += oppositePartyAmount;
                 platformWallet.Balance += platformAmount;
 
@@ -725,12 +716,11 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // OPTION 5: SELLER FAULT, PENALTY APPLIED
-            // Forfeit the seller's deposit, refund escrow if present,
-            // and distribute the penalty.
+            // OPTION 5: seller fault, penalty applied
+            // refund escrow, forfeit seller's deposit, split it 80/20
             else if (dto.FaultType == "Seller" && dto.ApplyPenalty)
             {
-                // Refund the buyer's sale payment before applying the penalty.
+                // refund the buyer's sale payment first
                 if (escrow != null)
                 {
                     var buyerWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == sale.BuyerId);
@@ -758,7 +748,7 @@ namespace ProductAuction.API.Controllers
                     });
                 }
 
-                // Find the seller's wallet and deposit.
+                // find the seller's wallet and deposit
                 var sellerWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == sale.SellerId);
 
                 if (sellerWallet == null)
@@ -789,7 +779,7 @@ namespace ProductAuction.API.Controllers
                     });
                 }
 
-                // Find the buyer's wallet to receive the 80% compensation.
+                // buyer gets the 80%
                 var buyerWalletForPenalty = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == sale.BuyerId);
 
                 if (buyerWalletForPenalty == null)
@@ -801,7 +791,7 @@ namespace ProductAuction.API.Controllers
                     });
                 }
 
-                // Find the platform wallet for the remaining 20%.
+                // platform gets the 20%
                 var platformUser = await _context.Users.FirstOrDefaultAsync(u => u.UserName == "platform-system-account");
 
                 if (platformUser == null)
@@ -824,12 +814,12 @@ namespace ProductAuction.API.Controllers
                     });
                 }
 
-                // Forfeit the seller's deposit. Do not deduct the penalty twice.
+                // forfeit the seller's deposit
                 sellerWallet.Balance -= totalPenalty;
                 sellerWallet.ReservedBalance -= sellerDeposit.Amount;
                 sellerDeposit.Status = "Forfeited";
 
-                // Distribute the forfeited amount.
+                // split it
                 buyerWalletForPenalty.Balance += oppositePartyAmount;
                 platformWallet.Balance += platformAmount;
 
@@ -877,8 +867,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Release the seller's deposit if it was not forfeited.
-            // A forfeited deposit is no longer Reserved, so it is skipped.
+            // release the seller's deposit if it wasn't forfeited
             var sellerWalletForRelease = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == sale.SellerId);
 
             if (sellerWalletForRelease != null)
@@ -897,7 +886,7 @@ namespace ProductAuction.API.Controllers
                 }
             }
 
-            // Release the buyer's deposit if it was not forfeited.
+            // release the buyer's deposit if it wasn't forfeited
             var buyerWalletForRelease = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == sale.BuyerId);
 
             if (buyerWalletForRelease != null)
@@ -916,10 +905,9 @@ namespace ProductAuction.API.Controllers
                 }
             }
 
-            // Release all other buyers' eligibility deposits for this auction.
-            // Deposits already marked Forfeited are not selected here.
-            // CRITICAL FIX: We fetch the current buyer's wallet ID and exclude it here
-            // to prevent the double-deduction bug caused by the in-memory "Forfeited" status.
+            // release every other buyer's eligibility deposit for this auction.
+            // skip the current buyer's wallet — otherwise we'd deduct twice,
+            // since we just changed its status in memory but haven't saved yet.
             var currentBuyerWalletId = buyerWalletForRelease?.Id ?? 0;
 
             var otherBuyerReservations = await _context.WalletReservations
@@ -957,7 +945,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Finalize the dispute without deleting historical records.
+            // wrap it up
             dispute.Status = "Resolved";
             product.Status = "Unavailable";
             sale.Status = "Refunded";

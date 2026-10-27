@@ -1,5 +1,4 @@
-﻿
-using Microsoft.AspNetCore.Http;
+﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ProductAuction.API.Data;
@@ -17,19 +16,21 @@ namespace ProductAuction.API.Controllers
         private readonly AppDbContext _context;
         private readonly IImageUploadService _imageUploadService;
 
-        public WalletController(AppDbContext context,
+        public WalletController(
+            AppDbContext context,
             IImageUploadService imageUploadService)
         {
             _context = context;
             _imageUploadService = imageUploadService;
         }
 
+
         // GET: api/wallet/me
         // Returns the wallet belonging to the logged-in user.
         [HttpGet("me")]
         public async Task<IActionResult> GetMyWallet()
         {
-            // Get the user's ID from the JWT token.
+            // grab the user id from the JWT
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             if (userId == null)
@@ -41,7 +42,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Find the wallet linked to this user.
+            // find the wallet linked to this user
             var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == userId);
 
             if (wallet == null)
@@ -53,7 +54,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Return only the wallet information needed by the user.
+            // only send what the user actually needs
             var response = new WalletResponseDto
             {
                 Id = wallet.Id,
@@ -69,12 +70,13 @@ namespace ProductAuction.API.Controllers
             });
         }
 
+
         // POST: api/wallet/deposit-request
         // Creates a deposit request for the logged-in user's wallet.
         [HttpPost("deposit-request")]
         public async Task<IActionResult> CreateDepositRequest([FromForm] CreateDepositRequestDto dto)
         {
-            // Get the logged-in user's ID from the JWT token.
+            // grab the user id from the JWT
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             if (userId == null)
@@ -86,7 +88,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Find the user's wallet.
+            // find the user's wallet
             var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == userId);
 
             if (wallet == null)
@@ -98,10 +100,10 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Upload the receipt image.
+            // upload the receipt image
             var receiptImageUrl = await _imageUploadService.UploadImageAsync(dto.ReceiptImage);
 
-            // Save the deposit request as pending verification.
+            // save the deposit request as pending verification
             var depositRequest = new DepositRequest
             {
                 WalletId = wallet.Id,
@@ -131,13 +133,15 @@ namespace ProductAuction.API.Controllers
             });
         }
 
+
         // GET: api/wallet/deposit-requests
         // Returns the deposit requests submitted by the logged-in user.
         [HttpGet("deposit-requests")]
         public async Task<IActionResult> GetMyDepositRequests()
         {
-            // Get the user's ID from the JWT token.
+            // grab the user id from the JWT
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
             if (userId == null)
             {
                 return Unauthorized(new
@@ -147,8 +151,9 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Find the wallet linked to this user.
+            // find the wallet linked to this user
             var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == userId);
+
             if (wallet == null)
             {
                 return NotFound(new
@@ -158,7 +163,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Return every deposit request this user submitted, newest first.
+            // return every deposit request this user submitted, newest first
             var requests = await _context.DepositRequests
                 .Where(d => d.WalletId == wallet.Id)
                 .OrderByDescending(d => d.CreatedAt)
@@ -184,12 +189,13 @@ namespace ProductAuction.API.Controllers
             });
         }
 
+
         // GET: api/wallet/transactions
         // Returns the transaction history for the logged-in user's wallet.
         [HttpGet("transactions")]
         public async Task<IActionResult> GetMyTransactions()
         {
-            // Get the user's ID from the JWT token.
+            // grab the user id from the JWT
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             if (userId == null)
@@ -201,7 +207,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Find the user's wallet.
+            // find the user's wallet
             var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == userId);
 
             if (wallet == null)
@@ -213,7 +219,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Get transactions belonging to this wallet, newest first.
+            // transactions for this wallet, newest first
             var transactions = await _context.WalletTransactions
                 .Where(t => t.WalletId == wallet.Id)
                 .OrderByDescending(t => t.CreatedAt)
@@ -236,12 +242,13 @@ namespace ProductAuction.API.Controllers
             });
         }
 
+
         // GET: api/wallet/reservations
         // Returns the logged-in user's reservation list.
         [HttpGet("reservations")]
         public async Task<IActionResult> GetMyReservations()
         {
-            // Get the user's ID from the JWT token.
+            // grab the user id from the JWT
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             if (userId == null)
@@ -253,7 +260,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Find the user's wallet.
+            // find the user's wallet
             var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == userId);
 
             if (wallet == null)
@@ -265,18 +272,20 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Get reservations belonging only to this user's wallet.
-            // Get reservations belonging only to this user's wallet.
+            // only reservations that belong to this wallet
             var reservations = await _context.WalletReservations
                 .Where(r => r.WalletId == wallet.Id)
                 .Select(r => new
                 {
                     r.Id,
                     r.ProductId,
+
+                    // product title (null if the product was deleted)
                     ProductTitle = _context.Products
                         .Where(p => p.Id == r.ProductId)
                         .Select(p => p.Title)
                         .FirstOrDefault(),
+
                     r.AuctionId,
                     r.SaleId,
                     r.Type,
@@ -293,5 +302,5 @@ namespace ProductAuction.API.Controllers
                 data = reservations
             });
         }
-   }
+    }
 }

@@ -19,6 +19,7 @@ namespace ProductAuction.API.Controllers
             _context = context;
         }
 
+
         // GET: api/category
         // Anyone can view the available categories.
         [HttpGet]
@@ -34,17 +35,17 @@ namespace ProductAuction.API.Controllers
             });
         }
 
+
         // POST: api/category
-        // Only an Admin can create a category.
+        // Only an admin can create a category.
         [HttpPost]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> CreateCategory(CreateCategoryDto dto)
         {
+            var name = dto.Name;
 
-            var Name = dto.Name;
-
-            // Do not accept an empty name.
-            if (string.IsNullOrEmpty(Name))
+            // name can't be empty
+            if (string.IsNullOrEmpty(name))
             {
                 return BadRequest(new
                 {
@@ -53,11 +54,10 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Check if there are any Duplicates
-            bool Exists = await _context.Categories.AnyAsync(c => c.Name == Name);
+            // reject duplicates
+            bool exists = await _context.Categories.AnyAsync(c => c.Name == name);
 
-            // Do not Except Duplicate Values
-            if (Exists)
+            if (exists)
             {
                 return BadRequest(new
                 {
@@ -66,17 +66,15 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-
-            // Create the category using the submitted name.
+            // build the category
             var category = new Category
             {
-                Name = Name
+                Name = name
             };
 
             _context.Categories.Add(category);
             await _context.SaveChangesAsync();
 
-            // Return the new category.
             return Ok(new
             {
                 status = 200,
@@ -85,15 +83,15 @@ namespace ProductAuction.API.Controllers
             });
         }
 
-        // DELETE: api/category/5
-        // Only an Admin can delete a category.
+
+        // DELETE: api/category/{id}
+        // Only an admin can delete a category.
         [HttpDelete("{id}")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> DeleteCategory(int id)
         {
-            var category = _context.Categories.FirstOrDefault(c => c.Id == id);
+            var category = await _context.Categories.FirstOrDefaultAsync(c => c.Id == id);
 
-            // Return an error if the category does not exist.
             if (category == null)
             {
                 return NotFound(new
@@ -103,14 +101,13 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Remove the category from the database.
             _context.Categories.Remove(category);
             await _context.SaveChangesAsync();
 
             return Ok(new
             {
                 status = 200,
-                message = "Category deleted successfully.",
+                message = "Category deleted successfully."
             });
         }
     }

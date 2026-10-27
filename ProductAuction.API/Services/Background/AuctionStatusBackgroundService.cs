@@ -26,7 +26,6 @@ namespace ProductAuction.API.Services.Background
             while (!stoppingToken.IsCancellationRequested)
             {
                 // A background service is a singleton, so we cannot inject
-                // AppDbContext directly (it is scoped). Create a fresh scope instead.
                 using (var scope = _scopeFactory.CreateScope())
                 {
                     // Get the database context from this scope.

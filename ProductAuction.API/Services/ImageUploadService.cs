@@ -65,7 +65,7 @@ namespace ProductAuction.API.Services
         public Task<bool> DeleteImageAsync(string imageUrl)
         {
             // Nothing to delete if the URL is empty.
-            if (string.IsNullOrWhiteSpace(imageUrl))
+            if (string.IsNullOrEmpty(imageUrl))
             {
                 return Task.FromResult(false);
             }
@@ -74,7 +74,7 @@ namespace ProductAuction.API.Services
             var fileName = Path.GetFileName(imageUrl);
 
             // Only allow URLs that actually point to a file in our uploads folder.
-            if (string.IsNullOrWhiteSpace(fileName) ||
+            if (string.IsNullOrEmpty(fileName) ||
                 fileName != imageUrl.Replace("\\", "/").Split('/').Last())
             {
                 return Task.FromResult(false);

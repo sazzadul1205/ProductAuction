@@ -25,129 +25,168 @@ namespace ProductAuction.API.Controllers
             _context = context;
         }
 
+
         // GET: api/Admin/dashboard
-        // Retrieves aggregated statistics for the admin dashboard,
-        // including user counts, pending moderation items, and platform wallet balance.
+        // Returns aggregated stats for the admin dashboard:
+        // user counts, pending moderation items, and the platform wallet balance.
         [HttpGet("dashboard")]
         public async Task<IActionResult> GetDashboard()
         {
-            // Count all registered users, excluding the system platform account.
-            var totalUsers = await _context.Users.CountAsync(u => u.UserName != "platform-system-account");
+            // total registered users (excluding the system platform account)
+            var totalUsers = await _context.Users
+                .CountAsync(u => u.UserName != "platform-system-account");
 
-            // Count items currently requiring admin review or action.
-            var pendingProducts = await _context.Products.CountAsync(p => p.ApprovalStatus == "PendingApproval");
-            var pendingDeposits = await _context.DepositRequests.CountAsync(d => d.Status == "PendingVerification");
-            var pendingVerifications = await _context.UserProfiles.CountAsync(p => p.VerificationStatus == "PendingReview");
-            var openDisputes = await _context.Disputes.CountAsync(d => d.Status == "Open" || d.Status == "UnderReview");
+            // items that need admin review / action
+            var pendingProducts = await _context.Products
+                .CountAsync(p => p.ApprovalStatus == "PendingApproval");
 
-            // Count currently active auctions.
-            var activeAuctions = await _context.Auctions.CountAsync(a => a.Status == "Active");
+            var pendingDeposits = await _context.DepositRequests
+                .CountAsync(d => d.Status == "PendingVerification");
 
-            // Retrieve the platform's system account and its current wallet balance.
-            var platformUser = await _context.Users.FirstOrDefaultAsync(u => u.UserName == "platform-system-account");
-            var platformWallet = platformUser != null ? await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == platformUser.Id) : null;
+            var pendingVerifications = await _context.UserProfiles
+                .CountAsync(p => p.VerificationStatus == "PendingReview");
+
+            var openDisputes = await _context.Disputes
+                .CountAsync(d => d.Status == "Open" || d.Status == "UnderReview");
+
+            // auctions currently running
+            var activeAuctions = await _context.Auctions
+                .CountAsync(a => a.Status == "Active");
+
+            // grab the platform's system account and its wallet balance
+            var platformUser = await _context.Users
+                .FirstOrDefaultAsync(u => u.UserName == "platform-system-account");
+
+            var platformWallet = platformUser != null
+                ? await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == platformUser.Id)
+                : null;
+
             var platformBalance = platformWallet?.Balance ?? 0;
 
             return Ok(new
             {
                 status = 200,
-                data = new { totalUsers, pendingProducts, pendingDeposits, pendingVerifications, activeAuctions, openDisputes, platformBalance }
+                data = new
+                {
+                    totalUsers,
+                    pendingProducts,
+                    pendingDeposits,
+                    pendingVerifications,
+                    activeAuctions,
+                    openDisputes,
+                    platformBalance
+                }
             });
         }
 
+
         // POST: api/Admin/create-admin
         // Creates a new user account with the Admin role.
-        // Also generates the required UserProfile and Wallet records to maintain data integrity.
+        // Also creates the UserProfile and Wallet records so everything stays consistent.
         [HttpPost("create-admin")]
         public async Task<IActionResult> CreateAdmin([FromBody] CreateAdminDto dto)
         {
-            // Validate required fields.
-            if (string.IsNullOrWhiteSpace(dto.Email) || string.IsNullOrWhiteSpace(dto.Password) || string.IsNullOrWhiteSpace(dto.FullName))
-                return BadRequest(new { status = 400, message = "All fields are required." });
-
-            // Ensure the email is not already registered.
-            var existingUser = await _userManager.FindByEmailAsync(dto.Email);
-            if (existingUser != null)
-                return BadRequest(new { status = 400, message = "Email is already registered." });
-
-            // Start a transaction so all database changes succeed or roll back together.
-            await using var transaction = await _context.Database.BeginTransactionAsync();
-            try
+            // basic field checks
+            if (string.IsNullOrEmpty(dto.Email) || string.IsNullOrEmpty(dto.Password) || string.IsNullOrEmpty(dto.FullName))
             {
-                // 1. Create the Identity account.
-                var user = new IdentityUser { UserName = dto.Email, Email = dto.Email, EmailConfirmed = true };
-                var result = await _userManager.CreateAsync(user, dto.Password);
-
-                if (!result.Succeeded)
+                return BadRequest(new
                 {
-                    await transaction.RollbackAsync();
-                    return BadRequest(new { status = 400, message = "Failed to create admin account.", errors = result.Errors });
-                }
-
-                // 2. Assign the Admin role.
-                await _userManager.AddToRoleAsync(user, "Admin");
-
-                // 3. Create the UserProfile and Wallet (to maintain DB integrity).
-                _context.UserProfiles.Add(new UserProfile { UserId = user.Id, FullName = dto.FullName, CreatedAt = DateTime.UtcNow });
-                _context.Wallets.Add(new Wallet { UserId = user.Id, Balance = 0, ReservedBalance = 0 });
-
-                await _context.SaveChangesAsync();
-                await transaction.CommitAsync();
-
-                return Ok(new { status = 200, message = "Admin created successfully." });
+                    status = 400,
+                    message = "All fields are required."
+                });
             }
-            catch (Exception)
+
+            // make sure this email isn't taken yet
+            var existingUser = await _userManager.FindByEmailAsync(dto.Email);
+
+            if (existingUser != null)
             {
-                // Undo the database changes if an unexpected error occurs.
-                await transaction.RollbackAsync();
-                return StatusCode(500, new { status = 500, message = "An error occurred while creating the admin." });
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "Email is already registered."
+                });
             }
+
+            // create the Identity account
+            var user = new IdentityUser
+            {
+                UserName = dto.Email,
+                Email = dto.Email,
+                EmailConfirmed = true
+            };
+
+            var result = await _userManager.CreateAsync(user, dto.Password);
+
+            if (!result.Succeeded)
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "Failed to create admin account.",
+                    errors = result.Errors
+                });
+            }
+
+            // give them the Admin role
+            await _userManager.AddToRoleAsync(user, "Admin");
+
+            // create the profile and wallet so the rest of the app has what it expects
+            _context.UserProfiles.Add(new UserProfile
+            {
+                UserId = user.Id,
+                FullName = dto.FullName,
+                CreatedAt = DateTime.UtcNow
+            });
+
+            _context.Wallets.Add(new Wallet
+            {
+                UserId = user.Id,
+                Balance = 0,
+                ReservedBalance = 0
+            });
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                status = 200,
+                message = "Admin created successfully."
+            });
         }
 
-        // GET: api/Admin
-        // Retrieves all human users with their roles and basic profiles.
+
+        // GET: api/Admin/user
+        // Returns all human users along with their roles and basic profile info.
         [HttpGet("user")]
         public async Task<IActionResult> GetAllUsers()
         {
-            // Retrieve registered users, excluding the platform system account.
+            // grab registered users, skip the platform system account
             var users = await _userManager.Users
                 .Where(u => u.UserName != "platform-system-account")
                 .OrderBy(u => u.Email)
                 .ToListAsync();
 
-            // Retrieve profiles for these users in one database query.
-            var userIds = users.Select(u => u.Id).ToList();
-
-            var profiles = await _context.UserProfiles
-                .Where(p => userIds.Contains(p.UserId))
-                .ToDictionaryAsync(p => p.UserId);
-
-            // Retrieve wallets for these users
-            var wallets = await _context.Wallets
-                .Where(w => userIds.Contains(w.UserId))
-                .ToDictionaryAsync(w => w.UserId);
+            // load all profiles and wallets once (2 queries total)
+            var profiles = await _context.UserProfiles.ToListAsync();
+            var wallets = await _context.Wallets.ToListAsync();
 
             var userList = new List<object>();
 
-            // Include the roles assigned to each user.
+            // build the response, one entry per user
             foreach (var user in users)
             {
                 var roles = await _userManager.GetRolesAsync(user);
 
-                profiles.TryGetValue(user.Id, out var profile);
-                wallets.TryGetValue(user.Id, out var wallet);
+                // look up this user's profile / wallet (may not exist)
+                var profile = profiles.FirstOrDefault(p => p.UserId == user.Id);
+                var wallet = wallets.FirstOrDefault(w => w.UserId == user.Id);
 
-                userList.Add(new
+                // build the profile part of the response (or null)
+                object? profileData = null;
+                if (profile != null)
                 {
-                    userId = user.Id,
-                    email = user.Email,
-                    emailConfirmed = user.EmailConfirmed,
-                    phoneNumber = user.PhoneNumber,
-                    roles,
-                    isLocked = await _userManager.IsLockedOutAsync(user),
-                    lockoutEnd = await _userManager.GetLockoutEndDateAsync(user),
-
-                    profile = profile == null ? null : new
+                    profileData = new
                     {
                         fullName = profile.FullName,
                         profilePhotoUrl = profile.ProfilePhotoUrl,
@@ -156,15 +195,32 @@ namespace ProductAuction.API.Controllers
                         nationalIdNumber = profile.NationalIdNumber,
                         verificationStatus = profile.VerificationStatus,
                         createdAt = profile.CreatedAt
-                    },
+                    };
+                }
 
-                    // NEW: Include Wallet data
-                    wallet = wallet == null ? null : new
+                // build the wallet part of the response (or null)
+                object? walletData = null;
+                if (wallet != null)
+                {
+                    walletData = new
                     {
                         balance = wallet.Balance,
                         reservedBalance = wallet.ReservedBalance,
                         availableBalance = wallet.Balance - wallet.ReservedBalance
-                    }
+                    };
+                }
+
+                userList.Add(new
+                {
+                    userId = user.Id,
+                    email = user.Email,
+                    emailConfirmed = user.EmailConfirmed,
+                    phoneNumber = user.PhoneNumber,
+                    roles,
+                    isLocked = user.LockoutEnd > DateTimeOffset.UtcNow,
+                    lockoutEnd = user.LockoutEnd,
+                    profile = profileData,
+                    wallet = walletData
                 });
             }
 
@@ -175,15 +231,16 @@ namespace ProductAuction.API.Controllers
                 data = userList
             });
         }
+
+
         // PUT: api/Admin/user/{id}/lock
-        // Locks a user permanently or for a specified duration.
-        // Also allows an admin to unlock the account.
+        // Locks a user permanently or for a set duration, and also handles unlocking.
         [HttpPut("user/{id}/lock")]
         public async Task<IActionResult> SetUserLock(string id, [FromBody] AdminUserLockDto request)
         {
             var user = await _userManager.FindByIdAsync(id);
 
-            // Do not expose or modify the platform system account.
+            // don't let anyone touch the platform system account
             if (user == null || user.UserName == "platform-system-account")
             {
                 return NotFound(new
@@ -193,6 +250,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
+            // temporary lock needs a positive duration
             if (request.IsLocked && !request.IsPermanent)
             {
                 if (!request.DurationMinutes.HasValue || request.DurationMinutes.Value <= 0)
@@ -205,9 +263,8 @@ namespace ProductAuction.API.Controllers
                 }
             }
 
-            if (request.IsLocked &&
-                request.IsPermanent &&
-                request.DurationMinutes.HasValue)
+            // permanent lock shouldn't have a duration attached
+            if (request.IsLocked && request.IsPermanent && request.DurationMinutes.HasValue)
             {
                 return BadRequest(new
                 {
@@ -216,6 +273,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
+            // make sure lockout is enabled before we set an end date
             var enableLockout = await _userManager.SetLockoutEnabledAsync(user, true);
 
             if (!enableLockout.Succeeded)
@@ -234,15 +292,17 @@ namespace ProductAuction.API.Controllers
             {
                 if (request.IsPermanent)
                 {
+                    // "forever"
                     lockoutEnd = DateTimeOffset.MaxValue;
                 }
                 else
                 {
+                    // lock for the given number of minutes
                     lockoutEnd = DateTimeOffset.UtcNow.AddMinutes(request.DurationMinutes!.Value);
                 }
             }
 
-            // Setting null unlocks the account.
+            // passing null here unlocks the account
             var result = await _userManager.SetLockoutEndDateAsync(user, lockoutEnd);
 
             if (!result.Succeeded)
@@ -255,6 +315,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
+            // clear failed login count when unlocking
             if (!request.IsLocked)
             {
                 await _userManager.ResetAccessFailedCountAsync(user);
@@ -281,7 +342,7 @@ namespace ProductAuction.API.Controllers
 
 
         // GET: api/Admin/product
-        // Retrieves all products for admin management, regardless of status.
+        // Returns every product for admin management, no matter what status it's in.
         [HttpGet("product")]
         public async Task<IActionResult> GetAllProductsForAdmin()
         {
@@ -298,13 +359,14 @@ namespace ProductAuction.API.Controllers
                     startingPrice = p.StartingPrice,
                     buyoutPrice = p.BuyoutPrice,
 
-                    // Include both approval and product lifecycle statuses.
+                    // both approval status and lifecycle status
                     approvalStatus = p.ApprovalStatus,
                     status = p.Status,
                     rejectionReason = p.RejectionReason,
                     condition = p.Condition,
                     createdAt = p.CreatedAt,
 
+                    // grab the main image url 
                     mainImageUrl = _context.ProductImages
                         .Where(i => i.ProductId == p.Id && i.IsMain)
                         .Select(i => i.ImageUrl)
@@ -321,9 +383,8 @@ namespace ProductAuction.API.Controllers
         }
 
 
-
         // GET: api/Admin/auctions
-        // Retrieves all auctions for administrative monitoring.
+        // Returns all auctions so admins can monitor them.
         [HttpGet("auctions")]
         public async Task<IActionResult> GetAllAuctionsForAdmin()
         {
@@ -334,11 +395,13 @@ namespace ProductAuction.API.Controllers
                     auctionId = a.Id,
                     productId = a.ProductId,
 
+                    // product title 
                     productTitle = _context.Products
                         .Where(p => p.Id == a.ProductId)
                         .Select(p => p.Title)
                         .FirstOrDefault() ?? string.Empty,
 
+                    // main product image 
                     mainImageUrl = _context.ProductImages
                         .Where(i => i.ProductId == a.ProductId && i.IsMain)
                         .Select(i => i.ImageUrl)
@@ -367,7 +430,7 @@ namespace ProductAuction.API.Controllers
 
 
         // GET: api/Admin/auction-results
-        // Retrieves finalized auction results for administrative review.
+        // Returns finalized auction results so admins can review them.
         [HttpGet("auction-results")]
         public async Task<IActionResult> GetAuctionResultsForAdmin()
         {
@@ -381,6 +444,7 @@ namespace ProductAuction.API.Controllers
                     auctionId = a.Id,
                     productId = a.ProductId,
 
+                    // product title (blank if missing)
                     productTitle = _context.Products
                         .Where(p => p.Id == a.ProductId)
                         .Select(p => p.Title)
@@ -421,7 +485,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Only open disputes can begin review.
+            // can only start review on an open dispute
             if (dispute.Status != "Open")
             {
                 return BadRequest(new
@@ -447,8 +511,9 @@ namespace ProductAuction.API.Controllers
             });
         }
 
+
         // GET: api/Admin/penalties
-        // Retrieves all penalty records for administrative review.
+        // Returns all penalty records for admin review.
         [HttpGet("penalties")]
         public async Task<IActionResult> GetAllPenalties()
         {
@@ -505,13 +570,12 @@ namespace ProductAuction.API.Controllers
         }
 
 
-
         // GET: api/wallet/deposit-requests/pending
         // Returns all deposit requests waiting for admin review.
         [HttpGet("deposit-requests/pending")]
         public async Task<IActionResult> GetPendingDepositRequests()
         {
-            // Get deposit requests that are still awaiting verification.
+            // only ones still waiting for verification
             var requests = await _context.DepositRequests
                 .Where(d => d.Status == "PendingVerification")
                 .OrderBy(d => d.CreatedAt)
@@ -536,12 +600,13 @@ namespace ProductAuction.API.Controllers
             });
         }
 
+
         // PUT: api/wallet/deposit-requests/{id}/review
         // Approves or rejects a deposit request.
         [HttpPut("deposit-requests/{id}/review")]
         public async Task<IActionResult> ReviewDepositRequest(int id, [FromBody] ReviewDepositRequestDto dto)
         {
-            // Find the deposit request.
+            // find the deposit request
             var depositRequest = await _context.DepositRequests.FirstOrDefaultAsync(d => d.Id == id);
 
             if (depositRequest == null)
@@ -553,7 +618,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Prevent reviewing the same deposit request more than once to avoid crediting the wallet multiple times.
+            // already reviewed? don't credit the wallet twice
             if (depositRequest.Status != "PendingVerification")
             {
                 return BadRequest(new
@@ -563,7 +628,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Only Approved or Rejected statuses are allowed.
+            // only Approved or Rejected are allowed
             if (dto.Status != "Approved" && dto.Status != "Rejected")
             {
                 return BadRequest(new
@@ -573,9 +638,9 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // A rejection must include a reason.
+            // rejection needs a reason
             if (dto.Status == "Rejected" &&
-                string.IsNullOrWhiteSpace(dto.RejectionReason))
+                string.IsNullOrEmpty(dto.RejectionReason))
             {
                 return BadRequest(new
                 {
@@ -584,7 +649,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Find the wallet associated with the deposit request.
+            // find the wallet this deposit belongs to
             var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.Id == depositRequest.WalletId);
 
             if (wallet == null)
@@ -596,17 +661,17 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Update the review information.
+            // save the review info
             depositRequest.Status = dto.Status;
             depositRequest.ReviewedAt = DateTime.UtcNow;
             depositRequest.RejectionReason = dto.Status == "Rejected" ? dto.RejectionReason : null;
 
-            // Only approved deposits increase the wallet balance.
+            // only approved deposits actually increase the balance
             if (dto.Status == "Approved")
             {
                 wallet.Balance += depositRequest.Amount;
 
-                // Record the wallet balance change.
+                // record the wallet balance change
                 var transaction = new WalletTransaction
                 {
                     WalletId = wallet.Id,
@@ -638,21 +703,121 @@ namespace ProductAuction.API.Controllers
             });
         }
 
-        // GET: api/admin/platform-wallet
-        // Returns the platform system account wallet and its transaction history.
+
+        // GET: api/Admin/transactions
+        // Returns every wallet transaction globally, for admin oversight.
+        [HttpGet("transactions")]
+        public async Task<IActionResult> GetAllTransactions()
+        {
+            var transactions = await _context.WalletTransactions
+                .OrderByDescending(t => t.CreatedAt)
+                .Select(t => new
+                {
+                    t.Id,
+                    t.Type,
+                    t.Amount,
+                    t.BalanceAfter,
+                    t.Reference,
+                    t.CreatedAt,
+
+                    // grab the user's full name 
+                    UserName = _context.UserProfiles
+                        .Where(p => p.UserId == _context.Wallets
+                            .Where(w => w.Id == t.WalletId)
+                            .Select(w => w.UserId)
+                            .FirstOrDefault())
+                        .Select(p => p.FullName)
+                        .FirstOrDefault() ?? "Unknown",
+
+                    UserEmail = _context.Users
+                        .Where(u => u.Id == _context.Wallets
+                            .Where(w => w.Id == t.WalletId)
+                            .Select(w => w.UserId)
+                            .FirstOrDefault())
+                        .Select(u => u.Email)
+                        .FirstOrDefault() ?? "Unknown"
+                })
+                .ToListAsync();
+
+            return Ok(new
+            {
+                status = 200,
+                message = "Transactions retrieved successfully.",
+                data = transactions
+            });
+        }
+
+
+        // GET: api/Admin/reservations
+        // Returns all wallet reservations globally, for admin oversight.
+        [HttpGet("reservations")]
+        public async Task<IActionResult> GetAllReservations()
+        {
+            var reservations = await _context.WalletReservations
+                .OrderByDescending(r => r.Id)
+                .Select(r => new
+                {
+                    r.Id,
+                    r.Type,
+                    r.Amount,
+                    r.Status,
+                    r.ProductId,
+                    r.AuctionId,
+                    r.SaleId,
+
+                    // grab the user's full name
+                    UserName = _context.UserProfiles
+                        .Where(p => p.UserId == _context.Wallets
+                            .Where(w => w.Id == r.WalletId)
+                            .Select(w => w.UserId)
+                            .FirstOrDefault())
+                        .Select(p => p.FullName)
+                        .FirstOrDefault() ?? "Unknown",
+
+                    // product title, only if this reservation is tied to a product
+                    ProductTitle = r.ProductId != null
+                        ? _context.Products
+                            .Where(p => p.Id == r.ProductId)
+                            .Select(p => p.Title)
+                            .FirstOrDefault()
+                        : null
+                })
+                .ToListAsync();
+
+            return Ok(new
+            {
+                status = 200,
+                message = "Reservations retrieved successfully.",
+                data = reservations
+            });
+        }
+
+
+        // GET: api/Admin/platform-wallet
+        // Returns the platform system account's wallet and its transaction history.
         [HttpGet("platform-wallet")]
         public async Task<IActionResult> GetPlatformWallet()
         {
             var platformUser = await _userManager.FindByNameAsync("platform-system-account");
+
             if (platformUser == null)
             {
-                return NotFound(new { status = 404, message = "Platform account not found." });
+                return NotFound(new
+                {
+                    status = 404,
+                    message = "Platform account not found."
+                });
             }
 
             var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == platformUser.Id);
+
             if (wallet == null)
             {
-                return NotFound(new { status = 404, message = "Platform wallet not found." });
+                return NotFound(new
+                {
+                    status = 404,
+                    message = "Platform wallet not found."
+                });
             }
 
             var transactions = await _context.WalletTransactions
@@ -685,79 +850,5 @@ namespace ProductAuction.API.Controllers
                 }
             });
         }
-
-        // GET: api/Admin/transactions
-        // Retrieves all wallet transactions globally for the admin.
-        [HttpGet("transactions")]
-        public async Task<IActionResult> GetAllTransactions()
-        {
-            var transactions = await _context.WalletTransactions
-                .OrderByDescending(t => t.CreatedAt)
-                .Select(t => new
-                {
-                    t.Id,
-                    t.Type,
-                    t.Amount,
-                    t.BalanceAfter,
-                    t.Reference,
-                    t.CreatedAt,
-
-                    //  Use a safe scalar subquery to avoid null reference exceptions in EF Core translation
-                    UserName = _context.UserProfiles
-                        .Where(p => p.UserId == _context.Wallets
-                            .Where(w => w.Id == t.WalletId)
-                            .Select(w => w.UserId)
-                            .FirstOrDefault())
-                        .Select(p => p.FullName)
-                        .FirstOrDefault() ?? "Unknown",
-
-                    UserEmail = _context.Users
-                        .Where(u => u.Id == _context.Wallets
-                            .Where(w => w.Id == t.WalletId)
-                            .Select(w => w.UserId)
-                            .FirstOrDefault())
-                        .Select(u => u.Email)
-                        .FirstOrDefault() ?? "Unknown"
-                })
-                .ToListAsync();
-
-            return Ok(new { status = 200, data = transactions });
-        }
-
-        // GET: api/Admin/reservations
-        // Retrieves all active wallet reservations globally for the admin.
-        [HttpGet("reservations")]
-        public async Task<IActionResult> GetAllReservations()
-        {
-            var reservations = await _context.WalletReservations
-                .OrderByDescending(r => r.Id)
-                .Select(r => new
-                {
-                    r.Id,
-                    r.Type,
-                    r.Amount,
-                    r.Status,
-                    r.ProductId,
-                    r.AuctionId,
-                    r.SaleId,
-
-                    // FIXED: Safe scalar subquery
-                    UserName = _context.UserProfiles
-                        .Where(p => p.UserId == _context.Wallets
-                            .Where(w => w.Id == r.WalletId)
-                            .Select(w => w.UserId)
-                            .FirstOrDefault())
-                        .Select(p => p.FullName)
-                        .FirstOrDefault() ?? "Unknown",
-
-                    ProductTitle = r.ProductId != null
-                        ? _context.Products.Where(p => p.Id == r.ProductId).Select(p => p.Title).FirstOrDefault()
-                        : null
-                })
-                .ToListAsync();
-
-            return Ok(new { status = 200, data = reservations });
-        }
-
     }
 }

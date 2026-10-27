@@ -57,7 +57,7 @@ namespace ProductAuction.API.Data.Seeder
                 }
                 else
                 {
-                    // If the account exists, ensure it has the Admin role (safety check for existing DBs)
+                    // If the account exists, ensure it has the Admin role
                     bool isAdmin = await userManager.IsInRoleAsync(adminUser, "Admin");
 
                     if (!isAdmin)
@@ -72,7 +72,7 @@ namespace ProductAuction.API.Data.Seeder
                     }
                 }
 
-                // 2. Ensure the UserProfile exists (mimics AuthController.Register)
+                // 2. Ensure the UserProfile exists
                 var profileExists = await context.UserProfiles.AnyAsync(p => p.UserId == adminUser.Id);
 
                 if (!profileExists)
@@ -87,7 +87,7 @@ namespace ProductAuction.API.Data.Seeder
                     context.UserProfiles.Add(profile);
                 }
 
-                // 3. Ensure the Wallet exists (mimics AuthController.Register)
+                // 3. Ensure the Wallet exists
                 var walletExists = await context.Wallets.AnyAsync(w => w.UserId == adminUser.Id);
 
                 if (!walletExists)

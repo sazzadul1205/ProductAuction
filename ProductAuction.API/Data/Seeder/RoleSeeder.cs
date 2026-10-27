@@ -18,19 +18,16 @@ namespace ProductAuction.API.Data.Seeder
             // Create a scope to access Identity services.
             using var scope = serviceProvider.CreateScope();
 
-            var roleManager = scope.ServiceProvider
-                .GetRequiredService<RoleManager<IdentityRole>>();
+            var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
 
             // Check each role and create it if it does not exist.
             foreach (var role in Roles)
             {
-                bool roleExists =
-                    await roleManager.RoleExistsAsync(role);
+                bool roleExists = await roleManager.RoleExistsAsync(role);
 
                 if (!roleExists)
                 {
-                    await roleManager.CreateAsync(
-                        new IdentityRole(role));
+                    await roleManager.CreateAsync(new IdentityRole(role));
                 }
             }
         }

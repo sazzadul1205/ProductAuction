@@ -24,29 +24,34 @@ namespace ProductAuction.API.Controllers
             _imageUploadService = imageUploadService;
         }
 
+
         // GET: api/product
+        // Public listing — only approved and available products.
         [HttpGet]
         public async Task<IActionResult> GetAllProducts()
         {
             var products = await _context.Products
-                 .Where(p => p.ApprovalStatus == "Approved" && p.Status == "Available")
-                 .OrderByDescending(p => p.CreatedAt)
-                 .Select(p => new ProductListResponseDto
-                 {
-                     Id = p.Id,
-                     Title = p.Title,
-                     ShortSummary = p.ShortSummary,
-                     StartingPrice = p.StartingPrice,
-                     BuyoutPrice = p.BuyoutPrice,
-                     ApprovalStatus = p.ApprovalStatus,
-                     MainImageUrl = _context.ProductImages
-                         .Where(i => i.ProductId == p.Id && i.IsMain)
-                         .Select(i => i.ImageUrl)
-                         .FirstOrDefault(),
-                     CreatedAt = p.CreatedAt,
-                     CategoryId = p.CategoryId, 
-                     CategoryName = p.Category.Name,
-                 }).ToListAsync();
+                .Where(p => p.ApprovalStatus == "Approved" && p.Status == "Available")
+                .OrderByDescending(p => p.CreatedAt)
+                .Select(p => new ProductListResponseDto
+                {
+                    Id = p.Id,
+                    Title = p.Title,
+                    ShortSummary = p.ShortSummary,
+                    StartingPrice = p.StartingPrice,
+                    BuyoutPrice = p.BuyoutPrice,
+                    ApprovalStatus = p.ApprovalStatus,
+
+                    // main product image 
+                    MainImageUrl = _context.ProductImages
+                        .Where(i => i.ProductId == p.Id && i.IsMain)
+                        .Select(i => i.ImageUrl)
+                        .FirstOrDefault(),
+
+                    CreatedAt = p.CreatedAt,
+                    CategoryId = p.CategoryId,
+                    CategoryName = p.Category.Name
+                }).ToListAsync();
 
             return Ok(new
             {
@@ -56,13 +61,14 @@ namespace ProductAuction.API.Controllers
             });
         }
 
+
         // GET: api/product/my-products
-        // List the logged-in seller's own products.
+        // Lists the logged-in seller's own products (any status).
         [HttpGet("my-products")]
         [Authorize(Roles = "Seller")]
         public async Task<IActionResult> GetMyProducts()
         {
-            // Read the user's ID from the validated JWT token.
+            // grab the user id from the JWT
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             if (userId == null)
@@ -85,41 +91,50 @@ namespace ProductAuction.API.Controllers
                     StartingPrice = p.StartingPrice,
                     BuyoutPrice = p.BuyoutPrice,
                     ApprovalStatus = p.ApprovalStatus,
+
+                    // main product image
                     MainImageUrl = _context.ProductImages
                         .Where(i => i.ProductId == p.Id && i.IsMain)
                         .Select(i => i.ImageUrl)
                         .FirstOrDefault(),
+
                     CreatedAt = p.CreatedAt,
-                    // Auction status (null when no auction exists for this product).
-                    // Lets sellers see the live/cancelled/completed status of their auction.
+
+                    // auction info 
                     AuctionStatus = _context.Auctions
                         .Where(a => a.ProductId == p.Id)
-                        .Select(a => (string?)a.Status)
+                        .Select(a => a.Status)
                         .FirstOrDefault(),
+
                     AuctionStartTime = _context.Auctions
                         .Where(a => a.ProductId == p.Id)
-                        .Select(a => (DateTime?)a.StartTime)
+                        .Select(a => a.StartTime)
                         .FirstOrDefault(),
+
                     AuctionEndTime = _context.Auctions
                         .Where(a => a.ProductId == p.Id)
-                        .Select(a => (DateTime?)a.EndTime)
+                        .Select(a => a.EndTime)
                         .FirstOrDefault(),
+
                     AuctionId = _context.Auctions
                         .Where(a => a.ProductId == p.Id)
-                        .Select(a => (int?)a.Id)
+                        .Select(a => a.Id)
                         .FirstOrDefault(),
+
                     AuctionBidCount = _context.Auctions
                         .Where(a => a.ProductId == p.Id)
-                        .Select(a => (int?)a.BidCount)
+                        .Select(a => a.BidCount)
                         .FirstOrDefault(),
+
                     AuctionCurrentHighestBid = _context.Auctions
                         .Where(a => a.ProductId == p.Id)
-                        .Select(a => (decimal?)a.CurrentHighestBid)
+                        .Select(a => a.CurrentHighestBid)
                         .FirstOrDefault(),
+
                     AuctionCancellationReason = _context.Auctions
                         .Where(a => a.ProductId == p.Id)
-                        .Select(a => (string?)a.CancellationReason)
-                        .FirstOrDefault(),
+                        .Select(a => a.CancellationReason)
+                        .FirstOrDefault()
                 }).ToListAsync();
 
             return Ok(new
@@ -132,13 +147,15 @@ namespace ProductAuction.API.Controllers
 
 
         // GET: api/product/my-products/{id}
-        // Retrieve one product owned by the logged-in seller (any status).
+        // Returns one product owned by the logged-in seller (any status).
         [HttpGet("my-products/{id}")]
         [Authorize(Roles = "Seller")]
         public async Task<IActionResult> GetMyProductById(int id)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (userId == null) return Unauthorized();
+
+            if (userId == null)
+                return Unauthorized();
 
             var product = await _context.Products
                 .Where(p => p.Id == id && p.SellerId == userId)
@@ -164,6 +181,8 @@ namespace ProductAuction.API.Controllers
                     RejectionReason = p.RejectionReason,
                     Status = p.Status,
                     CreatedAt = p.CreatedAt,
+
+                    // all images for this product
                     Images = _context.ProductImages
                         .Where(i => i.ProductId == p.Id)
                         .Select(i => new ProductImageResponseDto
@@ -193,18 +212,18 @@ namespace ProductAuction.API.Controllers
             });
         }
 
+
         // GET: api/product/{id}
-        // Retrieve one approved product with its details and images.
+        // Public view of one approved + available product.
         [HttpGet("{id}")]
         [AllowAnonymous]
         public async Task<IActionResult> GetProductById(int id)
         {
-            // Query the product with this id (approved only) and project it into a response DTO.
             var product = await _context.Products
                 .Where(p =>
-                p.Id == id &&
-                p.ApprovalStatus == "Approved" &&
-                p.Status == "Available")
+                    p.Id == id &&
+                    p.ApprovalStatus == "Approved" &&
+                    p.Status == "Available")
                 .Select(p => new ProductResponseDto
                 {
                     Id = p.Id,
@@ -228,7 +247,7 @@ namespace ProductAuction.API.Controllers
                     Status = p.Status,
                     CreatedAt = p.CreatedAt,
 
-                    // Load the images that belong to this product.
+                    // all images for this product
                     Images = _context.ProductImages
                         .Where(i => i.ProductId == p.Id)
                         .Select(i => new ProductImageResponseDto
@@ -241,7 +260,6 @@ namespace ProductAuction.API.Controllers
                 })
                 .FirstOrDefaultAsync();
 
-            // If no approved product matches this id, return not found.
             if (product == null)
             {
                 return NotFound(new
@@ -251,7 +269,6 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Return the product with a success message.
             return Ok(new
             {
                 status = 200,
@@ -262,12 +279,12 @@ namespace ProductAuction.API.Controllers
 
 
         // POST: api/product
-        // Create a New Product (saved as a Draft — no wallet reservation yet).
+        // Creates a new product as a Draft — no wallet reservation yet.
         [HttpPost]
         [Authorize(Roles = "Seller")]
         public async Task<IActionResult> CreateProduct([FromForm] CreateProductDto dto)
         {
-            // Read the user's ID from the validated JWT token.
+            // grab the user id from the JWT
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             if (userId == null)
@@ -279,7 +296,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Buyout price must not be lower than starting price.
+            // buyout price has to be at least the starting price
             if (dto.BuyoutPrice < dto.StartingPrice)
             {
                 return BadRequest(new
@@ -289,8 +306,9 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Check that the selected category exists.
-            var categoryExists = await _context.Categories.AnyAsync(c => c.Id == dto.CategoryId);
+            // category has to exist
+            var categoryExists = await _context.Categories
+                .AnyAsync(c => c.Id == dto.CategoryId);
 
             if (!categoryExists)
             {
@@ -301,8 +319,8 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Create the product. SellerId comes from the JWT.
-            // Drafts do NOT reserve any wallet funds; the deposit is taken on submission.
+            // create the product — drafts don't reserve any funds,
+            // the deposit is taken when the product is submitted
             var product = new Product
             {
                 SellerId = userId,
@@ -326,13 +344,11 @@ namespace ProductAuction.API.Controllers
             _context.Products.Add(product);
             await _context.SaveChangesAsync();
 
-            // Upload product images, if provided.
+            // upload any images that came with the request
             if (dto.Images != null && dto.Images.Count > 0)
             {
-                // Loop through each uploaded image.
                 for (int i = 0; i < dto.Images.Count; i++)
                 {
-                    // Generate Image URL via _imageUploadService 
                     var imageUrl = await _imageUploadService.UploadImageAsync(dto.Images[i]);
 
                     var productImage = new ProductImage
@@ -357,11 +373,11 @@ namespace ProductAuction.API.Controllers
 
 
         // PUT: api/product/{id}
-        // Update product details and images (drafts only).
+        // Updates a draft or rejected product's details and images.
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdateProduct(int id, [FromForm] UpdateProductDto dto)
         {
-            // Get the logged-in user's ID from the JWT.
+            // grab the user id from the JWT
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             if (userId == null)
@@ -373,7 +389,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Find the product.
+            // find the product
             var product = await _context.Products.FirstOrDefaultAsync(p => p.Id == id);
 
             if (product == null)
@@ -385,13 +401,11 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Only the product's seller can update it.
+            // only the seller who owns it can edit
             if (product.SellerId != userId)
-            {
                 return Forbid();
-            }
 
-            // Only draft products can be edited.
+            // only drafts and rejected products are editable
             if (product.ApprovalStatus != "Draft" && product.ApprovalStatus != "Rejected")
             {
                 return BadRequest(new
@@ -401,9 +415,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-
-
-            // Validate prices.
+            // buyout price check
             if (dto.BuyoutPrice < dto.StartingPrice)
             {
                 return BadRequest(new
@@ -413,8 +425,9 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Check that the category exists.
-            var categoryExists = await _context.Categories.AnyAsync(c => c.Id == dto.CategoryId);
+            // category check
+            var categoryExists = await _context.Categories
+                .AnyAsync(c => c.Id == dto.CategoryId);
 
             if (!categoryExists)
             {
@@ -425,7 +438,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Update product details.
+            // update the basic fields
             product.CategoryId = dto.CategoryId;
             product.Title = dto.Title;
             product.ShortSummary = dto.ShortSummary ?? string.Empty;
@@ -440,15 +453,19 @@ namespace ProductAuction.API.Controllers
             product.StartingPrice = dto.StartingPrice;
             product.BuyoutPrice = dto.BuyoutPrice;
 
-            // Get the product's existing images.
-            var images = await _context.ProductImages.Where(i => i.ProductId == id).ToListAsync();
+            // grab this product's existing images
+            var images = await _context.ProductImages
+                .Where(i => i.ProductId == id)
+                .ToListAsync();
 
-            // Delete selected images.
+            // delete images the client asked to remove
             if (dto.DeleteImageIds != null && dto.DeleteImageIds.Count > 0)
             {
-                // Make sure every requested image belongs to this product.
-                var imagesToDelete = images.Where(i => dto.DeleteImageIds.Contains(i.Id)).ToList();
+                var imagesToDelete = images
+                    .Where(i => dto.DeleteImageIds.Contains(i.Id))
+                    .ToList();
 
+                // every requested id must belong to this product
                 if (imagesToDelete.Count != dto.DeleteImageIds.Distinct().Count())
                 {
                     return BadRequest(new
@@ -466,7 +483,7 @@ namespace ProductAuction.API.Controllers
                 }
             }
 
-            // Upload new images.
+            // upload any new images
             if (dto.NewImages != null && dto.NewImages.Count > 0)
             {
                 foreach (var file in dto.NewImages)
@@ -477,7 +494,8 @@ namespace ProductAuction.API.Controllers
                     {
                         ProductId = product.Id,
                         ImageUrl = imageUrl,
-                        // New uploads are not main by default; the main is decided below.
+
+                        // new uploads aren't main by default 
                         IsMain = false
                     };
 
@@ -486,7 +504,7 @@ namespace ProductAuction.API.Controllers
                 }
             }
 
-            // If the client explicitly chose a main image, promote it (must belong to this product).
+            // if the client explicitly chose a main image, promote it
             if (dto.MainImageId.HasValue)
             {
                 var chosen = images.FirstOrDefault(i => i.Id == dto.MainImageId.Value);
@@ -500,7 +518,7 @@ namespace ProductAuction.API.Controllers
                     });
                 }
 
-                // Clear all mains, then set the chosen one.
+                // clear all mains, then set the chosen one
                 foreach (var img in images)
                 {
                     img.IsMain = false;
@@ -509,14 +527,13 @@ namespace ProductAuction.API.Controllers
                 chosen.IsMain = true;
             }
 
-            // Ensure one image is marked as the main image, if any exist.
+            // otherwise make sure at least one image is marked as main
             else if (images.Count > 0 && !images.Any(i => i.IsMain))
             {
                 images[0].IsMain = true;
             }
 
-            // If the product was rejected and is being edited, move it back to Draft
-            // so the seller can resubmit.
+            // rejected products go back to Draft when edited, so the seller can resubmit
             if (product.ApprovalStatus == "Rejected")
             {
                 product.ApprovalStatus = "Draft";
@@ -534,11 +551,11 @@ namespace ProductAuction.API.Controllers
 
 
         // POST: api/product/{id}/submit-for-approval
-        // Submit a draft product for admin approval.
+        // Submits a draft product for admin approval (reserves the seller deposit).
         [HttpPost("{id}/submit-for-approval")]
         public async Task<IActionResult> SubmitForApproval(int id)
         {
-            // Get the logged-in seller's ID from the JWT.
+            // grab the user id from the JWT
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             if (userId == null)
@@ -550,7 +567,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Find the seller's product.
+            // find the product
             var product = await _context.Products.FirstOrDefaultAsync(p => p.Id == id);
 
             if (product == null)
@@ -562,13 +579,11 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Only the owner can submit the product.
+            // only the owner can submit
             if (product.SellerId != userId)
-            {
                 return Forbid();
-            }
 
-            // Only draft products can be submitted.
+            // only drafts can be submitted
             if (product.ApprovalStatus != "Draft")
             {
                 return BadRequest(new
@@ -578,7 +593,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Find the seller's wallet.
+            // find the seller's wallet
             var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == userId);
 
             if (wallet == null)
@@ -590,10 +605,10 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Calculate the required deposit: 25% of starting price.
+            // deposit = 25% of starting price
             decimal reservationAmount = product.StartingPrice * 0.25m;
 
-            // Reserved funds cannot be used again.
+            // already-reserved funds can't be reused
             decimal availableBalance = wallet.Balance - wallet.ReservedBalance;
 
             if (availableBalance < reservationAmount)
@@ -607,10 +622,10 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Reserve the seller's deposit.
+            // reserve the deposit
             wallet.ReservedBalance += reservationAmount;
 
-            // Create a reservation linked to this product.
+            // create the reservation
             var reservation = new WalletReservation
             {
                 WalletId = wallet.Id,
@@ -622,7 +637,7 @@ namespace ProductAuction.API.Controllers
 
             _context.WalletReservations.Add(reservation);
 
-            // Send the product to the admin review queue.
+            // send it to the admin review queue
             product.ApprovalStatus = "PendingApproval";
 
             await _context.SaveChangesAsync();
@@ -634,12 +649,13 @@ namespace ProductAuction.API.Controllers
             });
         }
 
+
         // POST: api/product/{id}/withdraw
-        // Withdraw a pending product back to Draft (only while it hasn't been reviewed).
+        // Pulls a pending product back to Draft and releases the deposit.
         [HttpPost("{id}/withdraw")]
         public async Task<IActionResult> WithdrawSubmission(int id)
         {
-            // Get the logged-in seller's ID from the JWT.
+            // grab the user id from the JWT
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             if (userId == null)
@@ -651,8 +667,8 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Find the product.
-            var product = await _context.Products.FirstOrDefaultAsync(p => p.Id == id);
+            // find the product
+            var product = await _context.Productss.FirstOrDefaultAsync(p => p.Id == id);
 
             if (product == null)
             {
@@ -663,14 +679,11 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Only the owner can withdraw the product.
+            // only the owner can withdraw
             if (product.SellerId != userId)
-            {
                 return Forbid();
-            }
 
-            // Only products that are still waiting for review can be withdrawn.
-            // Once approved or rejected, the product can no longer be toggled.
+            // can only withdraw while still waiting for review
             if (product.ApprovalStatus != "PendingApproval")
             {
                 return BadRequest(new
@@ -680,7 +693,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Find the active reservation linked to this product.
+            // find the active reservation for this product
             var reservation = await _context.WalletReservations
                 .FirstOrDefaultAsync(r =>
                     r.ProductId == product.Id &&
@@ -700,7 +713,7 @@ namespace ProductAuction.API.Controllers
                     });
                 }
 
-                // Ensure the wallet has enough reserved funds to release.
+                // sanity check before releasing
                 if (wallet.ReservedBalance < reservation.Amount)
                 {
                     return BadRequest(new
@@ -710,15 +723,12 @@ namespace ProductAuction.API.Controllers
                     });
                 }
 
-                // Release the funds and update the reservation.
                 wallet.ReservedBalance -= reservation.Amount;
                 reservation.Status = "Released";
             }
 
-            // Flip the product back to Draft so the seller can edit it again.
+            // back to draft
             product.ApprovalStatus = "Draft";
-
-            // Clear any leftover rejection reason from a previous cycle.
             product.RejectionReason = null;
 
             await _context.SaveChangesAsync();
@@ -730,12 +740,13 @@ namespace ProductAuction.API.Controllers
             });
         }
 
+
         // DELETE: api/product/{id}
-        // Delete a draft product (no reservation to release).
+        // Deletes a draft or rejected product (no reservation to release).
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteProduct(int id)
         {
-            // Get the logged-in user's ID from the JWT.
+            // grab the user id from the JWT
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             if (userId == null)
@@ -747,7 +758,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Find the product.
+            // find the product
             var product = await _context.Products.FirstOrDefaultAsync(p => p.Id == id);
 
             if (product == null)
@@ -759,13 +770,11 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Only the product's seller can delete it.
+            // only the seller who owns it can delete
             if (product.SellerId != userId)
-            {
                 return Forbid();
-            }
 
-            // Only draft products can be deleted.
+            // only drafts and rejected products can be deleted
             if (product.ApprovalStatus != "Draft" && product.ApprovalStatus != "Rejected")
             {
                 return BadRequest(new
@@ -775,15 +784,17 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Find and delete the product's images.
-            var images = await _context.ProductImages.Where(i => i.ProductId == product.Id).ToListAsync();
+            // delete the product's images from storage first
+            var images = await _context.ProductImages
+                .Where(i => i.ProductId == product.Id)
+                .ToListAsync();
 
             foreach (var image in images)
             {
                 await _imageUploadService.DeleteImageAsync(image.ImageUrl);
             }
 
-            // Remove the image records and product.
+            // then remove the DB records
             _context.ProductImages.RemoveRange(images);
             _context.Products.Remove(product);
 
@@ -798,7 +809,7 @@ namespace ProductAuction.API.Controllers
 
 
         // GET: api/product/pending-approval
-        // Get products waiting for admin approval.
+        // Admin: lists products waiting for approval.
         [HttpGet("pending-approval")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> GetPendingApprovalProducts()
@@ -838,7 +849,7 @@ namespace ProductAuction.API.Controllers
 
 
         // GET: api/product/pending-approval/{id}
-        // Get full details of a product waiting for approval.
+        // Admin: full details of a product waiting for approval.
         [HttpGet("pending-approval/{id}")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> GetPendingApprovalProductById(int id)
@@ -867,6 +878,7 @@ namespace ProductAuction.API.Controllers
                     RejectionReason = p.RejectionReason,
                     CreatedAt = p.CreatedAt,
 
+                    // all images for this product
                     Images = _context.ProductImages
                         .Where(i => i.ProductId == p.Id)
                         .Select(i => new ProductImageResponseDto
@@ -898,12 +910,12 @@ namespace ProductAuction.API.Controllers
 
 
         // PUT: api/product/{id}/approval
-        // Admin approves or rejects a product.
+        // Admin approves or rejects a pending product.
         [HttpPut("{id}/approval")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> ReviewProduct(int id, [FromBody] ProductApprovalDto dto)
         {
-            // Find the product.
+            // find the product
             var product = await _context.Products.FirstOrDefaultAsync(p => p.Id == id);
 
             if (product == null)
@@ -915,7 +927,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Only pending products can be reviewed.
+            // only pending products can be reviewed
             if (product.ApprovalStatus != "PendingApproval")
             {
                 return BadRequest(new
@@ -925,7 +937,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Check the requested decision.
+            // decision has to be Approved or Rejected
             if (dto.Status != "Approved" && dto.Status != "Rejected")
             {
                 return BadRequest(new
@@ -935,8 +947,8 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // A rejected product must have a reason.
-            if (dto.Status == "Rejected" && string.IsNullOrWhiteSpace(dto.RejectionReason))
+            // rejection needs a reason
+            if (dto.Status == "Rejected" && string.IsNullOrEmpty(dto.RejectionReason))
             {
                 return BadRequest(new
                 {
@@ -945,7 +957,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // An approved product must have its required seller deposit reserved.
+            // before approving, make sure the seller's deposit is actually there
             if (dto.Status == "Approved")
             {
                 var reservation = await _context.WalletReservations
@@ -982,14 +994,14 @@ namespace ProductAuction.API.Controllers
                 }
             }
 
-            // Update the product's approval status.
+            // apply the decision
             product.ApprovalStatus = dto.Status;
 
             if (dto.Status == "Rejected")
             {
                 product.RejectionReason = dto.RejectionReason;
 
-                // Release the seller's deposit reservation on rejection.
+                // release the seller's deposit
                 var reservation = await _context.WalletReservations
                     .FirstOrDefaultAsync(r =>
                         r.ProductId == product.Id &&
@@ -1009,7 +1021,6 @@ namespace ProductAuction.API.Controllers
                         });
                     }
 
-                    // Check that the wallet has enough reserved funds.
                     if (wallet.ReservedBalance < reservation.Amount)
                     {
                         return BadRequest(new
@@ -1019,17 +1030,15 @@ namespace ProductAuction.API.Controllers
                         });
                     }
 
-                    // Release the funds and update the reservation.
                     wallet.ReservedBalance -= reservation.Amount;
                     reservation.Status = "Released";
                 }
             }
             else
             {
-                // Approved — the reservation stays in place.
+                // approved — reservation stays in place, and we spin up an auction
                 product.RejectionReason = null;
 
-                // Create an auction automatically when the product is approved.
                 var auctionExists = await _context.Auctions.AnyAsync(a => a.ProductId == product.Id);
 
                 if (!auctionExists)

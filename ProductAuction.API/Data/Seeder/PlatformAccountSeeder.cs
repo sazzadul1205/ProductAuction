@@ -35,12 +35,9 @@ namespace ProductAuction.API.Data.Seeder
 
                 if (!result.Succeeded)
                 {
-                    var errors = string.Join(
-                        "; ",
-                        result.Errors.Select(error => error.Description));
+                    var errors = string.Join("; ", result.Errors.Select(error => error.Description));
 
-                    throw new InvalidOperationException(
-                        $"Failed to create platform account: {errors}");
+                    throw new InvalidOperationException($"Failed to create platform account: {errors}");
                 }
             }
 
