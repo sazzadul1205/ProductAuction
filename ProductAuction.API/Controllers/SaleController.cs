@@ -80,11 +80,10 @@ namespace ProductAuction.API.Controllers
             var sales = await _context.Sales
                 .Where(s => s.BuyerId == userId || s.SellerId == userId)
                 .OrderByDescending(s => s.CreatedAt)
-                .Select(s => new SaleListDto
+                .Select(s => new
                 {
                     Id = s.Id,
                     ProductId = s.ProductId,
-
                     ProductTitle = _context.Products
                         .Where(p => p.Id == s.ProductId)
                         .Select(p => p.Title)
@@ -103,7 +102,33 @@ namespace ProductAuction.API.Controllers
                     MainImageUrl = _context.ProductImages
                         .Where(i => i.ProductId == s.ProductId && i.IsMain)
                         .Select(i => i.ImageUrl)
-                        .FirstOrDefault() ?? ""
+                        .FirstOrDefault() ?? "",
+
+                    // Fetch the dispute details including the penalty breakdown
+                    Dispute = _context.Disputes
+                        .Where(d => d.SaleId == s.Id)
+                        .Select(d => new
+                        {
+                            Id = d.Id,
+                            Complaint = d.Complaint,
+                            EvidenceUrl = d.EvidenceUrl,
+                            Status = d.Status,
+                            AdminDecision = d.AdminDecision,
+                            RaisedBy = d.RaisedBy,
+                            CreatedAt = d.CreatedAt,
+                            // Fetch the penalty if one was applied
+                            Penalty = _context.Penalties
+                                .Where(p => p.DisputeId == d.Id)
+                                .Select(p => new
+                                {
+                                    p.TotalAmount,
+                                    p.OppositePartyAmount,
+                                    p.PlatformAmount,
+                                    p.AgainstUserId
+                                })
+                                .FirstOrDefault()
+                        })
+                        .FirstOrDefault()
                 })
                 .ToListAsync();
 
@@ -114,7 +139,6 @@ namespace ProductAuction.API.Controllers
                 data = sales
             });
         }
-
 
         // GET: api/sale/1
         // View detailed information about one sale.
@@ -542,8 +566,8 @@ namespace ProductAuction.API.Controllers
             delivery.DispatchInfo = dto.DispatchInfo;
             delivery.TrackingEvidence = dto.TrackingEvidence;
             delivery.DispatchedAt = now;
-            
-            
+
+
             // Reflect the dispatch on the Sale itself so the seller list
             // shows Dispatched instead of still showing Dispatch Item.
             sale.Status = "Dispatched";
@@ -797,7 +821,7 @@ namespace ProductAuction.API.Controllers
             }
 
             // Find the dedicated platform system account.
-            var platformUser = await _context.Users.FirstOrDefaultAsync(u =>u.UserName == "platform-system-account");
+            var platformUser = await _context.Users.FirstOrDefaultAsync(u => u.UserName == "platform-system-account");
 
             if (platformUser == null)
             {

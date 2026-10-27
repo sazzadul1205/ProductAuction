@@ -1,4 +1,7 @@
-﻿public class AuctionDetailsDto
+﻿using System.Collections.Generic;
+using ProductAuction.API.DTOs.Product; // <-- ADD THIS LINE
+
+public class AuctionDetailsDto
 {
     public int Id { get; set; }
     public int ProductId { get; set; }
@@ -13,6 +16,7 @@
     public int BidCount { get; set; }
     public string? Result { get; set; }
     public string? MainImageUrl { get; set; }
+
     // Only populated by the seller-only view endpoint.
     public string? CancellationReason { get; set; }
 
@@ -25,4 +29,7 @@
     public string? UsageHistory { get; set; }
     public string? ReasonForSelling { get; set; }
     public string? KnownIssues { get; set; }
+
+    // NEW: Add Image list
+    public List<ProductImageResponseDto> Images { get; set; } = new();
 }

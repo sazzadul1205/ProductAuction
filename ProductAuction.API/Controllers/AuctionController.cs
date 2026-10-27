@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ProductAuction.API.Data;
 using ProductAuction.API.DTOs;
+using ProductAuction.API.DTOs.Product;
 using ProductAuction.API.Models;
 using System.Security.Claims;
 
@@ -20,8 +21,6 @@ namespace ProductAuction.API.Controllers
         }
 
         // Get: api/auction
-        // View all auctions that are scheduled or live.
-        // Pending auctions (Upcoming with no schedule) are hidden from the public.
         [HttpGet]
         public async Task<IActionResult> GetAuctions()
         {
@@ -31,36 +30,21 @@ namespace ProductAuction.API.Controllers
                 {
                     Id = a.Id,
                     ProductId = a.ProductId,
-                    ProductTitle = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.Title)
-                        .FirstOrDefault() ?? string.Empty,
-
-                    StartingPrice = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.StartingPrice)
-                        .FirstOrDefault(),
-                    BuyoutPrice = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.BuyoutPrice)
-                        .FirstOrDefault(),
-
+                    ProductTitle = a.Product.Title,
+                    StartingPrice = a.Product.StartingPrice,
+                    BuyoutPrice = a.Product.BuyoutPrice,
                     StartTime = a.StartTime,
                     EndTime = a.EndTime,
                     Status = a.Status,
                     CurrentHighestBid = a.CurrentHighestBid,
-                    BidCount = a.BidCount
+                    BidCount = a.BidCount,
+                    // NEW: Populate Image
+                    MainImageUrl = _context.ProductImages.Where(i => i.ProductId == a.ProductId && i.IsMain).Select(i => i.ImageUrl).FirstOrDefault() ?? ""
                 })
                 .ToListAsync();
 
-            return Ok(new
-            {
-                status = 200,
-                message = "Auctions retrieved successfully.",
-                data = auctions
-            });
+            return Ok(new { status = 200, message = "Auctions retrieved successfully.", data = auctions });
         }
-
 
         // Get: api/auction/my-auctions
         // View auctions created by the logged-in user.
@@ -298,88 +282,41 @@ namespace ProductAuction.API.Controllers
                 {
                     Id = a.Id,
                     ProductId = a.ProductId,
-
-                    ProductTitle = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.Title)
-                        .FirstOrDefault() ?? string.Empty,
-
-                    ProductDescription = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.Description)
-                        .FirstOrDefault() ?? string.Empty,
-
-                    StartingPrice = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.StartingPrice)
-                        .FirstOrDefault(),
-
-                    BuyoutPrice = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.BuyoutPrice)
-                        .FirstOrDefault(),
-
+                    ProductTitle = a.Product.Title,
+                    ProductDescription = a.Product.Description,
+                    StartingPrice = a.Product.StartingPrice,
+                    BuyoutPrice = a.Product.BuyoutPrice,
                     StartTime = a.StartTime,
                     EndTime = a.EndTime,
                     Status = a.Status,
                     CurrentHighestBid = a.CurrentHighestBid,
                     BidCount = a.BidCount,
                     Result = a.Result,
-                    MainImageUrl = _context.ProductImages
-                        .Where(i => i.ProductId == a.ProductId && i.IsMain)
-                        .Select(i => i.ImageUrl)
-                        .FirstOrDefault() ?? "",
+                    Brand = a.Product.Brand,
+                    ModelNumber = a.Product.ModelNumber,
+                    Condition = a.Product.Condition,
+                    CategoryName = a.Product.Category.Name,
+                    PurchaseDate = a.Product.PurchaseDate,
+                    UsageHistory = a.Product.UsageHistory,
+                    ReasonForSelling = a.Product.ReasonForSelling,
+                    KnownIssues = a.Product.KnownIssues,
 
-                    Brand = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.Brand)
-                        .FirstOrDefault(),
-                    ModelNumber = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.ModelNumber)
-                        .FirstOrDefault(),
-                    Condition = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.Condition)
-                        .FirstOrDefault(),
-                    CategoryName = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.Category.Name)
-                        .FirstOrDefault(),
-                    PurchaseDate = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.PurchaseDate)
-                        .FirstOrDefault(),
-                    UsageHistory = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.UsageHistory)
-                        .FirstOrDefault(),
-                    ReasonForSelling = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.ReasonForSelling)
-                        .FirstOrDefault(),
-                    KnownIssues = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.KnownIssues)
-                        .FirstOrDefault(),
+                    // NEW: Populate Main Image and Images list
+                    MainImageUrl = _context.ProductImages.Where(i => i.ProductId == a.ProductId && i.IsMain).Select(i => i.ImageUrl).FirstOrDefault() ?? "",
+                    Images = _context.ProductImages
+                        .Where(i => i.ProductId == a.ProductId)
+                        .Select(i => new ProductImageResponseDto
+                        {
+                            Id = i.Id,
+                            ImageUrl = i.ImageUrl,
+                            IsMain = i.IsMain
+                        }).ToList()
                 })
                 .FirstOrDefaultAsync();
 
-            if (auction == null)
-            {
-                return NotFound(new
-                {
-                    status = 404,
-                    message = "Auction not found."
-                });
-            }
+            if (auction == null) return NotFound(new { status = 404, message = "Auction not found." });
 
-            return Ok(new
-            {
-                status = 200,
-                message = "Auction details retrieved successfully.",
-                data = auction
-            });
+            return Ok(new { status = 200, message = "Auction details retrieved successfully.", data = auction });
         }
 
         // GET: api/auction/{id}/seller
@@ -758,7 +695,7 @@ namespace ProductAuction.API.Controllers
                 return Forbid();
             }
 
-            if (auction.Status != "Upcoming" &&  auction.Status != "Active")
+            if (auction.Status != "Upcoming" && auction.Status != "Active")
             {
                 return BadRequest(new
                 {
@@ -906,7 +843,7 @@ namespace ProductAuction.API.Controllers
 
                 foreach (var buyerReservation in buyerReservations)
                 {
-                    var buyerWallet = await _context.Wallets.FirstOrDefaultAsync(w =>w.Id == buyerReservation.WalletId);
+                    var buyerWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.Id == buyerReservation.WalletId);
 
                     if (buyerWallet == null)
                     {

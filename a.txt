@@ -1,0 +1,11 @@
+Buyer:
+TestBuyer@gmail.com
+@Test1205
+
+Admin
+admin@gmail.com
+Admin@123
+
+Seller
+TestSeller@gmail.com
+@Test1205

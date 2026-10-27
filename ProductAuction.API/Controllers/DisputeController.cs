@@ -1,4 +1,3 @@
-
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -32,16 +31,90 @@ namespace ProductAuction.API.Controllers
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> GetAllDisputes()
         {
-            var disputes = await _context.Disputes.OrderByDescending(d => d.CreatedAt).ToListAsync();
+            // 1. Fetch base dispute data
+            var disputes = await _context.Disputes
+                .OrderByDescending(d => d.CreatedAt)
+                .ToListAsync();
+
+            // 2. Fetch all related Sales for these disputes
+            var saleIds = disputes.Select(d => d.SaleId).Distinct().ToList();
+            var sales = await _context.Sales
+                .Where(s => saleIds.Contains(s.Id))
+                .ToDictionaryAsync(s => s.Id);
+
+            // 3. Fetch all relevant User IDs (RaisedBy and Against)
+            var raisedByIds = disputes.Select(d => d.RaisedBy).Distinct().ToList();
+            var againstUserIds = new List<string>();
+
+            foreach (var d in disputes)
+            {
+                if (sales.TryGetValue(d.SaleId, out var sale))
+                {
+                    var againstId = sale.BuyerId == d.RaisedBy ? sale.SellerId : sale.BuyerId;
+                    if (!string.IsNullOrEmpty(againstId)) againstUserIds.Add(againstId);
+                }
+            }
+            var allUserIds = raisedByIds.Concat(againstUserIds).Distinct().ToList();
+
+            // 4. Fetch Profiles and Roles for these users
+            var profiles = await _context.UserProfiles
+                .Where(p => allUserIds.Contains(p.UserId))
+                .ToDictionaryAsync(p => p.UserId, p => p.FullName);
+
+            var roles = await _context.UserRoles
+                .Where(ur => allUserIds.Contains(ur.UserId))
+                .Join(_context.Roles, ur => ur.RoleId, r => r.Id, (ur, r) => new { ur.UserId, RoleName = r.Name })
+                .GroupBy(x => x.UserId)
+                .Select(g => new { UserId = g.Key, RoleName = g.First().RoleName })
+                .ToDictionaryAsync(x => x.UserId, x => x.RoleName);
+
+            // 5. Fetch Penalties
+            var disputeIds = disputes.Select(d => d.Id).ToList();
+            var penalties = await _context.Penalties
+                .Where(p => disputeIds.Contains(p.DisputeId))
+                .ToDictionaryAsync(p => p.DisputeId, p => new
+                {
+                    p.TotalAmount,
+                    p.OppositePartyAmount,
+                    p.PlatformAmount,
+                    p.AgainstUserId
+                });
+
+            // 6. Combine in memory safely
+            var result = disputes.Select(d =>
+            {
+                sales.TryGetValue(d.SaleId, out var sale);
+                var againstUserId = sale != null ? (sale.BuyerId == d.RaisedBy ? sale.SellerId : sale.BuyerId) : null;
+                penalties.TryGetValue(d.Id, out var penalty);
+
+                return new
+                {
+                    d.Id,
+                    d.SaleId,
+                    d.ProductId,
+                    d.RaisedBy,
+                    d.Complaint,
+                    d.EvidenceUrl,
+                    d.Status,
+                    d.AdminDecision,
+                    d.DecidedBy,
+                    d.CreatedAt,
+                    RaisedByName = profiles.TryGetValue(d.RaisedBy, out var rName) ? rName : "Unknown",
+                    RaisedByRole = roles.TryGetValue(d.RaisedBy, out var rRole) ? rRole : "User",
+                    AgainstUserId = againstUserId,
+                    AgainstName = !string.IsNullOrEmpty(againstUserId) && profiles.TryGetValue(againstUserId, out var aName) ? aName : "Unknown",
+                    AgainstRole = !string.IsNullOrEmpty(againstUserId) && roles.TryGetValue(againstUserId, out var aRole) ? aRole : "User",
+                    Penalty = penalty 
+                };
+            }).ToList();
 
             return Ok(new
             {
                 status = 200,
                 message = "Disputes retrieved successfully.",
-                data = disputes
+                data = result
             });
         }
-
 
         // GET: api/dispute/my-disputes
         // Returns all disputes related to the currently logged-in user.
@@ -140,7 +213,7 @@ namespace ProductAuction.API.Controllers
         // POST: api/dispute
         // Buyer or seller submits a dispute for a sale.
         [HttpPost]
-        public async Task<IActionResult> CreateDispute(CreateDisputeDto dto)
+        public async Task<IActionResult> CreateDispute([FromForm] CreateDisputeDto dto)
         {
             // Get the ID of the logged-in user.
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -331,14 +404,14 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // A finalized dispute must not be processed again.
-            if (dispute.Status != "Open" &&
-                dispute.Status != "UnderReview")
+            // STRICT VALIDATION: A dispute must be UnderReview before it can be resolved.
+            // This prevents admins from skipping the review step entirely.
+            if (dispute.Status != "UnderReview")
             {
                 return BadRequest(new
                 {
                     status = 400,
-                    message = "This dispute has already been finalized."
+                    message = $"Disputes must be 'Under Review' before resolving. Current status: {dispute.Status}."
                 });
             }
 
@@ -427,7 +500,7 @@ namespace ProductAuction.API.Controllers
             decimal productValue = product.StartingPrice;
             decimal totalPenalty = Math.Round(product.StartingPrice * 0.25m, 2);
             decimal oppositePartyAmount = Math.Round(totalPenalty * 0.80m, 2);
-            decimal platformAmount =totalPenalty - oppositePartyAmount;
+            decimal platformAmount = totalPenalty - oppositePartyAmount;
 
             // OPTION 1: SYSTEM FAULT
             // No penalty. Refund escrow and release the deposits.
@@ -564,7 +637,7 @@ namespace ProductAuction.API.Controllers
                     });
                 }
 
-                // Find the seller's wallet to receive the 20% compensation.
+                // Find the seller's wallet to receive the 80% compensation.
                 var sellerWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == sale.SellerId);
 
                 if (sellerWallet == null)
@@ -576,7 +649,7 @@ namespace ProductAuction.API.Controllers
                     });
                 }
 
-                // Find the platform wallet for the remaining 5%.
+                // Find the platform wallet for the remaining 20%.
                 var platformUser = await _context.Users.FirstOrDefaultAsync(u => u.UserName == "platform-system-account");
 
                 if (platformUser == null)
@@ -716,7 +789,7 @@ namespace ProductAuction.API.Controllers
                     });
                 }
 
-                // Find the buyer's wallet to receive the 20% compensation.
+                // Find the buyer's wallet to receive the 80% compensation.
                 var buyerWalletForPenalty = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == sale.BuyerId);
 
                 if (buyerWalletForPenalty == null)
@@ -728,7 +801,7 @@ namespace ProductAuction.API.Controllers
                     });
                 }
 
-                // Find the platform wallet for the remaining 5%.
+                // Find the platform wallet for the remaining 20%.
                 var platformUser = await _context.Users.FirstOrDefaultAsync(u => u.UserName == "platform-system-account");
 
                 if (platformUser == null)
@@ -845,11 +918,16 @@ namespace ProductAuction.API.Controllers
 
             // Release all other buyers' eligibility deposits for this auction.
             // Deposits already marked Forfeited are not selected here.
+            // CRITICAL FIX: We fetch the current buyer's wallet ID and exclude it here
+            // to prevent the double-deduction bug caused by the in-memory "Forfeited" status.
+            var currentBuyerWalletId = buyerWalletForRelease?.Id ?? 0;
+
             var otherBuyerReservations = await _context.WalletReservations
                 .Where(r =>
                     r.AuctionId == sale.AuctionId &&
                     r.Type == "BuyerFunds" &&
-                    r.Status == "Reserved")
+                    r.Status == "Reserved" &&
+                    r.WalletId != currentBuyerWalletId)
                 .ToListAsync();
 
             foreach (var reservation in otherBuyerReservations)
@@ -916,6 +994,5 @@ namespace ProductAuction.API.Controllers
                 }
             });
         }
-
     }
 }

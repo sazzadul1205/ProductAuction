@@ -186,17 +186,29 @@ namespace ProductAuction.API.Controllers
                     startTime = a.StartTime,
                     endTime = a.EndTime,
 
-                    // Retrieve the specific sale ID linked to this auction and buyer.
                     saleId = _context.Sales
                         .Where(s => s.AuctionId == a.Id && s.BuyerId == buyerId)
                         .Select(s => (int?)s.Id)
                         .FirstOrDefault(),
 
-                    // Retrieve the payment status, defaulting to "AwaitingPayment" if no sale is found yet.
                     paymentStatus = _context.Sales
                         .Where(s => s.AuctionId == a.Id && s.BuyerId == buyerId)
                         .Select(s => s.Status)
-                        .FirstOrDefault() ?? "AwaitingPayment"
+                        .FirstOrDefault() ?? "AwaitingPayment",
+
+                    // Fetch the full dispute details if one exists for this sale
+                    dispute = _context.Disputes
+                        .Where(d => _context.Sales.Any(s => s.AuctionId == a.Id && s.BuyerId == buyerId && s.Id == d.SaleId))
+                        .Select(d => new
+                        {
+                            id = d.Id,
+                            complaint = d.Complaint,
+                            evidenceUrl = d.EvidenceUrl,
+                            status = d.Status,
+                            adminDecision = d.AdminDecision,
+                            createdAt = d.CreatedAt
+                        })
+                        .FirstOrDefault()
                 })
                 .ToListAsync();
 
