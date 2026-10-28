@@ -288,7 +288,7 @@ namespace ProductAuction.API.Controllers
                     items = userList,
                     page,
                     pageSize,
-                    totalCount
+                    totalCount,
                 }
             });
         }
@@ -750,6 +750,34 @@ namespace ProductAuction.API.Controllers
 
             var totalCount = await queryable.CountAsync();
 
+            // Global stats
+
+            // Total volume = sum of Credit + Debit across ALL transactions.
+            var totalVolume = await _context.WalletTransactions
+                .Where(t => t.Type == "Credit" || t.Type == "Debit")
+                .SumAsync(t => (decimal?)t.Amount) ?? 0;
+
+            // Escrow currently held = sum of active SaleEscrow reservations.
+            var totalEscrow = await _context.WalletReservations
+                .Where(r => r.Type == "SaleEscrow" && r.Status == "Reserved")
+                .SumAsync(r => (decimal?)r.Amount) ?? 0;
+
+            // Active buyer eligibility deposits.
+            var totalBuyerDeposits = await _context.WalletReservations
+                .Where(r => r.Type == "BuyerFunds" && r.Status == "Reserved")
+                .SumAsync(r => (decimal?)r.Amount) ?? 0;
+
+            // Active seller deposits.
+            var totalSellerDeposits = await _context.WalletReservations
+                .Where(r => r.Type == "SellerDeposit" && r.Status == "Reserved")
+                .SumAsync(r => (decimal?)r.Amount) ?? 0;
+
+            // Count of active reservation
+            var totalActiveReservations = await _context.WalletReservations
+                .CountAsync(r => r.Status == "Reserved");
+
+            // Paginated rows
+
             var transactions = await queryable
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
@@ -793,11 +821,15 @@ namespace ProductAuction.API.Controllers
                     items = transactions,
                     page,
                     pageSize,
-                    totalCount
+                    totalCount,
+                    totalVolume,
+                    totalEscrow,
+                    totalBuyerDeposits,
+                    totalSellerDeposits,
+                    totalActiveReservations
                 }
             });
         }
-        
 
         // GET: api/Admin/reservations
         // Returns all wallet reservations globally, for admin oversight.
@@ -943,6 +975,56 @@ namespace ProductAuction.API.Controllers
                         pageSize,
                         totalCount
                     }
+                }
+            });
+        }
+
+
+        // GET: api/Admin/user/role-counts
+        // Returns global counts of users per role (Admin / Seller / Buyer),
+        // ignoring any search or filter — used by the stats cards on the Users page.
+        [HttpGet("user/role-counts")]
+        public async Task<IActionResult> GetUserRoleCounts()
+        {
+            // Get the IDs of every user, excluding the platform system account.
+            var allUserIds = await _userManager.Users
+                .Where(u => u.UserName != "platform-system-account")
+                .Select(u => u.Id)
+                .ToListAsync();
+
+            // Load the role rows for those users.
+            var userRoleRows = await _context.UserRoles
+                .Where(ur => allUserIds.Contains(ur.UserId))
+                .ToListAsync();
+
+            // Load all roles 
+            var allRoles = await _context.Roles.ToListAsync();
+
+            // Count roles across the whole user base.
+            var adminCount = 0;
+            var sellerCount = 0;
+            var buyerCount = 0;
+
+            foreach (var userRole in userRoleRows)
+            {
+                // Find the role name for this role ID.
+                var role = allRoles.FirstOrDefault(r => r.Id == userRole.RoleId);
+                if (role == null) continue;
+
+                if (role.Name == "Admin") adminCount++;
+                else if (role.Name == "Seller") sellerCount++;
+                else if (role.Name == "Buyer") buyerCount++;
+            }
+
+            return Ok(new
+            {
+                status = 200,
+                message = "Role counts retrieved successfully.",
+                data = new
+                {
+                    admin = adminCount,
+                    seller = sellerCount,
+                    buyer = buyerCount
                 }
             });
         }

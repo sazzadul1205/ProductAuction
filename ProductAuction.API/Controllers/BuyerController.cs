@@ -155,6 +155,16 @@ namespace ProductAuction.API.Controllers
 
             var totalCount = await bidsQuery.CountAsync();
 
+            // Global counts across ALL of this buyer's bids (ignores status/search filters).
+            var totalBidsCount = await _context.Bids.CountAsync(b =>
+                b.BidderId == buyerId);
+            var activeBidsCount = await _context.Bids.CountAsync(b =>
+                b.BidderId == buyerId && b.Auction.Status == "Active");
+            var highestBidsCount = await _context.Bids.CountAsync(b =>
+                b.BidderId == buyerId
+                && b.Auction.CurrentHighestBidderId == buyerId
+                && b.Auction.CurrentHighestBid == b.Amount);
+
             var bids = await bidsQuery
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
@@ -189,7 +199,10 @@ namespace ProductAuction.API.Controllers
                     items = bids,
                     page,
                     pageSize,
-                    totalCount
+                    totalCount,
+                    totalBidsCount,
+                    activeBidsCount,
+                    highestBidsCount
                 }
             });
         }

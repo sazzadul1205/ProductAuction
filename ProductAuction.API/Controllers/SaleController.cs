@@ -260,6 +260,16 @@ namespace ProductAuction.API.Controllers
 
             var totalCount = await salesQuery.CountAsync();
 
+            // Global counts across ALL of this user's sales.
+            var totalSalesCount = await _context.Sales.CountAsync(s =>
+                s.BuyerId == userId || s.SellerId == userId);
+            var awaitingDispatchCount = await _context.Sales.CountAsync(s =>
+                (s.BuyerId == userId || s.SellerId == userId) && s.Status == "Paid");
+            var totalRevenue = await _context.Sales
+                .Where(s => (s.BuyerId == userId || s.SellerId == userId)
+                    && (s.Status == "Completed" || s.Status == "Dispatched" || s.Status == "Paid"))
+                .SumAsync(s => s.SellerProceeds);
+
             var sales = await salesQuery
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
@@ -328,7 +338,10 @@ namespace ProductAuction.API.Controllers
                     items = sales,
                     page,
                     pageSize,
-                    totalCount
+                    totalCount,
+                    totalSalesCount,
+                    awaitingDispatchCount,
+                    totalRevenue
                 }
             });
         }
