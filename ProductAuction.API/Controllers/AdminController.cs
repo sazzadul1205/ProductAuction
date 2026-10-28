@@ -343,46 +343,6 @@ namespace ProductAuction.API.Controllers
         }
 
 
-        // GET: api/Admin/product
-        // Returns every product for admin management, no matter what status it's in.
-        [HttpGet("product")]
-        public async Task<IActionResult> GetAllProductsForAdmin()
-        {
-            var products = await _context.Products
-                .OrderByDescending(p => p.CreatedAt)
-                .Select(p => new
-                {
-                    id = p.Id,
-                    sellerId = p.SellerId,
-                    categoryId = p.CategoryId,
-                    categoryName = p.Category.Name,
-                    title = p.Title,
-                    shortSummary = p.ShortSummary,
-                    startingPrice = p.StartingPrice,
-                    buyoutPrice = p.BuyoutPrice,
-
-                    approvalStatus = p.ApprovalStatus,
-                    status = p.Status,
-                    rejectionReason = p.RejectionReason,
-                    condition = p.Condition,
-                    createdAt = p.CreatedAt,
-
-                    mainImageUrl = _context.ProductImages
-                        .Where(i => i.ProductId == p.Id && i.IsMain)
-                        .Select(i => i.ImageUrl)
-                        .FirstOrDefault()
-                })
-                .ToListAsync();
-
-            return Ok(new
-            {
-                status = 200,
-                message = "All products retrieved successfully.",
-                data = products
-            });
-        }
-
-
         // GET: api/Admin/auctions
         // Returns all auctions so admins can monitor them.
         [HttpGet("auctions")]
@@ -426,46 +386,6 @@ namespace ProductAuction.API.Controllers
             });
         }
 
-
-        // GET: api/Admin/auction-results
-        // Returns finalized auction results so admins can review them.
-        [HttpGet("auction-results")]
-        public async Task<IActionResult> GetAuctionResultsForAdmin()
-        {
-            var results = await _context.Auctions
-                .Where(a =>
-                    a.Status == "Completed" &&          // Only Completed status are allowed 
-                    (a.Result == "Sold" || a.Result == "NoWinner")) // Only witgh the Result of Sold and No Winner Allowed 
-                .OrderByDescending(a => a.EndTime)
-                .Select(a => new
-                {
-                    auctionId = a.Id,
-                    productId = a.ProductId,
-
-                    productTitle = _context.Products
-                        .Where(p => p.Id == a.ProductId)
-                        .Select(p => p.Title)
-                        .FirstOrDefault() ?? string.Empty,
-
-                    sellerId = a.SellerId,
-                    winnerId = a.WinnerId,
-                    result = a.Result,
-                    finalAmount = a.CurrentHighestBid,
-                    bidCount = a.BidCount,
-                    startTime = a.StartTime,
-                    endTime = a.EndTime
-                })
-                .ToListAsync();
-
-            return Ok(new
-            {
-                status = 200,
-                message = "Auction results retrieved successfully.",
-                data = results
-            });
-        }
-
-
         // POST: api/Admin/disputes/{id}/start-review
         // Moves an open dispute into the admin review process.
         [HttpPost("disputes/{id}/start-review")]
@@ -508,65 +428,6 @@ namespace ProductAuction.API.Controllers
                 }
             });
         }
-
-
-        // GET: api/Admin/penalties
-        // Returns all penalty records for admin review.
-        [HttpGet("penalties")]
-        public async Task<IActionResult> GetAllPenalties()
-        {
-            var penalties = await _context.Penalties
-                .OrderByDescending(p => p.Id)
-                .Select(p => new
-                {
-                    id = p.Id,
-                    disputeId = p.DisputeId,
-                    againstUserId = p.AgainstUserId,
-                    productValue = p.ProductValue,
-                    totalAmount = p.TotalAmount,
-                    oppositePartyAmount = p.OppositePartyAmount,
-                    platformAmount = p.PlatformAmount,
-                    status = p.Status
-                })
-                .ToListAsync();
-
-            return Ok(new
-            {
-                status = 200,
-                message = "Penalties retrieved successfully.",
-                data = penalties
-            });
-        }
-
-
-        // GET: api/wallet/deposit-requests
-        // Returns all deposit requests for admin history.
-        [HttpGet("deposit-requests")]
-        public async Task<IActionResult> GetAllDepositRequests()
-        {
-            var requests = await _context.DepositRequests
-                .OrderByDescending(d => d.CreatedAt)
-                .Select(d => new DepositRequestResponseDto
-                {
-                    Id = d.Id,
-                    WalletId = d.WalletId,
-                    Method = d.Method,
-                    Amount = d.Amount,
-                    TransactionReference = d.TransactionReference,
-                    ReceiptImageUrl = d.ReceiptImageUrl,
-                    Status = d.Status,
-                    CreatedAt = d.CreatedAt
-                })
-                .ToListAsync();
-
-            return Ok(new
-            {
-                status = 200,
-                message = "Deposit request history retrieved successfully.",
-                data = requests
-            });
-        }
-
 
         // GET: api/wallet/deposit-requests/pending
         // Returns all deposit requests waiting for admin review.

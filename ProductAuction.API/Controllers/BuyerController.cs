@@ -137,48 +137,6 @@ namespace ProductAuction.API.Controllers
         }
 
 
-        // GET: api/Buyer/bid-history
-        // Returns the logged-in buyer's full bid history (including buyouts).
-        [HttpGet("bid-history")]
-        public async Task<IActionResult> GetBidHistory()
-        {
-            var buyerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-
-            if (buyerId == null)
-            {
-                return Unauthorized(new
-                {
-                    status = 401,
-                    message = "Please log in first."
-                });
-            }
-
-            var bids = await _context.Bids
-                .Where(b => b.BidderId == buyerId)
-                .OrderByDescending(b => b.PlacedAt)
-                .Select(b => new
-                {
-                    bidId = b.Id,
-                    auctionId = b.AuctionId,
-                    productId = b.Auction.Product.Id,
-                    productTitle = b.Auction.Product.Title,
-                    bidAmount = b.Amount,
-                    isBuyout = b.IsBuyout,
-                    placedAt = b.PlacedAt,
-                    auctionStatus = b.Auction.Status,
-                    auctionEndTime = b.Auction.EndTime
-                })
-                .ToListAsync();
-
-            return Ok(new
-            {
-                status = 200,
-                message = "Your bid history was retrieved successfully.",
-                data = bids
-            });
-        }
-
-
         // GET: api/Buyer/won-auctions
         // Returns auctions this buyer won, plus sale / dispatch / dispute info for each.
         [HttpGet("won-auctions")]

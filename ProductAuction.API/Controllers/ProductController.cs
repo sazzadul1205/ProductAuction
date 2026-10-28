@@ -25,43 +25,6 @@ namespace ProductAuction.API.Controllers
         }
 
 
-        // GET: api/product
-        // Public listing — only approved and available products.
-        [HttpGet]
-        public async Task<IActionResult> GetAllProducts()
-        {
-            var products = await _context.Products
-                .Where(p => p.ApprovalStatus == "Approved" && p.Status == "Available")
-                .OrderByDescending(p => p.CreatedAt)
-                .Select(p => new ProductListResponseDto
-                {
-                    Id = p.Id,
-                    Title = p.Title,
-                    ShortSummary = p.ShortSummary,
-                    StartingPrice = p.StartingPrice,
-                    BuyoutPrice = p.BuyoutPrice,
-                    ApprovalStatus = p.ApprovalStatus,
-
-                    // main product image 
-                    MainImageUrl = _context.ProductImages
-                        .Where(i => i.ProductId == p.Id && i.IsMain)
-                        .Select(i => i.ImageUrl)
-                        .FirstOrDefault(),
-
-                    CreatedAt = p.CreatedAt,
-                    CategoryId = p.CategoryId,
-                    CategoryName = p.Category.Name
-                }).ToListAsync();
-
-            return Ok(new
-            {
-                status = 200,
-                message = "Products retrieved successfully.",
-                data = products
-            });
-        }
-
-
         // GET: api/product/my-products
         // Lists the logged-in seller's own products (any status).
         [HttpGet("my-products")]
@@ -159,71 +122,6 @@ namespace ProductAuction.API.Controllers
 
             var product = await _context.Products
                 .Where(p => p.Id == id && p.SellerId == userId)
-                .Select(p => new ProductResponseDto
-                {
-                    Id = p.Id,
-                    SellerId = p.SellerId,
-                    CategoryId = p.CategoryId,
-                    CategoryName = p.Category.Name,
-                    Title = p.Title,
-                    ShortSummary = p.ShortSummary,
-                    Description = p.Description,
-                    Brand = p.Brand,
-                    ModelNumber = p.ModelNumber,
-                    Condition = p.Condition,
-                    PurchaseDate = p.PurchaseDate,
-                    UsageHistory = p.UsageHistory,
-                    ReasonForSelling = p.ReasonForSelling,
-                    KnownIssues = p.KnownIssues,
-                    StartingPrice = p.StartingPrice,
-                    BuyoutPrice = p.BuyoutPrice,
-                    ApprovalStatus = p.ApprovalStatus,
-                    RejectionReason = p.RejectionReason,
-                    Status = p.Status,
-                    CreatedAt = p.CreatedAt,
-
-                    // all images for this product
-                    Images = _context.ProductImages
-                        .Where(i => i.ProductId == p.Id)
-                        .Select(i => new ProductImageResponseDto
-                        {
-                            Id = i.Id,
-                            ImageUrl = i.ImageUrl,
-                            IsMain = i.IsMain
-                        })
-                        .ToList()
-                })
-                .FirstOrDefaultAsync();
-
-            if (product == null)
-            {
-                return NotFound(new
-                {
-                    status = 404,
-                    message = "Product not found."
-                });
-            }
-
-            return Ok(new
-            {
-                status = 200,
-                message = "Product retrieved successfully.",
-                data = product
-            });
-        }
-
-
-        // GET: api/product/{id}
-        // Public view of one approved + available product.
-        [HttpGet("{id}")]
-        [AllowAnonymous]
-        public async Task<IActionResult> GetProductById(int id)
-        {
-            var product = await _context.Products
-                .Where(p =>
-                    p.Id == id &&
-                    p.ApprovalStatus == "Approved" &&
-                    p.Status == "Available")
                 .Select(p => new ProductResponseDto
                 {
                     Id = p.Id,
