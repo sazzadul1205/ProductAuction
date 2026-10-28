@@ -1,9 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using ProductAuction.API.Data;
 
-// TODO: Handle overdue auctions whose StartTime and EndTime have both passed
-// while the application or background service was stopped.
-// Consider activating overdue auctions even if EndTime has passed, so that
 
 // AuctionResultBackgroundService can process them and mark them Completed.
 namespace ProductAuction.API.Services.Background

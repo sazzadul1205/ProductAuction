@@ -33,34 +33,33 @@ namespace ProductAuction.API.Controllers
         public async Task<IActionResult> GetDashboard()
         {
             // total registered users (excluding the system platform account)
-            var totalUsers = await _context.Users
-                .CountAsync(u => u.UserName != "platform-system-account");
+            var totalUsers = await _context.Users.CountAsync(u => u.UserName != "platform-system-account");
 
             // items that need admin review / action
-            var pendingProducts = await _context.Products
-                .CountAsync(p => p.ApprovalStatus == "PendingApproval");
+            // Pending Products
+            var pendingProducts = await _context.Products.CountAsync(p => p.ApprovalStatus == "PendingApproval");
 
-            var pendingDeposits = await _context.DepositRequests
-                .CountAsync(d => d.Status == "PendingVerification");
+            //pending Deposit Varification
+            var pendingDeposits = await _context.DepositRequests.CountAsync(d => d.Status == "PendingVerification");
 
-            var pendingVerifications = await _context.UserProfiles
-                .CountAsync(p => p.VerificationStatus == "PendingReview");
+            // pending User Profile Verifications
+            var pendingVerifications = await _context.UserProfiles.CountAsync(p => p.VerificationStatus == "PendingReview");
 
-            var openDisputes = await _context.Disputes
-                .CountAsync(d => d.Status == "Open" || d.Status == "UnderReview");
+            // Pending Dispute Resolve
+            var openDisputes = await _context.Disputes.CountAsync(d => d.Status == "Open" || d.Status == "UnderReview");
 
             // auctions currently running
-            var activeAuctions = await _context.Auctions
-                .CountAsync(a => a.Status == "Active");
+            var activeAuctions = await _context.Auctions.CountAsync(a => a.Status == "Active");
 
-            // grab the platform's system account and its wallet balance
-            var platformUser = await _context.Users
-                .FirstOrDefaultAsync(u => u.UserName == "platform-system-account");
+            // Get User Account Of the Platform
+            var platformUser = await _context.Users.FirstOrDefaultAsync(u => u.UserName == "platform-system-account");
 
+            // Get The Ballance of the Platform Account
             var platformWallet = platformUser != null
                 ? await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == platformUser.Id)
                 : null;
 
+            // Safety check Balance Either has Value or 0
             var platformBalance = platformWallet?.Balance ?? 0;
 
             return Ok(new
@@ -131,7 +130,7 @@ namespace ProductAuction.API.Controllers
             // give them the Admin role
             await _userManager.AddToRoleAsync(user, "Admin");
 
-            // create the profile and wallet so the rest of the app has what it expects
+            // create the profile and wallet
             _context.UserProfiles.Add(new UserProfile
             {
                 UserId = user.Id,
@@ -167,22 +166,22 @@ namespace ProductAuction.API.Controllers
                 .OrderBy(u => u.Email)
                 .ToListAsync();
 
-            // load all profiles and wallets once (2 queries total)
+            // load all profiles and wallets
             var profiles = await _context.UserProfiles.ToListAsync();
             var wallets = await _context.Wallets.ToListAsync();
 
             var userList = new List<object>();
 
-            // build the response, one entry per user
+            // build the response
             foreach (var user in users)
             {
                 var roles = await _userManager.GetRolesAsync(user);
 
-                // look up this user's profile / wallet (may not exist)
+                // look up this user's profile / wallet
                 var profile = profiles.FirstOrDefault(p => p.UserId == user.Id);
                 var wallet = wallets.FirstOrDefault(w => w.UserId == user.Id);
 
-                // build the profile part of the response (or null)
+                // build the profile part of the response
                 object? profileData = null;
                 if (profile != null)
                 {
@@ -198,8 +197,10 @@ namespace ProductAuction.API.Controllers
                     };
                 }
 
-                // build the wallet part of the response (or null)
+                // build the wallet part of the response 
                 object? walletData = null;
+
+                // If Wallaet found built it or else no need
                 if (wallet != null)
                 {
                     walletData = new
@@ -286,6 +287,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
+            // Set the Lockout Value as Null
             DateTimeOffset? lockoutEnd = null;
 
             if (request.IsLocked)
@@ -359,14 +361,12 @@ namespace ProductAuction.API.Controllers
                     startingPrice = p.StartingPrice,
                     buyoutPrice = p.BuyoutPrice,
 
-                    // both approval status and lifecycle status
                     approvalStatus = p.ApprovalStatus,
                     status = p.Status,
                     rejectionReason = p.RejectionReason,
                     condition = p.Condition,
                     createdAt = p.CreatedAt,
 
-                    // grab the main image url 
                     mainImageUrl = _context.ProductImages
                         .Where(i => i.ProductId == p.Id && i.IsMain)
                         .Select(i => i.ImageUrl)
@@ -395,13 +395,11 @@ namespace ProductAuction.API.Controllers
                     auctionId = a.Id,
                     productId = a.ProductId,
 
-                    // product title 
                     productTitle = _context.Products
                         .Where(p => p.Id == a.ProductId)
                         .Select(p => p.Title)
                         .FirstOrDefault() ?? string.Empty,
 
-                    // main product image 
                     mainImageUrl = _context.ProductImages
                         .Where(i => i.ProductId == a.ProductId && i.IsMain)
                         .Select(i => i.ImageUrl)
@@ -436,15 +434,14 @@ namespace ProductAuction.API.Controllers
         {
             var results = await _context.Auctions
                 .Where(a =>
-                    a.Status == "Completed" &&
-                    (a.Result == "Sold" || a.Result == "NoWinner"))
+                    a.Status == "Completed" &&          // Only Completed status are allowed 
+                    (a.Result == "Sold" || a.Result == "NoWinner")) // Only witgh the Result of Sold and No Winner Allowed 
                 .OrderByDescending(a => a.EndTime)
                 .Select(a => new
                 {
                     auctionId = a.Id,
                     productId = a.ProductId,
 
-                    // product title (blank if missing)
                     productTitle = _context.Products
                         .Where(p => p.Id == a.ProductId)
                         .Select(p => p.Title)
@@ -495,6 +492,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
+            // Set Under Dispute What Ever 
             dispute.Status = "UnderReview";
 
             await _context.SaveChangesAsync();
@@ -618,7 +616,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // already reviewed? don't credit the wallet twice
+            // already reviewed, don't credit the wallet twice
             if (depositRequest.Status != "PendingVerification")
             {
                 return BadRequest(new
@@ -639,8 +637,7 @@ namespace ProductAuction.API.Controllers
             }
 
             // rejection needs a reason
-            if (dto.Status == "Rejected" &&
-                string.IsNullOrEmpty(dto.RejectionReason))
+            if (dto.Status == "Rejected" && string.IsNullOrEmpty(dto.RejectionReason))
             {
                 return BadRequest(new
                 {
@@ -669,6 +666,7 @@ namespace ProductAuction.API.Controllers
             // only approved deposits actually increase the balance
             if (dto.Status == "Approved")
             {
+                // Increment Deposit Request Ammount + Previous Wallet Ballance
                 wallet.Balance += depositRequest.Amount;
 
                 // record the wallet balance change
@@ -710,28 +708,31 @@ namespace ProductAuction.API.Controllers
         public async Task<IActionResult> GetAllTransactions()
         {
             var transactions = await _context.WalletTransactions
-                .OrderByDescending(t => t.CreatedAt)
-                .Select(t => new
+                .OrderByDescending(wt => wt.CreatedAt)
+                .Select(wt => new
                 {
-                    t.Id,
-                    t.Type,
-                    t.Amount,
-                    t.BalanceAfter,
-                    t.Reference,
-                    t.CreatedAt,
+                    wt.Id,
+                    wt.Type,
+                    wt.Amount,
+                    wt.BalanceAfter,
+                    wt.Reference,
+                    wt.CreatedAt,
 
-                    // grab the user's full name 
+                    // Get the user's full name using the wallet's UserId.
+                    // If the name is not found, use "Unknown".
                     UserName = _context.UserProfiles
-                        .Where(p => p.UserId == _context.Wallets
-                            .Where(w => w.Id == t.WalletId)
+                        .Where(up => up.UserId == _context.Wallets
+                            .Where(w => w.Id == wt.WalletId)
                             .Select(w => w.UserId)
                             .FirstOrDefault())
-                        .Select(p => p.FullName)
+                        .Select(up => up.FullName)
                         .FirstOrDefault() ?? "Unknown",
 
+                    // Get the user's email using the wallet's UserId.
+                    // If the email is not found, use "Unknown".
                     UserEmail = _context.Users
                         .Where(u => u.Id == _context.Wallets
-                            .Where(w => w.Id == t.WalletId)
+                            .Where(w => w.Id == wt.WalletId)
                             .Select(w => w.UserId)
                             .FirstOrDefault())
                         .Select(u => u.Email)
@@ -754,30 +755,30 @@ namespace ProductAuction.API.Controllers
         public async Task<IActionResult> GetAllReservations()
         {
             var reservations = await _context.WalletReservations
-                .OrderByDescending(r => r.Id)
-                .Select(r => new
+                .OrderByDescending(wr => wr.Id)
+                .Select(wr => new
                 {
-                    r.Id,
-                    r.Type,
-                    r.Amount,
-                    r.Status,
-                    r.ProductId,
-                    r.AuctionId,
-                    r.SaleId,
+                    wr.Id,
+                    wr.Type,
+                    wr.Amount,
+                    wr.Status,
+                    wr.ProductId,
+                    wr.AuctionId,
+                    wr.SaleId,
 
                     // grab the user's full name
                     UserName = _context.UserProfiles
-                        .Where(p => p.UserId == _context.Wallets
-                            .Where(w => w.Id == r.WalletId)
+                        .Where(up => up.UserId == _context.Wallets
+                            .Where(w => w.Id == wr.WalletId)
                             .Select(w => w.UserId)
                             .FirstOrDefault())
                         .Select(p => p.FullName)
                         .FirstOrDefault() ?? "Unknown",
 
                     // product title, only if this reservation is tied to a product
-                    ProductTitle = r.ProductId != null
+                    ProductTitle = wr.ProductId != null
                         ? _context.Products
-                            .Where(p => p.Id == r.ProductId)
+                            .Where(p => p.Id == wr.ProductId)
                             .Select(p => p.Title)
                             .FirstOrDefault()
                         : null
