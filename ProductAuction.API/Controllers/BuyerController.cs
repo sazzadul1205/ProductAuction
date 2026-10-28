@@ -86,7 +86,7 @@ namespace ProductAuction.API.Controllers
         // GET: api/Buyer/my-bids
         // Returns the logged-in buyer's bids and the status of each auction.
         [HttpGet("my-bids")]
-        public async Task<IActionResult> GetMyBids()
+        public async Task<IActionResult> GetMyBids([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
         {
             // grab the buyer id from the JWT
             var buyerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -100,10 +100,22 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
+            // clamp paging
+            if (page < 1) page = 1;
+            if (pageSize < 1) pageSize = 20;
+            if (pageSize > 100) pageSize = 100;
+
             // only return bids placed by this buyer
-            var bids = await _context.Bids
+            var query = _context.Bids
                 .Where(b => b.BidderId == buyerId)
                 .OrderByDescending(b => b.PlacedAt)
+                .AsQueryable();
+
+            var totalCount = await query.CountAsync();
+
+            var bids = await query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
                 .Select(b => new
                 {
                     bidId = b.Id,
@@ -111,7 +123,7 @@ namespace ProductAuction.API.Controllers
                     productId = b.Auction.Product.Id,
                     productTitle = b.Auction.Product.Title,
 
-                    // main product image (blank if none)
+                    // main product image 
                     mainImageUrl = _context.ProductImages
                         .Where(i => i.ProductId == b.Auction.Product.Id && i.IsMain)
                         .Select(i => i.ImageUrl)
@@ -132,10 +144,15 @@ namespace ProductAuction.API.Controllers
             {
                 status = 200,
                 message = "Your bids were retrieved successfully.",
-                data = bids
+                data = new
+                {
+                    items = bids,
+                    page,
+                    pageSize,
+                    totalCount
+                }
             });
         }
-
 
         // GET: api/Buyer/won-auctions
         // Returns auctions this buyer won, plus sale / dispatch / dispute info for each.

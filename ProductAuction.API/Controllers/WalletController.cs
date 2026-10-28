@@ -137,7 +137,7 @@ namespace ProductAuction.API.Controllers
         // GET: api/wallet/deposit-requests
         // Returns the deposit requests submitted by the logged-in user.
         [HttpGet("deposit-requests")]
-        public async Task<IActionResult> GetMyDepositRequests()
+        public async Task<IActionResult> GetMyDepositRequests([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
         {
             // grab the user id from the JWT
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -163,10 +163,21 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
+            if (page < 1) page = 1;
+            if (pageSize < 1) pageSize = 20;
+            if (pageSize > 100) pageSize = 100;
+
             // return every deposit request this user submitted, newest first
-            var requests = await _context.DepositRequests
+            var query = _context.DepositRequests
                 .Where(d => d.WalletId == wallet.Id)
                 .OrderByDescending(d => d.CreatedAt)
+                .AsQueryable();
+
+            var totalCount = await query.CountAsync();
+
+            var requests = await query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
                 .Select(d => new DepositRequestResponseDto
                 {
                     Id = d.Id,
@@ -185,15 +196,20 @@ namespace ProductAuction.API.Controllers
             {
                 status = 200,
                 message = "Deposit requests retrieved successfully.",
-                data = requests
+                data = new
+                {
+                    items = requests,
+                    page,
+                    pageSize,
+                    totalCount
+                }
             });
         }
-
 
         // GET: api/wallet/transactions
         // Returns the transaction history for the logged-in user's wallet.
         [HttpGet("transactions")]
-        public async Task<IActionResult> GetMyTransactions()
+        public async Task<IActionResult> GetMyTransactions([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
         {
             // grab the user id from the JWT
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -219,10 +235,21 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
+            if (page < 1) page = 1;
+            if (pageSize < 1) pageSize = 20;
+            if (pageSize > 100) pageSize = 100;
+
             // transactions for this wallet, newest first
-            var transactions = await _context.WalletTransactions
+            var query = _context.WalletTransactions
                 .Where(t => t.WalletId == wallet.Id)
                 .OrderByDescending(t => t.CreatedAt)
+                .AsQueryable();
+
+            var totalCount = await query.CountAsync();
+
+            var transactions = await query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
                 .Select(t => new WalletTransactionResponseDto
                 {
                     Id = t.Id,
@@ -238,7 +265,13 @@ namespace ProductAuction.API.Controllers
             {
                 status = 200,
                 message = "Wallet transactions retrieved successfully.",
-                data = transactions
+                data = new
+                {
+                    items = transactions,
+                    page,
+                    pageSize,
+                    totalCount
+                }
             });
         }
 
@@ -246,7 +279,7 @@ namespace ProductAuction.API.Controllers
         // GET: api/wallet/reservations
         // Returns the logged-in user's reservation list.
         [HttpGet("reservations")]
-        public async Task<IActionResult> GetMyReservations()
+        public async Task<IActionResult> GetMyReservations([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
         {
             // grab the user id from the JWT
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -272,9 +305,21 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
+            if (page < 1) page = 1;
+            if (pageSize < 1) pageSize = 20;
+            if (pageSize > 100) pageSize = 100;
+
             // only reservations that belong to this wallet
-            var reservations = await _context.WalletReservations
+            var query = _context.WalletReservations
                 .Where(r => r.WalletId == wallet.Id)
+                .AsQueryable();
+
+            var totalCount = await query.CountAsync();
+
+            var reservations = await query
+                .OrderBy(r => r.Id)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
                 .Select(r => new
                 {
                     r.Id,
@@ -292,14 +337,19 @@ namespace ProductAuction.API.Controllers
                     r.Amount,
                     r.Status
                 })
-                .OrderBy(r => r.Id)
                 .ToListAsync();
 
             return Ok(new
             {
                 status = 200,
                 message = "Wallet reservations retrieved successfully.",
-                data = reservations
+                data = new
+                {
+                    items = reservations,
+                    page,
+                    pageSize,
+                    totalCount
+                }
             });
         }
     }

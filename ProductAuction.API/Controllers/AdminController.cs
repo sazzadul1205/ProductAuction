@@ -158,12 +158,23 @@ namespace ProductAuction.API.Controllers
         // GET: api/Admin/user
         // Returns all human users along with their roles and basic profile info.
         [HttpGet("user")]
-        public async Task<IActionResult> GetAllUsers()
+        public async Task<IActionResult> GetAllUsers([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
         {
+            if (page < 1) page = 1;
+            if (pageSize < 1) pageSize = 20;
+            if (pageSize > 100) pageSize = 100;
+
             // grab registered users, skip the platform system account
-            var users = await _userManager.Users
+            var query = _userManager.Users
                 .Where(u => u.UserName != "platform-system-account")
                 .OrderBy(u => u.Email)
+                .AsQueryable();
+
+            var totalCount = await query.CountAsync();
+
+            var users = await query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
                 .ToListAsync();
 
             // load all profiles and wallets
@@ -229,10 +240,15 @@ namespace ProductAuction.API.Controllers
             {
                 status = 200,
                 message = "Users retrieved successfully.",
-                data = userList
+                data = new
+                {
+                    items = userList,
+                    page,
+                    pageSize,
+                    totalCount
+                }
             });
         }
-
 
         // PUT: api/Admin/user/{id}/lock
         // Locks a user permanently or for a set duration, and also handles unlocking.
@@ -566,10 +582,21 @@ namespace ProductAuction.API.Controllers
         // GET: api/Admin/transactions
         // Returns every wallet transaction globally, for admin oversight.
         [HttpGet("transactions")]
-        public async Task<IActionResult> GetAllTransactions()
+        public async Task<IActionResult> GetAllTransactions([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
         {
-            var transactions = await _context.WalletTransactions
+            if (page < 1) page = 1;
+            if (pageSize < 1) pageSize = 20;
+            if (pageSize > 100) pageSize = 100;
+
+            var query = _context.WalletTransactions
                 .OrderByDescending(wt => wt.CreatedAt)
+                .AsQueryable();
+
+            var totalCount = await query.CountAsync();
+
+            var transactions = await query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
                 .Select(wt => new
                 {
                     wt.Id,
@@ -605,10 +632,15 @@ namespace ProductAuction.API.Controllers
             {
                 status = 200,
                 message = "Transactions retrieved successfully.",
-                data = transactions
+                data = new
+                {
+                    items = transactions,
+                    page,
+                    pageSize,
+                    totalCount
+                }
             });
         }
-
 
         // GET: api/Admin/reservations
         // Returns all wallet reservations globally, for admin oversight.
@@ -658,8 +690,12 @@ namespace ProductAuction.API.Controllers
         // GET: api/Admin/platform-wallet
         // Returns the platform system account's wallet and its transaction history.
         [HttpGet("platform-wallet")]
-        public async Task<IActionResult> GetPlatformWallet()
+        public async Task<IActionResult> GetPlatformWallet([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
         {
+            if (page < 1) page = 1;
+            if (pageSize < 1) pageSize = 20;
+            if (pageSize > 100) pageSize = 100;
+
             var platformUser = await _userManager.FindByNameAsync("platform-system-account");
 
             if (platformUser == null)
@@ -682,9 +718,16 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            var transactions = await _context.WalletTransactions
+            var txQuery = _context.WalletTransactions
                 .Where(t => t.WalletId == wallet.Id)
                 .OrderByDescending(t => t.CreatedAt)
+                .AsQueryable();
+
+            var totalCount = await txQuery.CountAsync();
+
+            var transactions = await txQuery
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
                 .Select(t => new WalletTransactionResponseDto
                 {
                     Id = t.Id,
@@ -708,7 +751,13 @@ namespace ProductAuction.API.Controllers
                         Balance = wallet.Balance,
                         ReservedBalance = wallet.ReservedBalance
                     },
-                    transactions
+                    transactions = new
+                    {
+                        items = transactions,
+                        page,
+                        pageSize,
+                        totalCount
+                    }
                 }
             });
         }

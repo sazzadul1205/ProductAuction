@@ -28,16 +28,27 @@ namespace ProductAuction.API.Controllers
         // Admin view of every sale.
         [HttpGet]
         [Authorize(Roles = "Admin")]
-        public async Task<IActionResult> GetSales()
+        public async Task<IActionResult> GetSales([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
         {
-            var sales = await _context.Sales
+            if (page < 1) page = 1;
+            if (pageSize < 1) pageSize = 20;
+            if (pageSize > 100) pageSize = 100;
+
+            var query = _context.Sales
                 .OrderByDescending(s => s.CreatedAt)
+                .AsQueryable();
+
+            var totalCount = await query.CountAsync();
+
+            var sales = await query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
                 .Select(s => new SaleListDto
                 {
                     Id = s.Id,
                     ProductId = s.ProductId,
 
-                    // product title 
+                    // product title
                     ProductTitle = _context.Products
                         .Where(p => p.Id == s.ProductId)
                         .Select(p => p.Title)
@@ -71,11 +82,11 @@ namespace ProductAuction.API.Controllers
                     PaymentDeadline = s.PaymentDeadline,
                     CreatedAt = s.CreatedAt,
 
-                    // main product image (blank if none)
+                    // main product image 
                     MainImageUrl = _context.ProductImages
                         .Where(i => i.ProductId == s.ProductId && i.IsMain)
                         .Select(i => i.ImageUrl)
-                        .FirstOrDefault() ?? ""
+                        .FirstOrDefault()
                 })
                 .ToListAsync();
 
@@ -83,15 +94,20 @@ namespace ProductAuction.API.Controllers
             {
                 status = 200,
                 message = "Sales retrieved successfully.",
-                data = sales
+                data = new
+                {
+                    items = sales,
+                    page,
+                    pageSize,
+                    totalCount
+                }
             });
         }
-
 
         // GET: api/sale/my-sales
         // Sales where the logged-in user is either the buyer or the seller.
         [HttpGet("my-sales")]
-        public async Task<IActionResult> GetMySales()
+        public async Task<IActionResult> GetMySales([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
@@ -104,53 +120,64 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            var sales = await _context.Sales
+            if (page < 1) page = 1;
+            if (pageSize < 1) pageSize = 20;
+            if (pageSize > 100) pageSize = 100;
+
+            var query = _context.Sales
                 .Where(s => s.BuyerId == userId || s.SellerId == userId)
                 .OrderByDescending(s => s.CreatedAt)
+                .AsQueryable();
+
+            var totalCount = await query.CountAsync();
+
+            var sales = await query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
                 .Select(s => new
                 {
-                    Id = s.Id,
-                    ProductId = s.ProductId,
+                    s.Id,
+                    s.ProductId,
 
-                    // product title (blank if missing)
+                    // product title 
                     ProductTitle = _context.Products
                         .Where(p => p.Id == s.ProductId)
                         .Select(p => p.Title)
-                        .FirstOrDefault() ?? string.Empty,
+                        .FirstOrDefault(),
 
-                    BuyerId = s.BuyerId,
-                    SellerId = s.SellerId,
-                    FinalAmount = s.FinalAmount,
-                    CommissionAmount = s.CommissionAmount,
-                    SellerProceeds = s.SellerProceeds,
-                    Status = s.Status,
-                    PaymentDeadline = s.PaymentDeadline,
-                    CreatedAt = s.CreatedAt,
+                    s.BuyerId,
+                    s.SellerId,
+                    s.FinalAmount,
+                    s.CommissionAmount,
+                    s.SellerProceeds,
+                    s.Status,
+                    s.PaymentDeadline,
+                    s.CreatedAt,
 
-                    // main product image (blank if none)
+                    // main product image
                     MainImageUrl = _context.ProductImages
                         .Where(i => i.ProductId == s.ProductId && i.IsMain)
                         .Select(i => i.ImageUrl)
                         .FirstOrDefault() ?? "",
 
-                    // frontend uses this to count down the 10-day window
+                    // Send Dispatched Time 
                     DispatchedAt = _context.DeliveryRecords
                         .Where(d => d.SaleId == s.Id)
                         .Select(d => d.DispatchedAt)
                         .FirstOrDefault(),
 
-                    // dispute (if any) plus its penalty record
+                    // dispute + penalty record
                     Dispute = _context.Disputes
                         .Where(d => d.SaleId == s.Id)
                         .Select(d => new
                         {
-                            Id = d.Id,
-                            Complaint = d.Complaint,
-                            EvidenceUrl = d.EvidenceUrl,
-                            Status = d.Status,
-                            AdminDecision = d.AdminDecision,
-                            RaisedBy = d.RaisedBy,
-                            CreatedAt = d.CreatedAt,
+                            d.Id,
+                            d.Complaint,
+                            d.EvidenceUrl,
+                            d.Status,
+                            d.AdminDecision,
+                            d.RaisedBy,
+                            d.CreatedAt,
 
                             Penalty = _context.Penalties
                                 .Where(p => p.DisputeId == d.Id)
@@ -171,10 +198,15 @@ namespace ProductAuction.API.Controllers
             {
                 status = 200,
                 message = "Your sales retrieved successfully.",
-                data = sales
+                data = new
+                {
+                    items = sales,
+                    page,
+                    pageSize,
+                    totalCount
+                }
             });
         }
-
 
         // POST: api/sale/{id}/pay
         // The winning buyer pays for the sale from their wallet.
