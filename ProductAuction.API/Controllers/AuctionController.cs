@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ProductAuction.API.Data;
 using ProductAuction.API.DTOs;
+using ProductAuction.API.DTOs.Common;
 using ProductAuction.API.DTOs.Product;
 using ProductAuction.API.Models;
 using System.Security.Claims;
@@ -24,10 +25,70 @@ namespace ProductAuction.API.Controllers
         // GET: api/auction
         // Returns all auctions that are either already started or have a start time set.
         [HttpGet]
-        public async Task<IActionResult> GetAuctions()
+        public async Task<IActionResult> GetAuctions([FromQuery] PaginationQueryDto query)
         {
-            var auctions = await _context.Auctions
+            // Normalize the page number — never below 1
+            var page = query.Page;
+            if (page < 1) page = 1;
+
+            // Normalize the page size — default 20, hard cap at 100
+            var pageSize = query.PageSize;
+            if (pageSize < 1) pageSize = 20;
+            if (pageSize > 100) pageSize = 100;
+
+            // Free-text search term (may be null or empty)
+            var search = query.Search;
+
+            // Optional auction-status filter: Active / Upcoming / Ended / All
+            var filter = query.Filter;
+
+            var auctionsQuery = _context.Auctions
                 .Where(a => a.Status != "Upcoming" || a.StartTime.HasValue)
+                .AsQueryable();
+
+            // apply status filter
+            if (!string.IsNullOrWhiteSpace(filter) && filter != "All")
+            {
+                if (filter == "Active" || filter == "Live")
+                {
+                    auctionsQuery = auctionsQuery.Where(a => a.Status == "Active");
+                }
+                else if (filter == "Upcoming")
+                {
+                    auctionsQuery = auctionsQuery.Where(a => a.Status == "Upcoming");
+                }
+                else if (filter == "Ended")
+                {
+                    auctionsQuery = auctionsQuery.Where(a =>
+                        a.Status == "Completed" || a.Status == "Cancelled");
+                }
+                else
+                {
+                    auctionsQuery = auctionsQuery.Where(a => a.Status == filter);
+                }
+            }
+
+            // apply search filter — matches product title
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var term = search.Trim();
+                auctionsQuery = auctionsQuery.Where(a =>
+                    a.Product.Title.Contains(term));
+            }
+
+            // apply category filter
+            if (query.CategoryId.HasValue)
+            {
+                auctionsQuery = auctionsQuery.Where(a => a.Product.CategoryId == query.CategoryId.Value);
+            }
+
+            auctionsQuery = auctionsQuery.OrderByDescending(a => a.Id);
+
+            var totalCount = await auctionsQuery.CountAsync();
+
+            var auctions = await auctionsQuery
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
                 .Select(a => new AuctionListDto
                 {
                     Id = a.Id,
@@ -53,7 +114,13 @@ namespace ProductAuction.API.Controllers
             {
                 status = 200,
                 message = "Auctions retrieved successfully.",
-                data = auctions
+                data = new
+                {
+                    items = auctions,
+                    page,
+                    pageSize,
+                    totalCount
+                }
             });
         }
 

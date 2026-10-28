@@ -9,5 +9,7 @@ namespace ProductAuction.API.DTOs.Common
         public string? Search { get; set; }
 
         public string? Filter { get; set; }
+
+        public int? CategoryId { get; set; }
     }
 }
