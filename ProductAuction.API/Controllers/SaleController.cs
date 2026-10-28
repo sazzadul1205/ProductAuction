@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ProductAuction.API.Data;
+using ProductAuction.API.DTOs.Common;
 using ProductAuction.API.DTOs.Sale;
 using ProductAuction.API.Models;
 using ProductAuction.API.Services;
@@ -28,19 +29,93 @@ namespace ProductAuction.API.Controllers
         // Admin view of every sale.
         [HttpGet]
         [Authorize(Roles = "Admin")]
-        public async Task<IActionResult> GetSales([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+        public async Task<IActionResult> GetSales([FromQuery] SalesQueryDto query)
         {
+            // Normalize the page number — never below 1
+            var page = query.Page;
             if (page < 1) page = 1;
+
+            // Normalize the page size — default 20, hard cap at 100
+            var pageSize = query.PageSize;
             if (pageSize < 1) pageSize = 20;
             if (pageSize > 100) pageSize = 100;
 
-            var query = _context.Sales
-                .OrderByDescending(s => s.CreatedAt)
-                .AsQueryable();
+            // Free-text search term (may be null or empty)
+            var search = query.Search;
 
-            var totalCount = await query.CountAsync();
+            // Optional sale-status filter (AwaitingPayment / Paid / Dispatched / etc.)
+            var filter = query.Filter;
 
-            var sales = await query
+            // Optional delivery-status filter
+            var deliveryStatus = query.DeliveryStatus;
+
+            var salesQuery = _context.Sales.AsQueryable();
+
+            // apply sale-status filter
+            if (!string.IsNullOrWhiteSpace(filter) && filter != "All")
+            {
+                // "In Progress" is a frontend convenience for Paid | Dispatched
+                if (filter == "InProgress")
+                {
+                    salesQuery = salesQuery.Where(s =>
+                        s.Status == "Paid" || s.Status == "Dispatched");
+                }
+                else if (filter == "Awaiting Payment")
+                {
+                    salesQuery = salesQuery.Where(s =>
+                        s.Status == "AwaitingPayment" || s.Status == "PaymentOverdue");
+                }
+                else if (filter == "Completed")
+                {
+                    salesQuery = salesQuery.Where(s => s.Status == "Completed");
+                }
+                else if (filter == "Disputed")
+                {
+                    salesQuery = salesQuery.Where(s =>
+                        s.Status == "Disputed" || s.Status == "Refunded");
+                }
+                else
+                {
+                    salesQuery = salesQuery.Where(s => s.Status == filter);
+                }
+            }
+
+            // apply delivery-status filter
+            if (!string.IsNullOrWhiteSpace(deliveryStatus) && deliveryStatus != "All")
+            {
+                salesQuery = salesQuery.Where(s =>
+                    _context.DeliveryRecords
+                        .Where(d => d.SaleId == s.Id)
+                        .Select(d => d.Status)
+                        .FirstOrDefault() == deliveryStatus);
+            }
+
+            // apply search filter — matches product title, buyer name, or seller name
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var term = search.Trim();
+
+                var matchingProductIds = await _context.Products
+                    .Where(p => p.Title.Contains(term))
+                    .Select(p => p.Id)
+                    .ToListAsync();
+
+                var matchingUserIds = await _context.UserProfiles
+                    .Where(p => p.FullName.Contains(term))
+                    .Select(p => p.UserId)
+                    .ToListAsync();
+
+                salesQuery = salesQuery.Where(s =>
+                    matchingProductIds.Contains(s.ProductId) ||
+                    matchingUserIds.Contains(s.BuyerId) ||
+                    matchingUserIds.Contains(s.SellerId));
+            }
+
+            salesQuery = salesQuery.OrderByDescending(s => s.CreatedAt);
+
+            var totalCount = await salesQuery.CountAsync();
+
+            var sales = await salesQuery
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
                 .Select(s => new SaleListDto
@@ -48,7 +123,6 @@ namespace ProductAuction.API.Controllers
                     Id = s.Id,
                     ProductId = s.ProductId,
 
-                    // product title
                     ProductTitle = _context.Products
                         .Where(p => p.Id == s.ProductId)
                         .Select(p => p.Title)
@@ -57,7 +131,6 @@ namespace ProductAuction.API.Controllers
                     BuyerId = s.BuyerId,
                     SellerId = s.SellerId,
 
-                    // names come from the profiles table
                     BuyerName = _context.UserProfiles
                         .Where(p => p.UserId == s.BuyerId)
                         .Select(p => p.FullName)
@@ -73,7 +146,6 @@ namespace ProductAuction.API.Controllers
                     SellerProceeds = s.SellerProceeds,
                     Status = s.Status,
 
-                    // delivery status defaults to awaiting dispatch if no record yet
                     DeliveryStatus = _context.DeliveryRecords
                         .Where(d => d.SaleId == s.Id)
                         .Select(d => d.Status)
@@ -82,7 +154,6 @@ namespace ProductAuction.API.Controllers
                     PaymentDeadline = s.PaymentDeadline,
                     CreatedAt = s.CreatedAt,
 
-                    // main product image 
                     MainImageUrl = _context.ProductImages
                         .Where(i => i.ProductId == s.ProductId && i.IsMain)
                         .Select(i => i.ImageUrl)
@@ -104,10 +175,11 @@ namespace ProductAuction.API.Controllers
             });
         }
 
+
         // GET: api/sale/my-sales
         // Sales where the logged-in user is either the buyer or the seller.
         [HttpGet("my-sales")]
-        public async Task<IActionResult> GetMySales([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+        public async Task<IActionResult> GetMySales([FromQuery] PaginationQueryDto query)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
@@ -120,18 +192,75 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
+            // Normalize the page number — never below 1
+            var page = query.Page;
             if (page < 1) page = 1;
+
+            // Normalize the page size — default 20, hard cap at 100
+            var pageSize = query.PageSize;
             if (pageSize < 1) pageSize = 20;
             if (pageSize > 100) pageSize = 100;
 
-            var query = _context.Sales
+            // Free-text search term (may be null or empty)
+            var search = query.Search;
+
+            // Optional sale-status filter
+            var filter = query.Filter;
+
+            var salesQuery = _context.Sales
                 .Where(s => s.BuyerId == userId || s.SellerId == userId)
-                .OrderByDescending(s => s.CreatedAt)
                 .AsQueryable();
 
-            var totalCount = await query.CountAsync();
+            // apply sale-status filter
+            if (!string.IsNullOrWhiteSpace(filter) && filter != "All")
+            {
+                if (filter == "Awaiting Payment")
+                {
+                    salesQuery = salesQuery.Where(s =>
+                        s.Status == "AwaitingPayment" || s.Status == "PaymentOverdue");
+                }
+                else if (filter == "Awaiting Dispatch")
+                {
+                    salesQuery = salesQuery.Where(s => s.Status == "Paid");
+                }
+                else if (filter == "Dispatched")
+                {
+                    salesQuery = salesQuery.Where(s => s.Status == "Dispatched");
+                }
+                else if (filter == "Completed")
+                {
+                    salesQuery = salesQuery.Where(s => s.Status == "Completed");
+                }
+                else if (filter == "Disputed")
+                {
+                    salesQuery = salesQuery.Where(s =>
+                        s.Status == "Disputed" || s.Status == "Refunded");
+                }
+                else
+                {
+                    salesQuery = salesQuery.Where(s => s.Status == filter);
+                }
+            }
 
-            var sales = await query
+            // apply search filter — matches product title
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var term = search.Trim();
+
+                var matchingProductIds = await _context.Products
+                    .Where(p => p.Title.Contains(term))
+                    .Select(p => p.Id)
+                    .ToListAsync();
+
+                salesQuery = salesQuery.Where(s =>
+                    matchingProductIds.Contains(s.ProductId));
+            }
+
+            salesQuery = salesQuery.OrderByDescending(s => s.CreatedAt);
+
+            var totalCount = await salesQuery.CountAsync();
+
+            var sales = await salesQuery
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
                 .Select(s => new
@@ -139,7 +268,6 @@ namespace ProductAuction.API.Controllers
                     s.Id,
                     s.ProductId,
 
-                    // product title 
                     ProductTitle = _context.Products
                         .Where(p => p.Id == s.ProductId)
                         .Select(p => p.Title)
@@ -154,19 +282,16 @@ namespace ProductAuction.API.Controllers
                     s.PaymentDeadline,
                     s.CreatedAt,
 
-                    // main product image
                     MainImageUrl = _context.ProductImages
                         .Where(i => i.ProductId == s.ProductId && i.IsMain)
                         .Select(i => i.ImageUrl)
                         .FirstOrDefault() ?? "",
 
-                    // Send Dispatched Time 
                     DispatchedAt = _context.DeliveryRecords
                         .Where(d => d.SaleId == s.Id)
                         .Select(d => d.DispatchedAt)
                         .FirstOrDefault(),
 
-                    // dispute + penalty record
                     Dispute = _context.Disputes
                         .Where(d => d.SaleId == s.Id)
                         .Select(d => new
@@ -207,6 +332,7 @@ namespace ProductAuction.API.Controllers
                 }
             });
         }
+
 
         // POST: api/sale/{id}/pay
         // The winning buyer pays for the sale from their wallet.

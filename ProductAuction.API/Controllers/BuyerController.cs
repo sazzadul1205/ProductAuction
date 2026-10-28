@@ -1,8 +1,9 @@
-﻿using System.Security.Claims;
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ProductAuction.API.Data;
+using ProductAuction.API.DTOs.Common;
+using System.Security.Claims;
 
 namespace ProductAuction.API.Controllers
 {
@@ -86,7 +87,7 @@ namespace ProductAuction.API.Controllers
         // GET: api/Buyer/my-bids
         // Returns the logged-in buyer's bids and the status of each auction.
         [HttpGet("my-bids")]
-        public async Task<IActionResult> GetMyBids([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+        public async Task<IActionResult> GetMyBids([FromQuery] PaginationQueryDto query)
         {
             // grab the buyer id from the JWT
             var buyerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -100,20 +101,61 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // clamp paging
+            // Normalize the page number — never below 1
+            var page = query.Page;
             if (page < 1) page = 1;
+
+            // Normalize the page size — default 20, hard cap at 100
+            var pageSize = query.PageSize;
             if (pageSize < 1) pageSize = 20;
             if (pageSize > 100) pageSize = 100;
 
+            // Free-text search term (may be null or empty)
+            var search = query.Search;
+
+            // Optional auction-status filter: Active / Ended
+            var filter = query.Filter;
+
             // only return bids placed by this buyer
-            var query = _context.Bids
+            var bidsQuery = _context.Bids
                 .Where(b => b.BidderId == buyerId)
-                .OrderByDescending(b => b.PlacedAt)
                 .AsQueryable();
 
-            var totalCount = await query.CountAsync();
+            // apply auction-status filter
+            if (!string.IsNullOrWhiteSpace(filter) && filter != "All")
+            {
+                if (filter == "Active")
+                {
+                    bidsQuery = bidsQuery.Where(b => b.Auction.Status == "Active");
+                }
+                else if (filter == "Ended")
+                {
+                    bidsQuery = bidsQuery.Where(b => b.Auction.Status == "Completed" || b.Auction.Status == "Cancelled");
+                }
+                else
+                {
+                    bidsQuery = bidsQuery.Where(b => b.Auction.Status == filter);
+                }
+            }
 
-            var bids = await query
+            // apply search filter — matches product title
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var term = search.Trim();
+
+                var matchingProductIds = await _context.Products
+                    .Where(p => p.Title.Contains(term))
+                    .Select(p => p.Id)
+                    .ToListAsync();
+
+                bidsQuery = bidsQuery.Where(b => matchingProductIds.Contains(b.Auction.ProductId));
+            }
+
+            bidsQuery = bidsQuery.OrderByDescending(b => b.PlacedAt);
+
+            var totalCount = await bidsQuery.CountAsync();
+
+            var bids = await bidsQuery
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
                 .Select(b => new
@@ -123,7 +165,6 @@ namespace ProductAuction.API.Controllers
                     productId = b.Auction.Product.Id,
                     productTitle = b.Auction.Product.Title,
 
-                    // main product image 
                     mainImageUrl = _context.ProductImages
                         .Where(i => i.ProductId == b.Auction.Product.Id && i.IsMain)
                         .Select(i => i.ImageUrl)
@@ -134,7 +175,6 @@ namespace ProductAuction.API.Controllers
                     auctionStatus = b.Auction.Status,
                     auctionEndTime = b.Auction.EndTime,
 
-                    // is this bid still the leading one?
                     isHighest = b.Auction.CurrentHighestBidderId == buyerId
                         && b.Auction.CurrentHighestBid == b.Amount
                 })
@@ -153,6 +193,7 @@ namespace ProductAuction.API.Controllers
                 }
             });
         }
+
 
         // GET: api/Buyer/won-auctions
         // Returns auctions this buyer won, plus sale / dispatch / dispute info for each.

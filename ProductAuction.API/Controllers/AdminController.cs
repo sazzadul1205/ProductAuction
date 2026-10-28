@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ProductAuction.API.Data;
 using ProductAuction.API.DTOs.Admin;
+using ProductAuction.API.DTOs.Common;
 using ProductAuction.API.DTOs.Wallet;
 using ProductAuction.API.Models;
 
@@ -158,21 +159,63 @@ namespace ProductAuction.API.Controllers
         // GET: api/Admin/user
         // Returns all human users along with their roles and basic profile info.
         [HttpGet("user")]
-        public async Task<IActionResult> GetAllUsers([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+        public async Task<IActionResult> GetAllUsers([FromQuery] PaginationQueryDto query)
         {
+            // Normalize the page number — never below 1
+            var page = query.Page;
             if (page < 1) page = 1;
+
+            // Normalize the page size — default 20, hard cap at 100
+            var pageSize = query.PageSize;
             if (pageSize < 1) pageSize = 20;
             if (pageSize > 100) pageSize = 100;
 
+            // Free-text search term 
+            var search = query.Search;
+
+            // Optional role filter: Admin / Seller / Buyer
+            var filter = query.Filter;
+
             // grab registered users, skip the platform system account
-            var query = _userManager.Users
+            var userQuery = _userManager.Users
                 .Where(u => u.UserName != "platform-system-account")
-                .OrderBy(u => u.Email)
                 .AsQueryable();
 
-            var totalCount = await query.CountAsync();
+            // apply role filter
+            if (!string.IsNullOrWhiteSpace(filter) && filter != "All")
+            {
+                var roleUserIds = await _context.UserRoles
+                    .Where(ur => _context.Roles
+                        .Where(r => r.Name == filter)
+                        .Select(r => r.Id)
+                        .Contains(ur.RoleId))
+                    .Select(ur => ur.UserId)
+                    .ToListAsync();
 
-            var users = await query
+                userQuery = userQuery.Where(u => roleUserIds.Contains(u.Id));
+            }
+
+            // apply search filter — matches email or full name
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var term = search.Trim();
+
+                // user ids whose profile full name matches
+                var matchingProfileUserIds = await _context.UserProfiles
+                    .Where(p => p.FullName.Contains(term))
+                    .Select(p => p.UserId)
+                    .ToListAsync();
+
+                userQuery = userQuery.Where(u =>
+                    (u.Email != null && u.Email.Contains(term)) ||
+                    matchingProfileUserIds.Contains(u.Id));
+            }
+
+            userQuery = userQuery.OrderBy(u => u.Email);
+
+            var totalCount = await userQuery.CountAsync();
+
+            var users = await userQuery
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
                 .ToListAsync();
@@ -249,6 +292,7 @@ namespace ProductAuction.API.Controllers
                 }
             });
         }
+
 
         // PUT: api/Admin/user/{id}/lock
         // Locks a user permanently or for a set duration, and also handles unlocking.
@@ -362,10 +406,70 @@ namespace ProductAuction.API.Controllers
         // GET: api/Admin/auctions
         // Returns all auctions so admins can monitor them.
         [HttpGet("auctions")]
-        public async Task<IActionResult> GetAllAuctionsForAdmin()
+        public async Task<IActionResult> GetAllAuctionsForAdmin([FromQuery] PaginationQueryDto query)
         {
-            var auctions = await _context.Auctions
-                .OrderByDescending(a => a.Id)
+            // Normalize the page number — never below 1
+            var page = query.Page;
+            if (page < 1) page = 1;
+
+            // Normalize the page size — default 20, hard cap at 100
+            var pageSize = query.PageSize;
+            if (pageSize < 1) pageSize = 20;
+            if (pageSize > 100) pageSize = 100;
+
+            // Free-text search term (may be null or empty)
+            var search = query.Search;
+
+            // Optional status filter: Upcoming / Active / Completed / Cancelled.
+            var filter = query.Filter;
+
+            var auctionsQuery = _context.Auctions.AsQueryable();
+
+            // apply status filter
+            if (!string.IsNullOrWhiteSpace(filter) && filter != "All")
+            {
+                if (filter == "NeedsSchedule")
+                {
+                    auctionsQuery = auctionsQuery.Where(a =>
+                        a.Status == "Upcoming" && a.StartTime == null);
+                }
+                else if (filter == "Scheduled")
+                {
+                    auctionsQuery = auctionsQuery.Where(a =>
+                        a.Status == "Upcoming" && a.StartTime != null);
+                }
+                else if (filter == "History")
+                {
+                    auctionsQuery = auctionsQuery.Where(a =>
+                        a.Status == "Completed" || a.Status == "Cancelled");
+                }
+                else
+                {
+                    auctionsQuery = auctionsQuery.Where(a => a.Status == filter);
+                }
+            }
+
+            // apply search filter — matches product title
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var term = search.Trim();
+
+                var matchingProductIds = await _context.Products
+                    .Where(p => p.Title.Contains(term))
+                    .Select(p => p.Id)
+                    .ToListAsync();
+
+                auctionsQuery = auctionsQuery.Where(a =>
+                    matchingProductIds.Contains(a.ProductId));
+            }
+
+            auctionsQuery = auctionsQuery.OrderByDescending(a => a.Id);
+
+            var totalCount = await auctionsQuery.CountAsync();
+
+            var auctions = await auctionsQuery
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
                 .Select(a => new
                 {
                     auctionId = a.Id,
@@ -398,9 +502,16 @@ namespace ProductAuction.API.Controllers
             {
                 status = 200,
                 message = "All auctions retrieved successfully.",
-                data = auctions
+                data = new
+                {
+                    items = auctions,
+                    page,
+                    pageSize,
+                    totalCount
+                }
             });
         }
+
 
         // POST: api/Admin/disputes/{id}/start-review
         // Moves an open dispute into the admin review process.
@@ -582,19 +693,64 @@ namespace ProductAuction.API.Controllers
         // GET: api/Admin/transactions
         // Returns every wallet transaction globally, for admin oversight.
         [HttpGet("transactions")]
-        public async Task<IActionResult> GetAllTransactions([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+        public async Task<IActionResult> GetAllTransactions([FromQuery] PaginationQueryDto query)
         {
+            // Normalize the page number — never below 1
+            var page = query.Page;
             if (page < 1) page = 1;
+
+            // Normalize the page size — default 20, hard cap at 100
+            var pageSize = query.PageSize;
             if (pageSize < 1) pageSize = 20;
             if (pageSize > 100) pageSize = 100;
 
-            var query = _context.WalletTransactions
-                .OrderByDescending(wt => wt.CreatedAt)
-                .AsQueryable();
+            // Free-text search term (may be null or empty)
+            var search = query.Search;
 
-            var totalCount = await query.CountAsync();
+            // Optional transaction-type filter: Credit / Debit / Penalty / Release / Commission
+            var filter = query.Filter;
 
-            var transactions = await query
+            var queryable = _context.WalletTransactions.AsQueryable();
+
+            // apply type filter
+            if (!string.IsNullOrWhiteSpace(filter) && filter != "All")
+            {
+                queryable = queryable.Where(wt => wt.Type == filter);
+            }
+
+            // apply search filter — matches reference, user name, or user email
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var term = search.Trim();
+
+                // user ids whose profile name matches
+                var nameMatchUserIds = await _context.UserProfiles
+                    .Where(p => p.FullName.Contains(term))
+                    .Select(p => p.UserId)
+                    .ToListAsync();
+
+                // user ids whose email matches
+                var emailMatchUserIds = await _context.Users
+                    .Where(u => u.Email != null && u.Email.Contains(term))
+                    .Select(u => u.Id)
+                    .ToListAsync();
+
+                // wallets owned by those users
+                var matchingWalletIds = await _context.Wallets
+                    .Where(w => nameMatchUserIds.Contains(w.UserId) || emailMatchUserIds.Contains(w.UserId))
+                    .Select(w => w.Id)
+                    .ToListAsync();
+
+                queryable = queryable.Where(wt =>
+                    (wt.Reference != null && wt.Reference.Contains(term)) ||
+                    matchingWalletIds.Contains(wt.WalletId));
+            }
+
+            queryable = queryable.OrderByDescending(wt => wt.CreatedAt);
+
+            var totalCount = await queryable.CountAsync();
+
+            var transactions = await queryable
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
                 .Select(wt => new
@@ -641,6 +797,7 @@ namespace ProductAuction.API.Controllers
                 }
             });
         }
+        
 
         // GET: api/Admin/reservations
         // Returns all wallet reservations globally, for admin oversight.
@@ -690,11 +847,22 @@ namespace ProductAuction.API.Controllers
         // GET: api/Admin/platform-wallet
         // Returns the platform system account's wallet and its transaction history.
         [HttpGet("platform-wallet")]
-        public async Task<IActionResult> GetPlatformWallet([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+        public async Task<IActionResult> GetPlatformWallet([FromQuery] PaginationQueryDto query)
         {
+            // Normalize the page number — never below 1
+            var page = query.Page;
             if (page < 1) page = 1;
+
+            // Normalize the page size — default 20, hard cap at 100
+            var pageSize = query.PageSize;
             if (pageSize < 1) pageSize = 20;
             if (pageSize > 100) pageSize = 100;
+
+            // Free-text search term (may be null or empty)
+            var search = query.Search;
+
+            // Optional transaction-type filter
+            var filter = query.Filter;
 
             var platformUser = await _userManager.FindByNameAsync("platform-system-account");
 
@@ -720,8 +888,25 @@ namespace ProductAuction.API.Controllers
 
             var txQuery = _context.WalletTransactions
                 .Where(t => t.WalletId == wallet.Id)
-                .OrderByDescending(t => t.CreatedAt)
                 .AsQueryable();
+
+            // apply type filter
+            if (!string.IsNullOrWhiteSpace(filter) && filter != "All")
+            {
+                txQuery = txQuery.Where(t => t.Type == filter);
+            }
+
+            // apply search filter — matches reference or transaction type
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var term = search.Trim();
+
+                txQuery = txQuery.Where(t =>
+                    (t.Reference != null && t.Reference.Contains(term)) ||
+                    t.Type.Contains(term));
+            }
+
+            txQuery = txQuery.OrderByDescending(t => t.CreatedAt);
 
             var totalCount = await txQuery.CountAsync();
 

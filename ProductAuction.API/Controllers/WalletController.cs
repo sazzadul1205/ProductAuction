@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ProductAuction.API.Data;
+using ProductAuction.API.DTOs.Common;
 using ProductAuction.API.DTOs.Wallet;
 using ProductAuction.API.Models;
 using ProductAuction.API.Services;
@@ -137,9 +138,8 @@ namespace ProductAuction.API.Controllers
         // GET: api/wallet/deposit-requests
         // Returns the deposit requests submitted by the logged-in user.
         [HttpGet("deposit-requests")]
-        public async Task<IActionResult> GetMyDepositRequests([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+        public async Task<IActionResult> GetMyDepositRequests([FromQuery] PaginationQueryDto query)
         {
-            // grab the user id from the JWT
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             if (userId == null)
@@ -151,7 +151,6 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // find the wallet linked to this user
             var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == userId);
 
             if (wallet == null)
@@ -163,19 +162,46 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
+            // Normalize the page number — never below 1
+            var page = query.Page;
             if (page < 1) page = 1;
+
+            // Normalize the page size — default 20, hard cap at 100
+            var pageSize = query.PageSize;
             if (pageSize < 1) pageSize = 20;
             if (pageSize > 100) pageSize = 100;
 
-            // return every deposit request this user submitted, newest first
-            var query = _context.DepositRequests
+            // Free-text search term (may be null or empty)
+            var search = query.Search;
+
+            // Optional status filter
+            var filter = query.Filter;
+
+            var requestsQuery = _context.DepositRequests
                 .Where(d => d.WalletId == wallet.Id)
-                .OrderByDescending(d => d.CreatedAt)
                 .AsQueryable();
 
-            var totalCount = await query.CountAsync();
+            // apply status filter
+            if (!string.IsNullOrWhiteSpace(filter) && filter != "All")
+            {
+                requestsQuery = requestsQuery.Where(d => d.Status == filter);
+            }
 
-            var requests = await query
+            // apply search filter — matches method or transaction reference
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var term = search.Trim();
+
+                requestsQuery = requestsQuery.Where(d =>
+                    d.Method.Contains(term) ||
+                    d.TransactionReference.Contains(term));
+            }
+
+            requestsQuery = requestsQuery.OrderByDescending(d => d.CreatedAt);
+
+            var totalCount = await requestsQuery.CountAsync();
+
+            var requests = await requestsQuery
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
                 .Select(d => new DepositRequestResponseDto
@@ -206,12 +232,12 @@ namespace ProductAuction.API.Controllers
             });
         }
 
+
         // GET: api/wallet/transactions
         // Returns the transaction history for the logged-in user's wallet.
         [HttpGet("transactions")]
-        public async Task<IActionResult> GetMyTransactions([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+        public async Task<IActionResult> GetMyTransactions([FromQuery] PaginationQueryDto query)
         {
-            // grab the user id from the JWT
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             if (userId == null)
@@ -223,7 +249,6 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // find the user's wallet
             var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == userId);
 
             if (wallet == null)
@@ -235,19 +260,46 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
+            // Normalize the page number — never below 1
+            var page = query.Page;
             if (page < 1) page = 1;
+
+            // Normalize the page size — default 20, hard cap at 100
+            var pageSize = query.PageSize;
             if (pageSize < 1) pageSize = 20;
             if (pageSize > 100) pageSize = 100;
 
-            // transactions for this wallet, newest first
-            var query = _context.WalletTransactions
+            // Free-text search term
+            var search = query.Search;
+
+            // Optional type filter
+            var filter = query.Filter;
+
+            var txQuery = _context.WalletTransactions
                 .Where(t => t.WalletId == wallet.Id)
-                .OrderByDescending(t => t.CreatedAt)
                 .AsQueryable();
 
-            var totalCount = await query.CountAsync();
+            // apply type filter
+            if (!string.IsNullOrWhiteSpace(filter) && filter != "All")
+            {
+                txQuery = txQuery.Where(t => t.Type == filter);
+            }
 
-            var transactions = await query
+            // apply search filter — matches reference or transaction type
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var term = search.Trim();
+
+                txQuery = txQuery.Where(t =>
+                    (t.Reference != null && t.Reference.Contains(term)) ||
+                    t.Type.Contains(term));
+            }
+
+            txQuery = txQuery.OrderByDescending(t => t.CreatedAt);
+
+            var totalCount = await txQuery.CountAsync();
+
+            var transactions = await txQuery
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
                 .Select(t => new WalletTransactionResponseDto
@@ -279,9 +331,8 @@ namespace ProductAuction.API.Controllers
         // GET: api/wallet/reservations
         // Returns the logged-in user's reservation list.
         [HttpGet("reservations")]
-        public async Task<IActionResult> GetMyReservations([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+        public async Task<IActionResult> GetMyReservations([FromQuery] PaginationQueryDto query)
         {
-            // grab the user id from the JWT
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             if (userId == null)
@@ -293,7 +344,6 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // find the user's wallet
             var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == userId);
 
             if (wallet == null)
@@ -305,18 +355,49 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
+            // Normalize the page number — never below 1
+            var page = query.Page;
             if (page < 1) page = 1;
+
+            // Normalize the page size — default 20, hard cap at 100
+            var pageSize = query.PageSize;
             if (pageSize < 1) pageSize = 20;
             if (pageSize > 100) pageSize = 100;
 
-            // only reservations that belong to this wallet
-            var query = _context.WalletReservations
+            // Free-text search term (may be null or empty)
+            var search = query.Search;
+
+            // Optional status filter
+            var filter = query.Filter;
+
+            var reservationsQuery = _context.WalletReservations
                 .Where(r => r.WalletId == wallet.Id)
                 .AsQueryable();
 
-            var totalCount = await query.CountAsync();
+            // apply status filter
+            if (!string.IsNullOrWhiteSpace(filter) && filter != "All")
+            {
+                reservationsQuery = reservationsQuery.Where(r => r.Status == filter);
+            }
 
-            var reservations = await query
+            // apply search filter — matches reservation type or product title
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var term = search.Trim();
+
+                var matchingProductIds = await _context.Products
+                    .Where(p => p.Title.Contains(term))
+                    .Select(p => p.Id)
+                    .ToListAsync();
+
+                reservationsQuery = reservationsQuery.Where(r =>
+                    r.Type.Contains(term) ||
+                    (r.ProductId != null && matchingProductIds.Contains(r.ProductId.Value)));
+            }
+
+            var totalCount = await reservationsQuery.CountAsync();
+
+            var reservations = await reservationsQuery
                 .OrderBy(r => r.Id)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
@@ -325,7 +406,6 @@ namespace ProductAuction.API.Controllers
                     r.Id,
                     r.ProductId,
 
-                    // product title (null if the product was deleted)
                     ProductTitle = _context.Products
                         .Where(p => p.Id == r.ProductId)
                         .Select(p => p.Title)
