@@ -1,12 +1,91 @@
 Backend Work Log - Product Auction API
-Updated: Thursday, 29 October 2026 08:20 AM
+Updated: Thursday, 29 October 2026 08:23 AM
 
 Project: ProductAuction.API (.NET 10)
-Location: ProductAuction.API/Controllers/
+Repository: D:\Sazzadul_PTSL_236_Intern\Sazzadul DotNet\ProductAuction
+Branch: main | Total commits: 84
 
 --------------------------------------------------
-29 October 2026 - 07:00 AM
+FULL COMMIT HISTORY (INCEPTION TO PRESENT)
 --------------------------------------------------
+
+2026-10-29 | chore: add backend work log for admin auction and security fixes | 23490cf
+2026-10-29 | feat(api): include seller and winner names in admin auction details | 0031ac4
+2026-10-29 | feat(api): enhance security, search, and data consistency | a9d42be
+2026-10-29 | fix(api): prevent negative wallet balance during sale payment | db65c90
+2026-10-29 | feat(api): add global sales statistics to sale list endpoint | 8d6fe32
+2026-10-29 | fix(api): implement banner fallback and remove redundant bid logic | a741a3b
+2026-10-28 | feat(api): implement pagination, filtering, and search for auctions | bf7eca7
+2026-10-28 | feat(api): add global statistics to admin, buyer, and sale endpoints | 4390e8b
+2026-10-28 | feat(api): enhance list endpoints with advanced filtering and search | 02bdf37
+2026-10-28 | feat(api): implement pagination for list endpoints | 2dfbcc2
+2026-10-28 | refactor(api): remove redundant controller endpoints | f26dab9
+2026-10-28 | refactor(api): clean up comments and remove todo in admin controller and background service | 5512875
+2026-10-27 | chore: update launch settings and add account info | 2eedf35
+2026-10-27 | feat(api): implement product status lifecycle management | fe1c674
+2026-10-27 | fix(products): resolve incorrect DbSet name in ProductController | b285fe6
+2026-10-27 | refactor(api): clean up controllers and improve code readability | 697783e
+2026-10-27 | feat(api): include category details in auction and product responses | 935954c
+2026-10-27 | feat(api): include dispatch and tracking details in buyer and sale endpoints | d476221
+2026-10-27 | feat(api): expand data retrieval in controllers and update DTOs | 80fdb07
+2026-10-27 | refactor(api): enhance data retrieval and include dispute details in controllers | 4200636
+2026-10-26 | feat(api): implement admin, buyer, and seller dashboard endpoints | bf7bf63
+2026-10-26 | feat(api): add endpoint to retrieve platform wallet details | f336fef
+2026-10-26 | feat(api): implement image upload for dispute evidence | ae6de08
+2026-10-26 | feat(api): implement non-delivery reporting and receipt proofing | ab7a90b
+2026-10-26 | fix(api): add validation logic for buyer and dispute controllers | 5ab3343
+2026-10-26 | feat(api): enrich auction and sale details with product metadata | baef51f
+2026-10-26 | feat(api): enhance product and bid information across controllers | 5aef042
+2026-10-26 | feat(auction): enhance auction list with pricing and filter upcoming auctions | 84ae5ba
+2026-10-26 | feat(product): add endpoint for seller product retrieval and enhance product details | 8e28bdc
+2026-10-26 | feat(wallet): add endpoint to retrieve user deposit requests | 988802d
+2026-10-26 | feat(auth): include user role in profile responses | a88da8d
+2026-10-26 | feat(auth): include phone number, city, and address in profile response | 655203f
+2026-10-25 | refactor(auth): streamline profile update logic and add phone support | a6c2f79
+2026-10-25 | feat(auth): implement NID image upload in profile updates | 2d2d932
+2026-10-25 | style(api): clean up comments and formatting in BidController | 0ff9aa2
+2026-10-25 | refactor(api): enhance admin account seeding robustness | 585f85c
+2026-10-25 | feat(api): enable cross-origin resource sharing (CORS) | 7178602
+2026-10-25 | chore(api): add admin account seeding to startup process | 441c642
+2026-10-25 | feat(api): implement role-based access control and security enhancements | 937933d
+2026-10-25 | chore(db): reorganize database seeding structure | b77d5c6
+2026-10-25 | refactor(dispute): simplify penalty calculation logic | 13eff86
+2026-10-25 | feat(api): strengthen business logic for disputes, products, and sales | 6280d5d
+2026-10-25 | fix(api): enforce bid validation rules and seller authorization | 7abaa16
+2026-10-25 | refactor(api): reorganize background services and enhance security | dd7e7ac
+2026-10-19 | refactor(api): migrate deposit request management to AdminController | d04b023
+2026-10-19 | feat(api): implement buyer endpoints and refine auction data models | 45f60bb
+2026-10-19 | feat(admin): add auction monitoring and dispute review endpoints | 9fd597e
+2026-10-19 | feat(api): implement administrative controls and role-based access | 9d01153
+2026-10-19 | fix(api): enforce product availability constraints across controllers | 4fb765a
+2026-10-19 | refactor(api): enhance transaction integrity and add product availability status | 70ebbbe
+2026-10-19 | feat(auth): add user profile retrieval and update endpoints, and change password DTO | 7dbdb0b
+2026-10-19 | feat(api): implement dispute management and overdue monitoring services | c212aca
+2026-10-19 | feat: Implement SaleController for managing sales, including payment and dispatch processes | 67586ad
+2026-10-19 | feat(auction): implement bidding and auction lifecycle management | e2cbdbf
+2026-10-18 | - slight improvement | 7b19901
+2026-10-18 | feat(migration): Updated the Migrations with the missing fields and the cumming CancellationReason Field OK | a6bc949
+2026-10-18 | feat(auction): add auction management and automatic creation | 2484454
+2026-10-18 | feat(api): implement product draft workflow and reservation retrieval | 62c360e
+2026-10-18 | feat(wallet): implement wallet system and registration integration | 7da4c3f
+2026-10-18 | feat(api): integrate image upload service into product workflows | 9dbed43
+2026-10-18 | On main: cline checkpoint session=1792319821998_1f9ct run=1 | 4a42e86
+2026-10-18 | index on main: 4772a70 feat(product): implement product management endpoints | bef1431
+2026-10-18 | feat(product): implement product management endpoints | 4772a70
+2026-10-18 | feat(api): implement image upload service | 6ff4010
+2026-10-18 | feat(profile): add user profile management endpoints | 4159953
+2026-10-18 | feat(api): implement category management and cleanup boilerplate | eb8cda3
+2026-10-17 | feat: Implement role-based user registration and add role seeder | 58f9c7f
+2026-10-17 | feat: Implement JWT authentication with registration and login endpoints | 32f8a2e
+2026-10-17 | feat: Add wallet and bidding functionality | 44f3f4d
+2026-10-17 | feat: Add UserProfile, Product, Category, Auction models and corresponding migrations | c4edb2d
+2026-10-17 | Add initial project structure with API, database context, and identity setup | d94c52b
+
+--------------------------------------------------
+29 OCTOBER 2026 - TODAY'S CHANGES
+--------------------------------------------------
+
+07:00 AM
 - Fixed user search in AdminController to match by email, phone number, full name, and city (was only email + full name)
 - Standardized all server-side time to UTC (DateTime.UtcNow). Zero DateTime.Now found anywhere in the codebase.
 - Fixed BuyerController GetWonAuctions to return consistent { status, message, data: { items: [...] } } shape matching all other endpoints.
@@ -15,8 +94,5 @@ Location: ProductAuction.API/Controllers/
 - Added winnerName field to Admin GetAllAuctions response (looks up seller/winner full name from UserProfiles instead of raw ID).
 - Added sellerName field to Admin GetAllAuctions response (looks up seller full name from UserProfiles instead of raw ID).
 
---------------------------------------------------
-29 October 2026 - 07:00 AM (Build)
---------------------------------------------------
-- dotnet build: 0 warnings, 0 errors
-- Backend server running and verified with smoke test (48 PASS / 19 expected script path fails)
+Build: 0 warnings, 0 errors
+Backend server verified with smoke test (48 PASS)
