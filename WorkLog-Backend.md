@@ -12,17 +12,17 @@
 
 ### 7:00 AM — Security, Search, and API Consistency
 
-**User Search — `AdminController`**
+#### User Search — `AdminController`
 
 - Expanded user search to match email, phone number, full name, and city.
 - Previously, search supported only email and full name.
 
-**UTC Time Standardization**
+#### UTC Time Standardization
 
 - Standardized server-side time handling using `DateTime.UtcNow`.
 - Confirmed that no `DateTime.Now` usage remained in the codebase.
 
-**Won Auctions — `BuyerController`**
+#### Won Auctions — `BuyerController`
 
 - Updated `GetWonAuctions` to return a consistent response structure:
 
@@ -30,15 +30,15 @@
 
 - Aligned the endpoint with the response format used by other paginated endpoints.
 
-**Login Rate Limiting**
+#### Login Rate Limiting
 
 - Added a limit of five login attempts per minute per IP address to help prevent brute-force attacks.
 
-**Seller Auction Details**
+#### Seller Auction Details
 
 - Updated `GetAuctionByIdForSeller` to include the complete product image list, matching the public `GetAuctionById` response structure.
 
-**Admin Auction Details**
+#### Admin Auction Details
 
 - Added `winnerName` to the `GetAllAuctions` response.
 - Added `sellerName` to the `GetAllAuctions` response.
@@ -46,13 +46,13 @@
 
 ### 10:30 AM — Code Cleanup
 
-**Unused DTO Removal**
+#### Unused DTO Removal
 
 - Deleted `BuyoutDto.cs` — declared but never referenced anywhere in the codebase.
 - Deleted `SaleDetailsDto.cs` — declared but never referenced anywhere in the codebase.
 - Deleted `ProfileResponseDto.cs` — declared but never referenced anywhere in the codebase.
 
-**DTO Namespace Standardization**
+#### DTO Namespace Standardization
 
 - Moved `AuctionListDto`, `AuctionDetailsDto`, `CancelAuctionDto`, and `UpdateAuctionScheduleDto` from the global namespace and `ProductAuction.API.DTOs` to `ProductAuction.API.DTOs.Auction`.
 - Added `using ProductAuction.API.DTOs.Auction;` to `AuctionController.cs`.
