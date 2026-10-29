@@ -454,6 +454,16 @@ namespace ProductAuction.API.Controllers
             var newBalance = wallet.Balance - sale.FinalAmount;
             var newReservedBalance = wallet.ReservedBalance - reservedAmount;
 
+            // never allow the wallet balance to go negative
+            if (newBalance < 0)
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "Insufficient wallet balance."
+                });
+            }
+
             // other reservations must remain covered after payment
             if (newBalance < newReservedBalance)
             {
