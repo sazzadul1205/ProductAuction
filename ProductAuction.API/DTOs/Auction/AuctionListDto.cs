@@ -1,4 +1,6 @@
-﻿public class AuctionListDto
+﻿namespace ProductAuction.API.DTOs.Auction
+{
+    public class AuctionListDto
 {
     public int Id { get; set; }
     public int ProductId { get; set; }
@@ -13,4 +15,5 @@
     public decimal? CurrentHighestBid { get; set; }
     public int BidCount { get; set; }
     public string? MainImageUrl { get; set; }
+}
 }

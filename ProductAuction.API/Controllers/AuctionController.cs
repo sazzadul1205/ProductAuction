@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ProductAuction.API.Data;
 using ProductAuction.API.DTOs;
+using ProductAuction.API.DTOs.Auction;
 using ProductAuction.API.DTOs.Common;
 using ProductAuction.API.DTOs.Product;
 using ProductAuction.API.Models;

@@ -1,7 +1,9 @@
 ﻿using System.Collections.Generic;
-using ProductAuction.API.DTOs.Product; // <-- ADD THIS LINE
+using ProductAuction.API.DTOs.Product;
 
-public class AuctionDetailsDto
+namespace ProductAuction.API.DTOs.Auction
+{
+    public class AuctionDetailsDto
 {
     public int Id { get; set; }
     public int ProductId { get; set; }
@@ -32,4 +34,5 @@ public class AuctionDetailsDto
 
     // NEW: Add Image list
     public List<ProductImageResponseDto> Images { get; set; } = new();
+}
 }

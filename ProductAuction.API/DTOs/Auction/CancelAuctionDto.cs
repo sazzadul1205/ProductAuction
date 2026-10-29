@@ -1,6 +1,6 @@
 ﻿using System.ComponentModel.DataAnnotations;
 
-namespace ProductAuction.API.DTOs
+namespace ProductAuction.API.DTOs.Auction
 {
     public class CancelAuctionDto
     {
