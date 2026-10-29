@@ -115,6 +115,16 @@ namespace ProductAuction.API.Controllers
 
             var totalCount = await salesQuery.CountAsync();
 
+            // Global card stats — counted across ALL sales, unaffected by
+            // search/delivery/status filters or pagination.
+            var totalSalesCount = await _context.Sales.CountAsync();
+            var awaitingPaymentCount = await _context.Sales.CountAsync(s =>
+                s.Status == "AwaitingPayment" || s.Status == "PaymentOverdue");
+            var activeDeliveriesCount = await _context.Sales.CountAsync(s =>
+                s.Status == "Paid" || s.Status == "Dispatched");
+            var completedCount = await _context.Sales.CountAsync(s =>
+                s.Status == "Completed");
+
             var sales = await salesQuery
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
@@ -170,7 +180,11 @@ namespace ProductAuction.API.Controllers
                     items = sales,
                     page,
                     pageSize,
-                    totalCount
+                    totalCount,
+                    totalSalesCount,
+                    awaitingPaymentCount,
+                    activeDeliveriesCount,
+                    completedCount
                 }
             });
         }
