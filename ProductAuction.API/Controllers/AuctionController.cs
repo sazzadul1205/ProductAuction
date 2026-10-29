@@ -86,6 +86,17 @@ namespace ProductAuction.API.Controllers
 
             var totalCount = await auctionsQuery.CountAsync();
 
+            // Banner guarantee: if filters returned zero results, fall back to
+            // all auctions so the home banner always has at least one product.
+            var bannerFallback = totalCount == 0;
+            if (bannerFallback)
+            {
+                auctionsQuery = _context.Auctions
+                    .Where(a => a.Status != "Upcoming" || a.StartTime.HasValue)
+                    .OrderByDescending(a => a.Id);
+                totalCount = await auctionsQuery.CountAsync();
+            }
+
             var auctions = await auctionsQuery
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)

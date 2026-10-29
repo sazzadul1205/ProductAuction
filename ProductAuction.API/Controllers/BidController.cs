@@ -599,10 +599,6 @@ namespace ProductAuction.API.Controllers
             // total range between starting and buyout price
             var range = buyoutPrice - startingPrice;
 
-            // if buyout isn't above starting, just use the smallest tier
-            if (range <= 0)
-                return 20m;
-
             // first third of the range
             if (currentBid < startingPrice + range / 3m)
                 return 20m;
