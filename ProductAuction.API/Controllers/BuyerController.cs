@@ -296,7 +296,10 @@ namespace ProductAuction.API.Controllers
             {
                 status = 200,
                 message = "Your won auctions were retrieved successfully.",
-                data = auctions
+                data = new
+                {
+                    items = auctions
+                }
             });
         }
     }

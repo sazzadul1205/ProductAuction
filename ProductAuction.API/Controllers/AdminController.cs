@@ -195,19 +195,20 @@ namespace ProductAuction.API.Controllers
                 userQuery = userQuery.Where(u => roleUserIds.Contains(u.Id));
             }
 
-            // apply search filter — matches email or full name
+            // apply search filter — matches email, phone, full name, or city
             if (!string.IsNullOrWhiteSpace(search))
             {
                 var term = search.Trim();
 
-                // user ids whose profile full name matches
+                // user ids whose profile full name or city matches
                 var matchingProfileUserIds = await _context.UserProfiles
-                    .Where(p => p.FullName.Contains(term))
+                    .Where(p => p.FullName.Contains(term) || (p.City != null && p.City.Contains(term)))
                     .Select(p => p.UserId)
                     .ToListAsync();
 
                 userQuery = userQuery.Where(u =>
                     (u.Email != null && u.Email.Contains(term)) ||
+                    (u.PhoneNumber != null && u.PhoneNumber.Contains(term)) ||
                     matchingProfileUserIds.Contains(u.Id));
             }
 

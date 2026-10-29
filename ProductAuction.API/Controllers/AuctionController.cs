@@ -308,6 +308,14 @@ namespace ProductAuction.API.Controllers
                         .Where(i => i.ProductId == a.ProductId && i.IsMain)
                         .Select(i => i.ImageUrl)
                         .FirstOrDefault() ?? "",
+                    Images = _context.ProductImages
+                        .Where(i => i.ProductId == a.ProductId)
+                        .Select(i => new ProductImageResponseDto
+                        {
+                            Id = i.Id,
+                            ImageUrl = i.ImageUrl,
+                            IsMain = i.IsMain
+                        }).ToList(),
                     CancellationReason = a.CancellationReason,
                     Brand = a.Product.Brand,
                     ModelNumber = a.Product.ModelNumber,

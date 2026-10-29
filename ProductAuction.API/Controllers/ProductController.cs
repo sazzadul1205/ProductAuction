@@ -682,21 +682,23 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // delete the product's images from storage first
+            // load the product's images
             var images = await _context.ProductImages
                 .Where(i => i.ProductId == product.Id)
                 .ToListAsync();
 
-            foreach (var image in images)
-            {
-                await _imageUploadService.DeleteImageAsync(image.ImageUrl);
-            }
-
-            // then remove the DB records
+            // remove the DB records first
             _context.ProductImages.RemoveRange(images);
             _context.Products.Remove(product);
 
             await _context.SaveChangesAsync();
+
+            // only delete files from storage after the DB commit succeeds.
+            // if the commit fails, files are preserved and can be retried.
+            foreach (var image in images)
+            {
+                await _imageUploadService.DeleteImageAsync(image.ImageUrl);
+            }
 
             return Ok(new
             {
