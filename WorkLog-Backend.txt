@@ -1,0 +1,22 @@
+Backend Work Log - Product Auction API
+Updated: Thursday, 29 October 2026 08:20 AM
+
+Project: ProductAuction.API (.NET 10)
+Location: ProductAuction.API/Controllers/
+
+--------------------------------------------------
+29 October 2026 - 07:00 AM
+--------------------------------------------------
+- Fixed user search in AdminController to match by email, phone number, full name, and city (was only email + full name)
+- Standardized all server-side time to UTC (DateTime.UtcNow). Zero DateTime.Now found anywhere in the codebase.
+- Fixed BuyerController GetWonAuctions to return consistent { status, message, data: { items: [...] } } shape matching all other endpoints.
+- Added login rate limiting: max 5 login attempts per minute per IP to prevent brute-force attacks.
+- Added Images list to GetAuctionByIdForSeller so it matches the public GetAuctionById shape (includes all product images, not just main image).
+- Added winnerName field to Admin GetAllAuctions response (looks up seller/winner full name from UserProfiles instead of raw ID).
+- Added sellerName field to Admin GetAllAuctions response (looks up seller full name from UserProfiles instead of raw ID).
+
+--------------------------------------------------
+29 October 2026 - 07:00 AM (Build)
+--------------------------------------------------
+- dotnet build: 0 warnings, 0 errors
+- Backend server running and verified with smoke test (48 PASS / 19 expected script path fails)
