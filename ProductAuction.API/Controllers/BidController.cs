@@ -19,7 +19,7 @@ namespace ProductAuction.API.Controllers
         {
             _context = context;
         }
-
+            
 
         // POST: api/bid
         // Places a bid on an active auction.

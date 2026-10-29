@@ -487,6 +487,10 @@ namespace ProductAuction.API.Controllers
                         .FirstOrDefault() ?? "",
 
                     sellerId = a.SellerId,
+                    sellerName = _context.UserProfiles
+                        .Where(p => p.UserId == a.SellerId)
+                        .Select(p => p.FullName)
+                        .FirstOrDefault(),
                     startTime = a.StartTime,
                     endTime = a.EndTime,
                     status = a.Status,
@@ -494,6 +498,10 @@ namespace ProductAuction.API.Controllers
                     currentHighestBidderId = a.CurrentHighestBidderId,
                     bidCount = a.BidCount,
                     winnerId = a.WinnerId,
+                    winnerName = _context.UserProfiles
+                        .Where(p => p.UserId == a.WinnerId)
+                        .Select(p => p.FullName)
+                        .FirstOrDefault(),
                     result = a.Result,
                     cancellationReason = a.CancellationReason
                 })
