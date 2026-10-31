@@ -1,7 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using ProductAuction.API.Data;
 
-
 // AuctionResultBackgroundService can process them and mark them Completed.
 namespace ProductAuction.API.Services.Background
 {
@@ -10,15 +9,21 @@ namespace ProductAuction.API.Services.Background
     {
         // Factory used to create a new DI scope each time we touch the database.
         private readonly IServiceScopeFactory _scopeFactory;
+        private readonly ILogger<AuctionStatusBackgroundService> _logger;
 
-        public AuctionStatusBackgroundService(IServiceScopeFactory scopeFactory)
+        public AuctionStatusBackgroundService(
+            IServiceScopeFactory scopeFactory,
+            ILogger<AuctionStatusBackgroundService> logger)
         {
             _scopeFactory = scopeFactory;
+            _logger = logger;
         }
 
         // Main loop of the background service. Runs until the app shuts down.
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
+            // _logger.LogInformation("AuctionStatusBackgroundService started at {Time}.", DateTime.UtcNow);
+
             // Keep repeating until the application is stopping.
             while (!stoppingToken.IsCancellationRequested)
             {
@@ -43,18 +48,23 @@ namespace ProductAuction.API.Services.Background
                     foreach (var auction in auctions)
                     {
                         auction.Status = "Active";
+                        // _logger.LogInformation("Auction #{AuctionId} activated at {Time}.", auction.Id, now);
                     }
 
                     // Save only if we actually changed something.
                     if (auctions.Count > 0)
                     {
                         await context.SaveChangesAsync(stoppingToken);
+
+                        // System.Diagnostics.Debug.Assert(auctions.All(a => a.Status == "Active"));
                     }
                 }
 
                 // Wait 30 seconds before checking again.
                 await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
             }
+
+            // _logger.LogInformation("AuctionStatusBackgroundService stopped at {Time}.", DateTime.UtcNow);
         }
     }
 }

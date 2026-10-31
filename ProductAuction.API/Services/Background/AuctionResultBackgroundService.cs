@@ -1,5 +1,4 @@
-﻿
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using ProductAuction.API.Data;
 using ProductAuction.API.Models;
 
@@ -10,15 +9,21 @@ namespace ProductAuction.API.Services.Background
     {
         // Factory used to create a new DI scope each time we access the database.
         private readonly IServiceScopeFactory _scopeFactory;
+        private readonly ILogger<AuctionResultBackgroundService> _logger;
 
-        public AuctionResultBackgroundService(IServiceScopeFactory scopeFactory)
+        public AuctionResultBackgroundService(
+            IServiceScopeFactory scopeFactory,
+            ILogger<AuctionResultBackgroundService> logger)
         {
             _scopeFactory = scopeFactory;
+            _logger = logger;
         }
 
         // Main loop that runs until the application shuts down.
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
+            // _logger.LogInformation("AuctionResultBackgroundService started at {Time}.", DateTime.UtcNow);
+
             // Keep checking until the application is stopping.
             while (!stoppingToken.IsCancellationRequested)
             {
@@ -39,9 +44,16 @@ namespace ProductAuction.API.Services.Background
                             a.EndTime.Value <= now)
                         .ToListAsync(stoppingToken);
 
+                    // if (auctions.Count > 0)
+                    // {
+                    //     _logger.LogInformation("Found {Count} ended auction(s) to process.", auctions.Count);
+                    // }
+
                     // Process each ended auction.
                     foreach (var auction in auctions)
                     {
+                        // _logger.LogInformation("Processing ended auction #{AuctionId}.", auction.Id);
+
                         // Start a transaction for this auction.
                         await using var transaction = await context.Database.BeginTransactionAsync(stoppingToken);
 
@@ -57,6 +69,7 @@ namespace ProductAuction.API.Services.Background
                         // If a sale already exists, use its buyer as the winner.
                         if (existingSale != null)
                         {
+                            // _logger.LogDebug("Auction #{AuctionId} already has a sale; reusing buyer {BuyerId}.", auction.Id, existingSale.BuyerId);
                             winnerId = existingSale.BuyerId;
                             auction.Status = "Completed";
                         }
@@ -74,6 +87,8 @@ namespace ProductAuction.API.Services.Background
                             // without a winner and release the seller's deposit.
                             if (highestBid == null)
                             {
+                                // _logger.LogInformation("Auction #{AuctionId} ended with no bids; releasing seller deposit.", auction.Id);
+
                                 // Find the product to identify its seller.
                                 var product = await context.Products
                                     .FirstOrDefaultAsync(
@@ -84,6 +99,7 @@ namespace ProductAuction.API.Services.Background
                                 // retry when the background service runs again.
                                 if (product == null)
                                 {
+                                    // _logger.LogWarning("Auction #{AuctionId} skipped: product #{ProductId} not found.", auction.Id, auction.ProductId);
                                     await transaction.RollbackAsync(stoppingToken);
                                     continue;
                                 }
@@ -113,6 +129,7 @@ namespace ProductAuction.API.Services.Background
                                     (sellerDeposit != null &&
                                      sellerWallet.ReservedBalance < sellerDeposit.Amount))
                                 {
+                                    // _logger.LogWarning("Auction #{AuctionId} skipped: seller wallet/reserved balance invalid.", auction.Id);
                                     await transaction.RollbackAsync(stoppingToken);
                                     continue;
                                 }
@@ -142,15 +159,17 @@ namespace ProductAuction.API.Services.Background
                                 auction.Result = "NoWinner";
                                 auction.WinnerId = null;
                             }
-
                             else
                             {
+                                // _logger.LogInformation("Auction #{AuctionId} sold to {BidderId} for {Amount}.", auction.Id, highestBid.BidderId, highestBid.Amount);
+
                                 // Find the product to identify its seller.
                                 var product = await context.Products.FirstOrDefaultAsync(p => p.Id == auction.ProductId, stoppingToken);
 
                                 // If the product is missing, try again next time.
                                 if (product == null)
                                 {
+                                    // _logger.LogWarning("Auction #{AuctionId} skipped: product #{ProductId} not found.", auction.Id, auction.ProductId);
                                     await transaction.RollbackAsync(stoppingToken);
                                     continue;
                                 }
@@ -209,6 +228,7 @@ namespace ProductAuction.API.Services.Background
                             // Skip if the wallet no longer exists.
                             if (wallet == null)
                             {
+                                // _logger.LogWarning("Reservation #{ReservationId} skipped: wallet #{WalletId} not found.", reservation.Id, reservation.WalletId);
                                 continue;
                             }
 
@@ -226,12 +246,19 @@ namespace ProductAuction.API.Services.Background
                         // Save the auction result, sale, and reservation changes together.
                         await context.SaveChangesAsync(stoppingToken);
                         await transaction.CommitAsync(stoppingToken);
+
+
+                        // System.Diagnostics.Debug.Assert(auction.Status == "Completed");
+                        // _logger.LogDebug("Auction #{AuctionId} finalized. Result={Result}, Winner={WinnerId}",
+                        //     auction.Id, auction.Result, auction.WinnerId ?? "<none>");
                     }
                 }
 
                 // Wait 30 seconds before checking again.
                 await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
             }
+
+            // _logger.LogInformation("AuctionResultBackgroundService stopped at {Time}.", DateTime.UtcNow);
         }
     }
 }

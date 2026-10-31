@@ -1,5 +1,4 @@
-﻿
-using Microsoft.AspNetCore.Identity;
+﻿using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using ProductAuction.API.Models;
 
@@ -18,6 +17,12 @@ namespace ProductAuction.API.Data.Seeder
             var userManager = scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
 
             var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            // Logger resolved from the scope (static class cannot take it via ctor).
+            var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
+                .CreateLogger(nameof(PlatformAccountSeeder));
+
+            // logger.LogInformation("PlatformAccountSeeder started at {Time}.", DateTime.UtcNow);
 
             // Check whether the platform account already exists.
             var platformUser = await userManager.FindByNameAsync(PlatformUserName);
@@ -39,7 +44,13 @@ namespace ProductAuction.API.Data.Seeder
 
                     throw new InvalidOperationException($"Failed to create platform account: {errors}");
                 }
+
+                // logger.LogInformation("Platform account '{User}' created.", PlatformUserName);
             }
+            // else
+            // {
+            //     logger.LogDebug("Platform account '{User}' already exists; skipping creation.", PlatformUserName);
+            // }
 
             // Check whether the platform wallet already exists.
             bool walletExists = await context.Wallets.AnyAsync(wallet => wallet.UserId == platformUser.Id);
@@ -57,7 +68,13 @@ namespace ProductAuction.API.Data.Seeder
                 context.Wallets.Add(platformWallet);
 
                 await context.SaveChangesAsync();
+
+                // logger.LogInformation("Platform wallet created for user {UserId}.", platformUser.Id);
+
+                // System.Diagnostics.Debug.Assert(await context.Wallets.AnyAsync(w => w.UserId == platformUser.Id));
             }
+
+            // logger.LogInformation("PlatformAccountSeeder completed at {Time}.", DateTime.UtcNow);
         }
     }
 }
