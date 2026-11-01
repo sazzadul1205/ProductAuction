@@ -22,20 +22,21 @@ namespace ProductAuction.API.Controllers
         private readonly UserManager<IdentityUser> _userManager;
         private readonly AppDbContext _context;
         private readonly IImageUploadService _imageUploadService;
-
-        // reads JWT settings from appsettings.json
         private readonly IConfiguration _configuration;
+        private readonly ILogger<AuthController> _logger;
 
         public AuthController(
             UserManager<IdentityUser> userManager,
             AppDbContext context,
             IConfiguration configuration,
-            IImageUploadService imageUploadService)
+            IImageUploadService imageUploadService,
+            ILogger<AuthController> logger)
         {
             _userManager = userManager;
             _context = context;
             _configuration = configuration;
             _imageUploadService = imageUploadService;
+            _logger = logger;
         }
 
 
@@ -44,11 +45,15 @@ namespace ProductAuction.API.Controllers
         [HttpPost("register")]
         public async Task<IActionResult> Register(RegisterDto dto)
         {
+            // _logger.LogInformation("Register called for {Email} (role={Role}).", dto.Email, dto.Role);
+
             // check if this email is already taken
             var existingUser = await _userManager.FindByEmailAsync(dto.Email);
 
             if (existingUser != null)
             {
+                // _logger.LogWarning("Register: email {Email} is already registered.", dto.Email);
+
                 return BadRequest(new
                 {
                     status = 400,
@@ -59,6 +64,8 @@ namespace ProductAuction.API.Controllers
             // public registration only allows Buyer or Seller
             if (dto.Role != "Buyer" && dto.Role != "Seller")
             {
+                // _logger.LogWarning("Register: invalid role {Role} requested for {Email}.", dto.Role, dto.Email);
+
                 return BadRequest(new
                 {
                     status = 400,
@@ -78,6 +85,9 @@ namespace ProductAuction.API.Controllers
 
             if (!result.Succeeded)
             {
+                // _logger.LogWarning("Register: Identity create failed for {Email}: {Errors}",
+                //     dto.Email, string.Join("; ", result.Errors.Select(e => e.Description)));
+
                 return BadRequest(new
                 {
                     status = 400,
@@ -91,6 +101,9 @@ namespace ProductAuction.API.Controllers
 
             if (!roleResult.Succeeded)
             {
+                // _logger.LogWarning("Register: role assignment '{Role}' failed for {Email}: {Errors}",
+                //     dto.Role, dto.Email, string.Join("; ", roleResult.Errors.Select(e => e.Description)));
+
                 return BadRequest(new
                 {
                     status = 400,
@@ -120,6 +133,13 @@ namespace ProductAuction.API.Controllers
 
             await _context.SaveChangesAsync();
 
+
+            // System.Diagnostics.Debug.Assert(await _context.UserProfiles.AnyAsync(p => p.UserId == user.Id));
+            // System.Diagnostics.Debug.Assert(await _context.Wallets.AnyAsync(w => w.UserId == user.Id));
+            // System.Diagnostics.Debug.Assert(await _userManager.IsInRoleAsync(user, dto.Role));
+
+            // _logger.LogInformation("Register: account {Email} created with role {Role}.", dto.Email, dto.Role);
+
             return Ok(new
             {
                 status = 200,
@@ -136,12 +156,16 @@ namespace ProductAuction.API.Controllers
         [EnableRateLimiting("login")]
         public async Task<IActionResult> Login(LoginDto dto)
         {
+            // _logger.LogInformation("Login attempt for {Email}.", dto.Email);
+
             // find the account by email
             var user = await _userManager.FindByEmailAsync(dto.Email);
 
             // don't reveal whether the email or password was wrong
             if (user == null)
             {
+                // _logger.LogWarning("Login failed: no account for {Email}.", dto.Email);
+
                 return Unauthorized(new
                 {
                     status = 401,
@@ -152,6 +176,8 @@ namespace ProductAuction.API.Controllers
             // locked accounts can't log in even with the right password
             if (await _userManager.IsLockedOutAsync(user))
             {
+                // _logger.LogWarning("Login blocked: account {Email} is locked out.", dto.Email);
+
                 return Unauthorized(new
                 {
                     status = 401,
@@ -164,6 +190,8 @@ namespace ProductAuction.API.Controllers
 
             if (!passwordIsValid)
             {
+                // _logger.LogWarning("Login failed: invalid password for {Email}.", dto.Email);
+
                 return Unauthorized(new
                 {
                     status = 401,
@@ -203,6 +231,11 @@ namespace ProductAuction.API.Controllers
             // turn it into a string for the client
             var tokenString = new JwtSecurityTokenHandler().WriteToken(token);
 
+            // System.Diagnostics.Debug.Assert(!string.IsNullOrWhiteSpace(tokenString));
+            // System.Diagnostics.Debug.Assert(claims.Any(c => c.Type == ClaimTypes.NameIdentifier && c.Value == user.Id));
+
+            // _logger.LogInformation("Login successful for {Email} (roles: {Roles}).", dto.Email, string.Join(",", roles));
+
             return Ok(new
             {
                 status = 200,
@@ -220,6 +253,8 @@ namespace ProductAuction.API.Controllers
         [HttpGet("test-token")]
         public IActionResult TestToken()
         {
+            // _logger.LogInformation("TestToken called by user {UserId}.", User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
+
             return Ok(new
             {
                 status = 200,
@@ -242,6 +277,8 @@ namespace ProductAuction.API.Controllers
 
             if (string.IsNullOrEmpty(userId))
             {
+                // _logger.LogWarning("Me: user identity missing from token.");
+
                 return Unauthorized(new
                 {
                     status = 401,
@@ -249,11 +286,15 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
+            // _logger.LogInformation("Me called for user {UserId}.", userId);
+
             // find the Identity account
             var user = await _userManager.FindByIdAsync(userId);
 
             if (user == null)
             {
+                // _logger.LogWarning("Me: account {UserId} not found.", userId);
+
                 return Unauthorized(new
                 {
                     status = 401,
@@ -266,6 +307,8 @@ namespace ProductAuction.API.Controllers
 
             // get all roles for this account
             var roles = await _userManager.GetRolesAsync(user);
+
+            // System.Diagnostics.Debug.Assert(roles.Any());
 
             return Ok(new
             {
@@ -308,12 +351,20 @@ namespace ProductAuction.API.Controllers
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             if (string.IsNullOrEmpty(userId))
+            {
+                // _logger.LogWarning("UpdateMe: user identity missing from token.");
+
                 return Unauthorized();
+            }
+
+            // _logger.LogInformation("UpdateMe called for user {UserId}.", userId);
 
             var profile = await _context.UserProfiles.FirstOrDefaultAsync(p => p.UserId == userId);
 
             if (profile == null)
             {
+                // _logger.LogWarning("UpdateMe: profile for user {UserId} not found.", userId);
+
                 return NotFound(new
                 {
                     message = "User profile not found."
@@ -331,11 +382,15 @@ namespace ProductAuction.API.Controllers
             if (dto.NationalIdFrontImage != null)
             {
                 profile.NationalIdFrontImageUrl = await _imageUploadService.UploadImageAsync(dto.NationalIdFrontImage);
+
+                // _logger.LogDebug("UpdateMe: uploaded new NID front image for user {UserId}.", userId);
             }
 
             if (dto.NationalIdBackImage != null)
             {
                 profile.NationalIdBackImageUrl = await _imageUploadService.UploadImageAsync(dto.NationalIdBackImage);
+
+                // _logger.LogDebug("UpdateMe: uploaded new NID back image for user {UserId}.", userId);
             }
 
             profile.UpdatedAt = DateTime.UtcNow;
@@ -351,6 +406,9 @@ namespace ProductAuction.API.Controllers
 
                     if (!phoneResult.Succeeded)
                     {
+                        // _logger.LogWarning("UpdateMe: failed to update phone number for user {UserId}: {Errors}",
+                        //     userId, string.Join("; ", phoneResult.Errors.Select(e => e.Description)));
+
                         return BadRequest(new
                         {
                             message = "Failed to update phone number."
@@ -360,6 +418,11 @@ namespace ProductAuction.API.Controllers
             }
 
             await _context.SaveChangesAsync();
+
+            // System.Diagnostics.Debug.Assert(profile.UpdatedAt != null);
+            // System.Diagnostics.Debug.Assert(profile.FullName == dto.FullName);
+
+            // _logger.LogInformation("UpdateMe: profile for user {UserId} updated successfully.", userId);
 
             return Ok(new
             {
@@ -380,6 +443,8 @@ namespace ProductAuction.API.Controllers
 
             if (string.IsNullOrEmpty(userId))
             {
+                // _logger.LogWarning("ChangePassword: user identity missing from token.");
+
                 return Unauthorized(new
                 {
                     status = 401,
@@ -387,11 +452,15 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
+            // _logger.LogInformation("ChangePassword called for user {UserId}.", userId);
+
             // find the current Identity account
             var user = await _userManager.FindByIdAsync(userId);
 
             if (user == null)
             {
+                // _logger.LogWarning("ChangePassword: account {UserId} not found.", userId);
+
                 return NotFound(new
                 {
                     status = 404,
@@ -404,6 +473,9 @@ namespace ProductAuction.API.Controllers
 
             if (!result.Succeeded)
             {
+                // _logger.LogWarning("ChangePassword: failed for user {UserId}: {Errors}",
+                //     userId, string.Join("; ", result.Errors.Select(e => e.Description)));
+
                 return BadRequest(new
                 {
                     status = 400,
@@ -411,6 +483,8 @@ namespace ProductAuction.API.Controllers
                     errors = result.Errors.Select(e => e.Description)
                 });
             }
+
+            // _logger.LogInformation("ChangePassword: password updated for user {UserId}.", userId);
 
             return Ok(new
             {

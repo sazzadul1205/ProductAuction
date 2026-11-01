@@ -16,13 +16,16 @@ namespace ProductAuction.API.Controllers
     {
         private readonly AppDbContext _context;
         private readonly IImageUploadService _imageUploadService;
+        private readonly ILogger<WalletController> _logger;
 
         public WalletController(
             AppDbContext context,
-            IImageUploadService imageUploadService)
+            IImageUploadService imageUploadService,
+            ILogger<WalletController> logger)
         {
             _context = context;
             _imageUploadService = imageUploadService;
+            _logger = logger;
         }
 
 
@@ -36,6 +39,8 @@ namespace ProductAuction.API.Controllers
 
             if (userId == null)
             {
+                // _logger.LogWarning("GetMyWallet: user identity missing from token.");
+
                 return Unauthorized(new
                 {
                     status = 401,
@@ -43,11 +48,15 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
+            // _logger.LogInformation("GetMyWallet called by user {UserId}.", userId);
+
             // find the wallet linked to this user
             var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == userId);
 
             if (wallet == null)
             {
+                // _logger.LogWarning("GetMyWallet: wallet for user {UserId} not found.", userId);
+
                 return NotFound(new
                 {
                     status = 404,
@@ -82,6 +91,8 @@ namespace ProductAuction.API.Controllers
 
             if (userId == null)
             {
+                // _logger.LogWarning("CreateDepositRequest: user identity missing from token.");
+
                 return Unauthorized(new
                 {
                     status = 401,
@@ -89,11 +100,16 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
+            // _logger.LogInformation("CreateDepositRequest called by user {UserId} (method='{Method}', amount={Amount}).",
+            //     userId, dto.Method, dto.Amount);
+
             // find the user's wallet
             var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == userId);
 
             if (wallet == null)
             {
+                // _logger.LogWarning("CreateDepositRequest: wallet for user {UserId} not found.", userId);
+
                 return NotFound(new
                 {
                     status = 404,
@@ -118,6 +134,13 @@ namespace ProductAuction.API.Controllers
 
             _context.DepositRequests.Add(depositRequest);
             await _context.SaveChangesAsync();
+
+
+            // System.Diagnostics.Debug.Assert(depositRequest.Id > 0);
+            // System.Diagnostics.Debug.Assert(depositRequest.Status == "PendingVerification");
+
+            // _logger.LogInformation("CreateDepositRequest: deposit request #{DepositRequestId} created for wallet #{WalletId}.",
+            //     depositRequest.Id, wallet.Id);
 
             return Ok(new
             {
@@ -144,6 +167,8 @@ namespace ProductAuction.API.Controllers
 
             if (userId == null)
             {
+                // _logger.LogWarning("GetMyDepositRequests: user identity missing from token.");
+
                 return Unauthorized(new
                 {
                     status = 401,
@@ -155,6 +180,8 @@ namespace ProductAuction.API.Controllers
 
             if (wallet == null)
             {
+                // _logger.LogWarning("GetMyDepositRequests: wallet for user {UserId} not found.", userId);
+
                 return NotFound(new
                 {
                     status = 404,
@@ -176,6 +203,9 @@ namespace ProductAuction.API.Controllers
 
             // Optional status filter
             var filter = query.Filter;
+
+            // _logger.LogInformation("GetMyDepositRequests called by user {UserId}: page={Page}, pageSize={PageSize}, filter={Filter}, search={Search}.",
+            //     userId, page, pageSize, filter, search);
 
             var requestsQuery = _context.DepositRequests
                 .Where(d => d.WalletId == wallet.Id)
@@ -218,6 +248,12 @@ namespace ProductAuction.API.Controllers
                 })
                 .ToListAsync();
 
+
+            // System.Diagnostics.Debug.Assert(requests.Count <= pageSize);
+
+            // _logger.LogInformation("GetMyDepositRequests returned {Count} of {Total} request(s) for user {UserId}.",
+            //     requests.Count, totalCount, userId);
+
             return Ok(new
             {
                 status = 200,
@@ -242,6 +278,8 @@ namespace ProductAuction.API.Controllers
 
             if (userId == null)
             {
+                // _logger.LogWarning("GetMyTransactions: user identity missing from token.");
+
                 return Unauthorized(new
                 {
                     status = 401,
@@ -253,6 +291,8 @@ namespace ProductAuction.API.Controllers
 
             if (wallet == null)
             {
+                // _logger.LogWarning("GetMyTransactions: wallet for user {UserId} not found.", userId);
+
                 return NotFound(new
                 {
                     status = 404,
@@ -274,6 +314,9 @@ namespace ProductAuction.API.Controllers
 
             // Optional type filter
             var filter = query.Filter;
+
+            // _logger.LogInformation("GetMyTransactions called by user {UserId}: page={Page}, pageSize={PageSize}, filter={Filter}, search={Search}.",
+            //     userId, page, pageSize, filter, search);
 
             var txQuery = _context.WalletTransactions
                 .Where(t => t.WalletId == wallet.Id)
@@ -313,6 +356,12 @@ namespace ProductAuction.API.Controllers
                 })
                 .ToListAsync();
 
+
+            // System.Diagnostics.Debug.Assert(transactions.Count <= pageSize);
+
+            // _logger.LogInformation("GetMyTransactions returned {Count} of {Total} transaction(s) for user {UserId}.",
+            //     transactions.Count, totalCount, userId);
+
             return Ok(new
             {
                 status = 200,
@@ -337,6 +386,8 @@ namespace ProductAuction.API.Controllers
 
             if (userId == null)
             {
+                // _logger.LogWarning("GetMyReservations: user identity missing from token.");
+
                 return Unauthorized(new
                 {
                     status = 401,
@@ -348,6 +399,8 @@ namespace ProductAuction.API.Controllers
 
             if (wallet == null)
             {
+                // _logger.LogWarning("GetMyReservations: wallet for user {UserId} not found.", userId);
+
                 return NotFound(new
                 {
                     status = 404,
@@ -369,6 +422,9 @@ namespace ProductAuction.API.Controllers
 
             // Optional status filter
             var filter = query.Filter;
+
+            // _logger.LogInformation("GetMyReservations called by user {UserId}: page={Page}, pageSize={PageSize}, filter={Filter}, search={Search}.",
+            //     userId, page, pageSize, filter, search);
 
             var reservationsQuery = _context.WalletReservations
                 .Where(r => r.WalletId == wallet.Id)
@@ -393,6 +449,8 @@ namespace ProductAuction.API.Controllers
                 reservationsQuery = reservationsQuery.Where(r =>
                     r.Type.Contains(term) ||
                     (r.ProductId != null && matchingProductIds.Contains(r.ProductId.Value)));
+
+                // _logger.LogDebug("GetMyReservations: search '{Term}' matched {Count} product(s).", term, matchingProductIds.Count);
             }
 
             var totalCount = await reservationsQuery.CountAsync();
@@ -418,6 +476,12 @@ namespace ProductAuction.API.Controllers
                     r.Status
                 })
                 .ToListAsync();
+
+
+            // System.Diagnostics.Debug.Assert(reservations.Count <= pageSize);
+
+            // _logger.LogInformation("GetMyReservations returned {Count} of {Total} reservation(s) for user {UserId}.",
+            //     reservations.Count, totalCount, userId);
 
             return Ok(new
             {

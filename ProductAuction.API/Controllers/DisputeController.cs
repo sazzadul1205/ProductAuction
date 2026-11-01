@@ -17,11 +17,16 @@ namespace ProductAuction.API.Controllers
     {
         private readonly AppDbContext _context;
         private readonly IImageUploadService _imageUploadService;
+        private readonly ILogger<DisputeController> _logger;
 
-        public DisputeController(AppDbContext context, IImageUploadService imageUploadService)
+        public DisputeController(
+            AppDbContext context,
+            IImageUploadService imageUploadService,
+            ILogger<DisputeController> logger)
         {
             _context = context;
             _imageUploadService = imageUploadService;
+            _logger = logger;
         }
 
 
@@ -31,6 +36,8 @@ namespace ProductAuction.API.Controllers
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> GetAllDisputes()
         {
+            // _logger.LogInformation("GetAllDisputes called.");
+
             // fetch base dispute data
             var disputes = await _context.Disputes
                 .OrderByDescending(d => d.CreatedAt)
@@ -126,6 +133,11 @@ namespace ProductAuction.API.Controllers
                 };
             }).ToList();
 
+
+            // System.Diagnostics.Debug.Assert(result.Count == disputes.Count);
+
+            // _logger.LogInformation("GetAllDisputes returned {Count} dispute(s).", result.Count);
+
             return Ok(new
             {
                 status = 200,
@@ -145,6 +157,8 @@ namespace ProductAuction.API.Controllers
 
             if (userId == null)
             {
+                // _logger.LogWarning("CreateDispute: user identity missing from token.");
+
                 return Unauthorized(new
                 {
                     status = 401,
@@ -152,11 +166,15 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
+            // _logger.LogInformation("CreateDispute called by user {UserId} for sale #{SaleId}.", userId, dto.SaleId);
+
             // find the sale this dispute is about
             var sale = await _context.Sales.FirstOrDefaultAsync(s => s.Id == dto.SaleId);
 
             if (sale == null)
             {
+                // _logger.LogWarning("CreateDispute: sale #{SaleId} not found.", dto.SaleId);
+
                 return NotFound(new
                 {
                     status = 404,
@@ -166,11 +184,17 @@ namespace ProductAuction.API.Controllers
 
             // only the buyer or seller involved can dispute it
             if (sale.BuyerId != userId && sale.SellerId != userId)
+            {
+                // _logger.LogWarning("CreateDispute: user {UserId} is not a party to sale #{SaleId}.", userId, sale.Id);
+
                 return Forbid();
+            }
 
             // can't dispute before payment — nothing has gone wrong yet
             if (sale.Status == "AwaitingPayment")
             {
+                // _logger.LogWarning("CreateDispute: sale #{SaleId} is still AwaitingPayment.", sale.Id);
+
                 return BadRequest(new
                 {
                     status = 400,
@@ -181,6 +205,8 @@ namespace ProductAuction.API.Controllers
             // can't dispute something that's already done
             if (sale.Status == "Completed")
             {
+                // _logger.LogWarning("CreateDispute: sale #{SaleId} is already Completed.", sale.Id);
+
                 return BadRequest(new
                 {
                     status = 400,
@@ -193,6 +219,8 @@ namespace ProductAuction.API.Controllers
 
             if (isSeller && DateTime.UtcNow <= sale.PaymentDeadline)
             {
+                // _logger.LogWarning("CreateDispute: seller tried to raise a dispute for sale #{SaleId} before payment window closed.", sale.Id);
+
                 return BadRequest(new
                 {
                     status = 400,
@@ -205,6 +233,8 @@ namespace ProductAuction.API.Controllers
 
             if (existingDispute)
             {
+                // _logger.LogWarning("CreateDispute: a dispute already exists for sale #{SaleId}.", sale.Id);
+
                 return BadRequest(new
                 {
                     status = 400,
@@ -218,6 +248,8 @@ namespace ProductAuction.API.Controllers
             if (dto.EvidenceImage != null)
             {
                 evidenceUrl = await _imageUploadService.UploadImageAsync(dto.EvidenceImage);
+
+                // _logger.LogDebug("CreateDispute: evidence image uploaded for sale #{SaleId}.", sale.Id);
             }
 
             // create the dispute
@@ -238,6 +270,13 @@ namespace ProductAuction.API.Controllers
             _context.Disputes.Add(dispute);
 
             await _context.SaveChangesAsync();
+
+
+            // System.Diagnostics.Debug.Assert(dispute.Id > 0);
+            // System.Diagnostics.Debug.Assert(sale.Status == "Disputed");
+
+            // _logger.LogInformation("CreateDispute: dispute #{DisputeId} created for sale #{SaleId} by user {UserId}.",
+            //     dispute.Id, sale.Id, userId);
 
             return Ok(new
             {
@@ -268,6 +307,8 @@ namespace ProductAuction.API.Controllers
 
             if (adminId == null)
             {
+                // _logger.LogWarning("ResolveDispute: admin identity missing from token.");
+
                 return Unauthorized(new
                 {
                     status = 401,
@@ -275,9 +316,14 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
+            // _logger.LogInformation("ResolveDispute called for dispute #{DisputeId} by admin {AdminId} (fault={Fault}, applyPenalty={Apply}).",
+            //     id, adminId, dto.FaultType, dto.ApplyPenalty);
+
             // fault type has to be one of the three expected values
             if (dto.FaultType != "Buyer" && dto.FaultType != "Seller" && dto.FaultType != "System")
             {
+                // _logger.LogWarning("ResolveDispute: invalid FaultType '{Fault}'.", dto.FaultType);
+
                 return BadRequest(new
                 {
                     status = 400,
@@ -287,6 +333,8 @@ namespace ProductAuction.API.Controllers
 
             if (string.IsNullOrEmpty(dto.AdminDecision))
             {
+                // _logger.LogWarning("ResolveDispute: AdminDecision is required for dispute #{DisputeId}.", id);
+
                 return BadRequest(new
                 {
                     status = 400,
@@ -297,6 +345,8 @@ namespace ProductAuction.API.Controllers
             // system fault can't get a penalty — nobody's fault
             if (dto.FaultType == "System" && dto.ApplyPenalty)
             {
+                // _logger.LogWarning("ResolveDispute: system fault cannot be penalized for dispute #{DisputeId}.", id);
+
                 return BadRequest(new
                 {
                     status = 400,
@@ -311,6 +361,8 @@ namespace ProductAuction.API.Controllers
 
             if (dispute == null)
             {
+                // _logger.LogWarning("ResolveDispute: dispute #{DisputeId} not found.", id);
+
                 return NotFound(new
                 {
                     status = 404,
@@ -321,6 +373,9 @@ namespace ProductAuction.API.Controllers
             // dispute has to be under review first
             if (dispute.Status != "UnderReview")
             {
+                // _logger.LogWarning("ResolveDispute: dispute #{DisputeId} has status {Status}, expected UnderReview.",
+                //     id, dispute.Status);
+
                 return BadRequest(new
                 {
                     status = 400,
@@ -333,6 +388,9 @@ namespace ProductAuction.API.Controllers
 
             if (sale == null)
             {
+                // _logger.LogError("ResolveDispute: related sale #{SaleId} for dispute #{DisputeId} not found.",
+                //     dispute.SaleId, id);
+
                 return NotFound(new
                 {
                     status = 404,
@@ -345,6 +403,9 @@ namespace ProductAuction.API.Controllers
 
             if (product == null)
             {
+                // _logger.LogError("ResolveDispute: related product #{ProductId} for sale #{SaleId} not found.",
+                //     sale.ProductId, sale.Id);
+
                 return NotFound(new
                 {
                     status = 404,
@@ -355,6 +416,8 @@ namespace ProductAuction.API.Controllers
             // don't create two penalty records for the same dispute
             if (await _context.Penalties.AnyAsync(p => p.DisputeId == dispute.Id))
             {
+                // _logger.LogWarning("ResolveDispute: a penalty already exists for dispute #{DisputeId}.", id);
+
                 return BadRequest(new
                 {
                     status = 400,
@@ -369,9 +432,11 @@ namespace ProductAuction.API.Controllers
                     r.Type == "SaleEscrow" &&
                     r.Status == "Reserved");
 
-            // if payment was submitted, escrow must exist 
+            // if payment was submitted, escrow must exist
             if (sale.PaymentSubmittedAt.HasValue && escrow == null)
             {
+                // _logger.LogError("ResolveDispute: payment submitted for sale #{SaleId} but no escrow found.", sale.Id);
+
                 return BadRequest(new
                 {
                     status = 400,
@@ -382,6 +447,9 @@ namespace ProductAuction.API.Controllers
             //  escrow amount should match the sale amount
             if (escrow != null && escrow.Amount != sale.FinalAmount)
             {
+                // _logger.LogError("ResolveDispute: escrow {Escrow} != sale amount {SaleAmount} for sale #{SaleId}.",
+                //     escrow.Amount, sale.FinalAmount, sale.Id);
+
                 return BadRequest(new
                 {
                     status = 400,
@@ -392,6 +460,8 @@ namespace ProductAuction.API.Controllers
             // buyer-fault penalty with money in escrow needs manual handling
             if (dto.FaultType == "Buyer" && dto.ApplyPenalty && escrow != null)
             {
+                // _logger.LogWarning("ResolveDispute: buyer-fault penalty blocked by active escrow on dispute #{DisputeId}.", id);
+
                 return BadRequest(new
                 {
                     status = 400,
@@ -410,7 +480,10 @@ namespace ProductAuction.API.Controllers
             decimal oppositePartyAmount = Math.Round(totalPenalty * 0.80m, 2);
             decimal platformAmount = totalPenalty - oppositePartyAmount;
 
-            // OPTION 1: system fault 
+            // _logger.LogDebug("ResolveDispute: penalty breakdown for dispute #{DisputeId}: total={Total}, opposite={Opposite}, platform={Platform}.",
+            //     id, totalPenalty, oppositePartyAmount, platformAmount);
+
+            // OPTION 1: system fault
             // no penalty, just refund escrow and release deposits
             if (dto.FaultType == "System")
             {
@@ -420,6 +493,8 @@ namespace ProductAuction.API.Controllers
 
                     if (buyerWallet == null)
                     {
+                        // _logger.LogError("ResolveDispute: buyer wallet for user {BuyerId} not found.", sale.BuyerId);
+
                         return BadRequest(new
                         {
                             status = 400,
@@ -440,6 +515,8 @@ namespace ProductAuction.API.Controllers
                         CreatedAt = DateTime.UtcNow
                     });
                 }
+
+                // _logger.LogInformation("ResolveDispute: system-fault escrow refunded for dispute #{DisputeId}.", id);
             }
 
             // OPTION 2: buyer fault, no penalty
@@ -453,6 +530,8 @@ namespace ProductAuction.API.Controllers
 
                     if (buyerWallet == null)
                     {
+                        // _logger.LogError("ResolveDispute: buyer wallet for user {BuyerId} not found.", sale.BuyerId);
+
                         return BadRequest(new
                         {
                             status = 400,
@@ -473,6 +552,8 @@ namespace ProductAuction.API.Controllers
                         CreatedAt = DateTime.UtcNow
                     });
                 }
+
+                // _logger.LogInformation("ResolveDispute: buyer fault without penalty; escrow refunded for dispute #{DisputeId}.", id);
             }
 
             // OPTION 3: seller fault, no penalty
@@ -485,6 +566,8 @@ namespace ProductAuction.API.Controllers
 
                     if (buyerWallet == null)
                     {
+                        // _logger.LogError("ResolveDispute: buyer wallet for user {BuyerId} not found.", sale.BuyerId);
+
                         return BadRequest(new
                         {
                             status = 400,
@@ -505,6 +588,8 @@ namespace ProductAuction.API.Controllers
                         CreatedAt = DateTime.UtcNow
                     });
                 }
+
+                // _logger.LogInformation("ResolveDispute: seller fault without penalty; escrow refunded for dispute #{DisputeId}.", id);
             }
 
             // OPTION 4: buyer fault, penalty applied
@@ -515,6 +600,8 @@ namespace ProductAuction.API.Controllers
 
                 if (buyerWallet == null)
                 {
+                    // _logger.LogError("ResolveDispute: buyer wallet for user {BuyerId} not found.", sale.BuyerId);
+
                     return BadRequest(new
                     {
                         status = 400,
@@ -535,6 +622,8 @@ namespace ProductAuction.API.Controllers
                     buyerWallet.ReservedBalance < buyerDeposit.Amount ||
                     buyerWallet.Balance < totalPenalty)
                 {
+                    // _logger.LogError("ResolveDispute: buyer deposit missing or mismatched for dispute #{DisputeId}.", id);
+
                     return BadRequest(new
                     {
                         status = 400,
@@ -547,6 +636,8 @@ namespace ProductAuction.API.Controllers
 
                 if (sellerWallet == null)
                 {
+                    // _logger.LogError("ResolveDispute: seller wallet for user {SellerId} not found.", sale.SellerId);
+
                     return BadRequest(new
                     {
                         status = 400,
@@ -559,6 +650,8 @@ namespace ProductAuction.API.Controllers
 
                 if (platformUser == null)
                 {
+                    // _logger.LogError("ResolveDispute: platform system account not found.");
+
                     return BadRequest(new
                     {
                         status = 400,
@@ -570,6 +663,8 @@ namespace ProductAuction.API.Controllers
 
                 if (platformWallet == null)
                 {
+                    // _logger.LogError("ResolveDispute: platform wallet for user {PlatformUserId} not found.", platformUser.Id);
+
                     return BadRequest(new
                     {
                         status = 400,
@@ -628,6 +723,9 @@ namespace ProductAuction.API.Controllers
                     PlatformAmount = platformAmount,
                     Status = "Applied"
                 });
+
+                // _logger.LogInformation("ResolveDispute: buyer penalty of {Amount} applied for dispute #{DisputeId}.",
+                //     totalPenalty, id);
             }
 
             // OPTION 5: seller fault, penalty applied
@@ -641,6 +739,8 @@ namespace ProductAuction.API.Controllers
 
                     if (buyerWallet == null)
                     {
+                        // _logger.LogError("ResolveDispute: buyer wallet for user {BuyerId} not found.", sale.BuyerId);
+
                         return BadRequest(new
                         {
                             status = 400,
@@ -667,6 +767,8 @@ namespace ProductAuction.API.Controllers
 
                 if (sellerWallet == null)
                 {
+                    // _logger.LogError("ResolveDispute: seller wallet for user {SellerId} not found.", sale.SellerId);
+
                     return BadRequest(new
                     {
                         status = 400,
@@ -686,6 +788,8 @@ namespace ProductAuction.API.Controllers
                     sellerWallet.ReservedBalance < sellerDeposit.Amount ||
                     sellerWallet.Balance < totalPenalty)
                 {
+                    // _logger.LogError("ResolveDispute: seller deposit missing or mismatched for dispute #{DisputeId}.", id);
+
                     return BadRequest(new
                     {
                         status = 400,
@@ -698,6 +802,8 @@ namespace ProductAuction.API.Controllers
 
                 if (buyerWalletForPenalty == null)
                 {
+                    // _logger.LogError("ResolveDispute: buyer wallet for user {BuyerId} not found.", sale.BuyerId);
+
                     return BadRequest(new
                     {
                         status = 400,
@@ -710,6 +816,8 @@ namespace ProductAuction.API.Controllers
 
                 if (platformUser == null)
                 {
+                    // _logger.LogError("ResolveDispute: platform system account not found.");
+
                     return BadRequest(new
                     {
                         status = 400,
@@ -721,6 +829,8 @@ namespace ProductAuction.API.Controllers
 
                 if (platformWallet == null)
                 {
+                    // _logger.LogError("ResolveDispute: platform wallet for user {PlatformUserId} not found.", platformUser.Id);
+
                     return BadRequest(new
                     {
                         status = 400,
@@ -779,6 +889,9 @@ namespace ProductAuction.API.Controllers
                     PlatformAmount = platformAmount,
                     Status = "Applied"
                 });
+
+                // _logger.LogInformation("ResolveDispute: seller penalty of {Amount} applied for dispute #{DisputeId}.",
+                //     totalPenalty, id);
             }
 
             // release the seller's deposit if it wasn't forfeited
@@ -838,6 +951,9 @@ namespace ProductAuction.API.Controllers
 
                 if (wallet == null)
                 {
+                    // _logger.LogError("ResolveDispute: wallet #{WalletId} for reservation #{ReservationId} not found.",
+                    //     reservation.WalletId, reservation.Id);
+
                     return BadRequest(new
                     {
                         status = 400,
@@ -866,6 +982,15 @@ namespace ProductAuction.API.Controllers
 
             await _context.SaveChangesAsync();
             await transaction.CommitAsync();
+
+
+            // System.Diagnostics.Debug.Assert(dispute.Status == "Resolved");
+            // System.Diagnostics.Debug.Assert(sale.Status == "Refunded");
+            // System.Diagnostics.Debug.Assert(product.Status == "Unavailable");
+            // System.Diagnostics.Debug.Assert(!dto.ApplyPenalty || await _context.Penalties.AnyAsync(p => p.DisputeId == dispute.Id));
+
+            // _logger.LogInformation("ResolveDispute: dispute #{DisputeId} resolved (fault={Fault}, penaltyApplied={Apply}).",
+            //     id, dto.FaultType, dto.ApplyPenalty);
 
             return Ok(new
             {

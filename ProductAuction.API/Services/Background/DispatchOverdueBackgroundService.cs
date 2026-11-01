@@ -1,5 +1,4 @@
-﻿
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using ProductAuction.API.Data;
 
 namespace ProductAuction.API.Services.Background
@@ -9,15 +8,21 @@ namespace ProductAuction.API.Services.Background
     {
         // Factory used to create a new DI scope each time we access the database.
         private readonly IServiceScopeFactory _scopeFactory;
+        private readonly ILogger<DispatchOverdueBackgroundService> _logger;
 
-        public DispatchOverdueBackgroundService(IServiceScopeFactory scopeFactory)
+        public DispatchOverdueBackgroundService(
+            IServiceScopeFactory scopeFactory,
+            ILogger<DispatchOverdueBackgroundService> logger)
         {
             _scopeFactory = scopeFactory;
+            _logger = logger;
         }
 
         // Main loop that runs until the application shuts down.
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
+            // _logger.LogInformation("DispatchOverdueBackgroundService started at {Time}.", DateTime.UtcNow);
+
             // Keep checking until the application is stopping.
             while (!stoppingToken.IsCancellationRequested)
             {
@@ -42,18 +47,23 @@ namespace ProductAuction.API.Services.Background
                     foreach (var delivery in overdueDeliveries)
                     {
                         delivery.Status = "DispatchOverdue";
+                        // _logger.LogWarning("Delivery #{DeliveryId} marked DispatchOverdue at {Time}.", delivery.Id, now);
                     }
 
                     // Save changes only when there are overdue deliveries.
                     if (overdueDeliveries.Count > 0)
                     {
                         await context.SaveChangesAsync(stoppingToken);
+
+                        // System.Diagnostics.Debug.Assert(overdueDeliveries.All(d => d.Status == "DispatchOverdue"));
                     }
                 }
 
                 // Wait 30 seconds before checking again.
                 await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
             }
+
+            // _logger.LogInformation("DispatchOverdueBackgroundService stopped at {Time}.", DateTime.UtcNow);
         }
     }
 }

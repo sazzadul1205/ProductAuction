@@ -13,10 +13,12 @@ namespace ProductAuction.API.Controllers
     public class BuyerController : ControllerBase
     {
         private readonly AppDbContext _context;
+        private readonly ILogger<BuyerController> _logger;
 
-        public BuyerController(AppDbContext context)
+        public BuyerController(AppDbContext context, ILogger<BuyerController> logger)
         {
             _context = context;
+            _logger = logger;
         }
 
 
@@ -29,7 +31,13 @@ namespace ProductAuction.API.Controllers
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             if (string.IsNullOrEmpty(userId))
+            {
+                // _logger.LogWarning("GetDashboard: user identity missing from token.");
+
                 return Unauthorized();
+            }
+
+            // _logger.LogInformation("GetDashboard called by user {UserId}.", userId);
 
             //  bid stats
             // grab all of this user's bids along with their auctions
@@ -67,6 +75,13 @@ namespace ProductAuction.API.Controllers
             var availableBalance = wallet != null ? (wallet.Balance - wallet.ReservedBalance) : 0;
             var reservedBalance = wallet?.ReservedBalance ?? 0;
 
+
+            // System.Diagnostics.Debug.Assert(activeBids >= leadingBids);
+            // System.Diagnostics.Debug.Assert(wonCount == sales.Count);
+
+            // _logger.LogInformation("GetDashboard for {UserId}: activeBids={ActiveBids}, leadingBids={LeadingBids}, wonCount={WonCount}, totalSpent={TotalSpent}.",
+            //     userId, activeBids, leadingBids, wonCount, totalSpent);
+
             return Ok(new
             {
                 status = 200,
@@ -94,6 +109,8 @@ namespace ProductAuction.API.Controllers
 
             if (buyerId == null)
             {
+                // _logger.LogWarning("GetMyBids: user identity missing from token.");
+
                 return Unauthorized(new
                 {
                     status = 401,
@@ -110,11 +127,14 @@ namespace ProductAuction.API.Controllers
             if (pageSize < 1) pageSize = 20;
             if (pageSize > 100) pageSize = 100;
 
-            // Free-text search term (may be null or empty)
+            // Free-text search term
             var search = query.Search;
 
             // Optional auction-status filter: Active / Ended
             var filter = query.Filter;
+
+            // _logger.LogInformation("GetMyBids called by {BuyerId}: page={Page}, pageSize={PageSize}, filter={Filter}, search={Search}.",
+            //     buyerId, page, pageSize, filter, search);
 
             // only return bids placed by this buyer
             var bidsQuery = _context.Bids
@@ -149,6 +169,8 @@ namespace ProductAuction.API.Controllers
                     .ToListAsync();
 
                 bidsQuery = bidsQuery.Where(b => matchingProductIds.Contains(b.Auction.ProductId));
+
+                // _logger.LogDebug("GetMyBids: search '{Term}' matched {Count} product(s).", term, matchingProductIds.Count);
             }
 
             bidsQuery = bidsQuery.OrderByDescending(b => b.PlacedAt);
@@ -190,6 +212,13 @@ namespace ProductAuction.API.Controllers
                 })
                 .ToListAsync();
 
+
+            // System.Diagnostics.Debug.Assert(bids.Count <= pageSize);
+            // System.Diagnostics.Debug.Assert(highestBidsCount <= totalBidsCount);
+
+            // _logger.LogInformation("GetMyBids returned {Count} of {Total} bid(s) for {BuyerId} (totalBids={TotalBids}, active={Active}, highest={Highest}).",
+            //     bids.Count, totalCount, buyerId, totalBidsCount, activeBidsCount, highestBidsCount);
+
             return Ok(new
             {
                 status = 200,
@@ -217,12 +246,16 @@ namespace ProductAuction.API.Controllers
 
             if (buyerId == null)
             {
+                // _logger.LogWarning("GetWonAuctions: user identity missing from token.");
+
                 return Unauthorized(new
                 {
                     status = 401,
                     message = "Please log in first."
                 });
             }
+
+            // _logger.LogInformation("GetWonAuctions called by {BuyerId}.", buyerId);
 
             var auctions = await _context.Auctions
                 .Where(a => a.WinnerId == buyerId)
@@ -291,6 +324,11 @@ namespace ProductAuction.API.Controllers
                         .FirstOrDefault()
                 })
                 .ToListAsync();
+
+
+            // System.Diagnostics.Debug.Assert(auctions.All(a => a.auctionId > 0));
+
+            // _logger.LogInformation("GetWonAuctions returned {Count} won auction(s) for {BuyerId}.", auctions.Count, buyerId);
 
             return Ok(new
             {

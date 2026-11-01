@@ -12,10 +12,12 @@ namespace ProductAuction.API.Controllers
     public class SellerController : ControllerBase
     {
         private readonly AppDbContext _context;
+        private readonly ILogger<SellerController> _logger;
 
-        public SellerController(AppDbContext context)
+        public SellerController(AppDbContext context, ILogger<SellerController> logger)
         {
             _context = context;
+            _logger = logger;
         }
 
 
@@ -29,7 +31,13 @@ namespace ProductAuction.API.Controllers
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             if (string.IsNullOrEmpty(userId))
+            {
+                // _logger.LogWarning("GetDashboard: user identity missing from token.");
+
                 return Unauthorized();
+            }
+
+            // _logger.LogInformation("GetDashboard called by seller {SellerId}.", userId);
 
             //  product stats
             // pull all products listed by this seller
@@ -67,6 +75,14 @@ namespace ProductAuction.API.Controllers
                 .FirstOrDefaultAsync(w => w.UserId == userId);
 
             var availableBalance = wallet != null ? (wallet.Balance - wallet.ReservedBalance) : 0;
+
+
+            // System.Diagnostics.Debug.Assert(totalProducts == pendingApproval + approved + rejected
+            //     || totalProducts >= pendingApproval + approved + rejected); // drafts also exist
+            // System.Diagnostics.Debug.Assert(soldCount <= sales.Count);
+
+            // _logger.LogInformation("GetDashboard for {SellerId}: products={Total}, activeAuctions={Active}, sold={Sold}, earnings={Earnings}, available={Available}.",
+            //     userId, totalProducts, activeAuctions, soldCount, totalEarnings, availableBalance);
 
             return Ok(new
             {
