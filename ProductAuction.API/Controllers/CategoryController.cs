@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ProductAuction.API.Data;
 using ProductAuction.API.DTOs.Category;
+using ProductAuction.API.DTOs.Common;
 using ProductAuction.API.Models;
 
 namespace ProductAuction.API.Controllers
@@ -25,19 +26,36 @@ namespace ProductAuction.API.Controllers
         // GET: api/category
         // Anyone can view the available categories.
         [HttpGet]
-        public async Task<IActionResult> GetCategories()
+        public async Task<IActionResult> GetCategories([FromQuery] PaginationQueryDto query)
         {
-            // _logger.LogInformation("GetCategories called.");
+            var page = query.Page < 1 ? 1 : query.Page;
+            var pageSize = query.PageSize < 1 ? 20 : (query.PageSize > 100 ? 100 : query.PageSize);
+            var search = query.Search;
 
-            var categories = await _context.Categories.ToListAsync();
+            var categoriesQuery = _context.Categories.AsQueryable();
 
-            // _logger.LogInformation("GetCategories returned {Count} category(ies).", categories.Count);
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var term = search.Trim().ToLower();
+                categoriesQuery = categoriesQuery.Where(c => c.Name.ToLower().Contains(term));
+            }
+
+            var totalCount = await categoriesQuery.CountAsync();
+
+            var categories = await categoriesQuery
+                .OrderBy(c => c.Name)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
 
             return Ok(new
             {
                 status = 200,
                 message = "Categories retrieved successfully.",
-                data = categories
+                data = categories,
+                page,
+                pageSize,
+                totalCount
             });
         }
 

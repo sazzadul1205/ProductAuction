@@ -34,15 +34,13 @@ namespace ProductAuction.API.Controllers
         // Lists the logged-in seller's own products (any status).
         [HttpGet("my-products")]
         [Authorize(Roles = "Seller")]
-        public async Task<IActionResult> GetMyProducts()
+        public async Task<IActionResult> GetMyProducts([FromQuery] PaginationQueryDto query)
         {
             // grab the user id from the JWT
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             if (userId == null)
             {
-                // _logger.LogWarning("GetMyProducts: user identity missing from token.");
-
                 return Unauthorized(new
                 {
                     status = 401,
@@ -50,11 +48,46 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // _logger.LogInformation("GetMyProducts called by seller {SellerId}.", userId);
+            var page = query.Page < 1 ? 1 : query.Page;
+            var pageSize = query.PageSize < 1 ? 20 : (query.PageSize > 100 ? 100 : query.PageSize);
 
-            var products = await _context.Products
+            var search = query.Search;
+            var approvalStatus = query.ApprovalStatus ?? query.Filter ?? query.Status;
+            var auctionStatus = query.AuctionStatus;
+
+            var productsQuery = _context.Products
                 .Where(p => p.SellerId == userId)
+                .AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(approvalStatus) && approvalStatus != "All")
+            {
+                productsQuery = productsQuery.Where(p => p.ApprovalStatus == approvalStatus);
+            }
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var term = search.Trim();
+                productsQuery = productsQuery.Where(p => p.Title.Contains(term));
+            }
+
+            if (!string.IsNullOrWhiteSpace(auctionStatus) && auctionStatus != "All")
+            {
+                if (auctionStatus == "No Auction")
+                {
+                    productsQuery = productsQuery.Where(p => !_context.Auctions.Any(a => a.ProductId == p.Id));
+                }
+                else
+                {
+                    productsQuery = productsQuery.Where(p => _context.Auctions.Any(a => a.ProductId == p.Id && a.Status == auctionStatus));
+                }
+            }
+
+            var totalCount = await productsQuery.CountAsync();
+
+            var products = await productsQuery
                 .OrderByDescending(p => p.CreatedAt)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
                 .Select(p => new ProductListResponseDto
                 {
                     Id = p.Id,
@@ -63,8 +96,8 @@ namespace ProductAuction.API.Controllers
                     StartingPrice = p.StartingPrice,
                     BuyoutPrice = p.BuyoutPrice,
                     ApprovalStatus = p.ApprovalStatus,
+                    Status = p.Status,
 
-                    // main product image
                     MainImageUrl = _context.ProductImages
                         .Where(i => i.ProductId == p.Id && i.IsMain)
                         .Select(i => i.ImageUrl)
@@ -72,7 +105,6 @@ namespace ProductAuction.API.Controllers
 
                     CreatedAt = p.CreatedAt,
 
-                    // auction info
                     AuctionStatus = _context.Auctions
                         .Where(a => a.ProductId == p.Id)
                         .Select(a => a.Status)
@@ -109,13 +141,14 @@ namespace ProductAuction.API.Controllers
                         .FirstOrDefault()
                 }).ToListAsync();
 
-            // _logger.LogInformation("GetMyProducts returned {Count} product(s) for seller {SellerId}.", products.Count, userId);
-
             return Ok(new
             {
                 status = 200,
                 message = "Products retrieved successfully.",
-                data = products
+                data = products,
+                page,
+                pageSize,
+                totalCount
             });
         }
 
@@ -843,17 +876,26 @@ namespace ProductAuction.API.Controllers
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> GetPendingApprovalProducts([FromQuery] PaginationQueryDto query)
         {
-            var page = query.Page;
-            if (page < 1) page = 1;
-            var pageSize = query.PageSize;
-            if (pageSize < 1) pageSize = 20;
-            if (pageSize > 100) pageSize = 100;
+            var page = query.Page < 1 ? 1 : query.Page;
+            var pageSize = query.PageSize < 1 ? 20 : (query.PageSize > 100 ? 100 : query.PageSize);
 
-            var totalCount = await _context.Products
-                .CountAsync(p => p.ApprovalStatus == "PendingApproval");
+            var search = query.Search;
 
-            var products = await _context.Products
+            var productsQuery = _context.Products
                 .Where(p => p.ApprovalStatus == "PendingApproval")
+                .AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var term = search.Trim().ToLower();
+                productsQuery = productsQuery.Where(p =>
+                    p.Title.ToLower().Contains(term) ||
+                    (p.Category != null && p.Category.Name.ToLower().Contains(term)));
+            }
+
+            var totalCount = await productsQuery.CountAsync();
+
+            var products = await productsQuery
                 .OrderByDescending(p => p.CreatedAt)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
@@ -867,6 +909,7 @@ namespace ProductAuction.API.Controllers
                     Status = p.Status,
                     ApprovalStatus = p.ApprovalStatus,
                     CategoryName = p.Category.Name,
+                    CategoryId = p.CategoryId,
                     Condition = p.Condition,
                     RejectionReason = p.RejectionReason,
 
@@ -878,8 +921,6 @@ namespace ProductAuction.API.Controllers
                     CreatedAt = p.CreatedAt
                 })
                 .ToListAsync();
-
-            // _logger.LogInformation("GetPendingApprovalProducts returned {Count} product(s).", products.Count);
 
             return Ok(new
             {

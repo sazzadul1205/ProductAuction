@@ -1,4 +1,4 @@
-namespace ProductAuction.API.DTOs.Common
+﻿namespace ProductAuction.API.DTOs.Common
 {
     public class PaginationQueryDto
     {
@@ -11,5 +11,11 @@ namespace ProductAuction.API.DTOs.Common
         public string? Filter { get; set; }
 
         public int? CategoryId { get; set; }
+
+        public string? ApprovalStatus { get; set; }
+
+        public string? AuctionStatus { get; set; }
+
+        public string? Status { get; set; }
     }
 }
