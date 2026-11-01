@@ -146,9 +146,6 @@ namespace ProductAuction.API.Controllers
             // _logger.LogInformation("GetAuctions returned {Count} of {Total} auction(s) (bannerFallback={Fallback}).",
             //     auctions.Count, totalCount, bannerFallback);
 
-            // System.Diagnostics.Debug.Assert(auctions.Count <= pageSize);
-            // System.Diagnostics.Debug.Assert(totalCount >= auctions.Count);
-
             return Ok(new
             {
                 status = 200,
@@ -169,7 +166,6 @@ namespace ProductAuction.API.Controllers
         [HttpGet("active")]
         public async Task<IActionResult> GetActiveAuctions()
         {
-            // _logger.LogInformation("GetActiveAuctions called.");
 
             var auctions = await _context.Auctions
                 .Where(a => a.Status == "Active")
@@ -194,10 +190,6 @@ namespace ProductAuction.API.Controllers
                 })
                 .ToListAsync();
 
-            // _logger.LogInformation("GetActiveAuctions returned {Count} auction(s).", auctions.Count);
-
-            // System.Diagnostics.Debug.Assert(auctions.All(a => a.Status == "Active"));
-
             return Ok(new
             {
                 status = 200,
@@ -212,7 +204,6 @@ namespace ProductAuction.API.Controllers
         [HttpGet("upcoming")]
         public async Task<IActionResult> GetUpcomingAuctions()
         {
-            // _logger.LogInformation("GetUpcomingAuctions called.");
 
             var auctions = await _context.Auctions
                 .Where(a => a.Status == "Upcoming" && a.StartTime.HasValue)
@@ -237,10 +228,6 @@ namespace ProductAuction.API.Controllers
                 })
                 .ToListAsync();
 
-            // _logger.LogInformation("GetUpcomingAuctions returned {Count} auction(s).", auctions.Count);
-
-            // System.Diagnostics.Debug.Assert(auctions.All(a => a.Status == "Upcoming"));
-
             return Ok(new
             {
                 status = 200,
@@ -255,7 +242,6 @@ namespace ProductAuction.API.Controllers
         [HttpGet("{id}")]
         public async Task<IActionResult> GetAuctionById(int id)
         {
-            // _logger.LogInformation("GetAuctionById called for auction #{AuctionId}.", id);
 
             var auction = await _context.Auctions
                 .Where(a => a.Id == id)
@@ -298,7 +284,6 @@ namespace ProductAuction.API.Controllers
 
             if (auction == null)
             {
-                // _logger.LogWarning("GetAuctionById: auction #{AuctionId} not found.", id);
 
                 return NotFound(new
                 {
@@ -379,7 +364,6 @@ namespace ProductAuction.API.Controllers
 
             if (auction == null)
             {
-                // _logger.LogWarning("GetAuctionByIdForSeller: auction #{AuctionId} not found for seller {UserId}.", id, userId);
 
                 return NotFound(new
                 {
@@ -459,8 +443,6 @@ namespace ProductAuction.API.Controllers
             await _context.SaveChangesAsync();
 
             // _logger.LogInformation("ConfigureAuction: auction #{AuctionId} scheduled successfully.", id);
-
-            // System.Diagnostics.Debug.Assert(auction.StartTime == dto.StartTime && auction.EndTime == dto.EndTime);
 
             return Ok(new
             {
@@ -603,7 +585,6 @@ namespace ProductAuction.API.Controllers
                 if (isSeller)
                 {
                     // seller cancelling = deposit is forfeited to the platform.
-                    // ReservedBalance is only a hold
                     if (sellerWallet.Balance < reservation.Amount)
                     {
                         // _logger.LogWarning("CancelAuction: seller wallet #{WalletId} balance insufficient to forfeit deposit.", sellerWallet.Id);
@@ -731,9 +712,6 @@ namespace ProductAuction.API.Controllers
 
             await _context.SaveChangesAsync();
             await transaction.CommitAsync();
-
-            // System.Diagnostics.Debug.Assert(auction.Status == "Cancelled");
-            // System.Diagnostics.Debug.Assert(!string.IsNullOrWhiteSpace(auction.CancellationReason));
 
             // _logger.LogInformation("CancelAuction: auction #{AuctionId} cancelled successfully (bySeller={IsSeller}).", auction.Id, isSeller);
 

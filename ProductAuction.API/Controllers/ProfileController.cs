@@ -83,10 +83,6 @@ namespace ProductAuction.API.Controllers
 
             await _context.SaveChangesAsync();
 
-
-            // System.Diagnostics.Debug.Assert(profile.VerificationStatus == "PendingReview");
-            // System.Diagnostics.Debug.Assert(profile.VerifiedBy == null && profile.VerifiedAt == null);
-
             // _logger.LogInformation("SubmitVerification: profile #{ProfileId} for user {UserId} submitted for review.", profile.Id, userId);
 
             return Ok(new
@@ -120,8 +116,6 @@ namespace ProductAuction.API.Controllers
                     FullName = p.FullName,
                     City = p.City,
                     Address = p.Address,
-
-                    // phone number comes from the Identity users table
                     PhoneNumber = _context.Users
                         .Where(u => u.Id == p.UserId)
                         .Select(u => u.PhoneNumber)
@@ -144,9 +138,6 @@ namespace ProductAuction.API.Controllers
                     CreatedAt = p.CreatedAt
                 })
                 .ToListAsync();
-
-
-            // System.Diagnostics.Debug.Assert(profiles.All(p => p.VerificationStatus == "PendingReview"));
 
             // _logger.LogInformation("GetPendingVerificationProfiles returned {Count} profile(s).", profiles.Count);
 
@@ -219,11 +210,6 @@ namespace ProductAuction.API.Controllers
             profile.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
-
-
-            // System.Diagnostics.Debug.Assert(profile.VerificationStatus == dto.Status);
-            // System.Diagnostics.Debug.Assert(profile.VerifiedBy == adminId);
-            // System.Diagnostics.Debug.Assert(dto.Status == "Rejected" || profile.RejectionReason == null);
 
             // _logger.LogInformation("VerifyProfile: profile #{ProfileId} marked '{Status}' by admin {AdminId}.",
             //     id, dto.Status, adminId);

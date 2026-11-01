@@ -41,8 +41,6 @@ namespace ProductAuction.API.Data.Seeder
                     }
 
                     // logger.LogInformation("Role '{Role}' created.", role);
-
-                    // System.Diagnostics.Debug.Assert(await roleManager.RoleExistsAsync(role));
                 }
                 // else
                 // {

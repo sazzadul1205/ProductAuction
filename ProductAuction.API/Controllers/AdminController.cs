@@ -17,9 +17,6 @@ namespace ProductAuction.API.Controllers
     {
         private readonly UserManager<IdentityUser> _userManager;
         private readonly AppDbContext _context;
-
-        // Logger wired through DI. Log calls are intentionally commented out
-        // so the controller stays quiet in the current build (kept for future use).
         private readonly ILogger<AdminController> _logger;
 
         public AdminController(
@@ -279,7 +276,6 @@ namespace ProductAuction.API.Controllers
                     };
                 }
 
-                // build the wallet part of the response
                 object? walletData = null;
 
                 // If Wallet found built it or else no need
@@ -759,10 +755,6 @@ namespace ProductAuction.API.Controllers
                 // _logger.LogInformation("ReviewDepositRequest: request #{RequestId} approved; wallet #{WalletId} credited {Amount}.",
                 //     id, wallet.Id, depositRequest.Amount);
             }
-            else
-            {
-                // _logger.LogInformation("ReviewDepositRequest: request #{RequestId} rejected.", id);
-            }
 
             await _context.SaveChangesAsync();
 
@@ -851,7 +843,6 @@ namespace ProductAuction.API.Controllers
             // Global stats.
 
             // Total volume = sum of Credit + Debit across ALL transactions.
-            // the (decimal?) cast makes Sum null-safe; ?? 0 turns an empty table into 0.
             var totalVolume = await _context.WalletTransactions
                 .Where(t => t.Type == "Credit" || t.Type == "Debit")
                 .SumAsync(t => (decimal?)t.Amount) ?? 0;

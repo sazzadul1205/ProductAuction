@@ -122,12 +122,6 @@ namespace ProductAuction.API.Data.Seeder
 
                 // Save profile and wallet changes to the database.
                 await context.SaveChangesAsync();
-
-                // System.Diagnostics.Debug.Assert(await context.UserProfiles.AnyAsync(p => p.UserId == adminUser.Id));
-                // System.Diagnostics.Debug.Assert(await context.Wallets.AnyAsync(w => w.UserId == adminUser.Id));
-                // System.Diagnostics.Debug.Assert(await userManager.IsInRoleAsync(adminUser, "Admin"));
-
-                // Commit the transaction only after everything succeeds.
                 await transaction.CommitAsync();
 
                 // logger.LogInformation("AdminAccountSeeder completed successfully for {Email}.", email);

@@ -33,9 +33,6 @@ namespace ProductAuction.API.Controllers
 
             // _logger.LogInformation("GetCategories returned {Count} category(ies).", categories.Count);
 
-
-            // System.Diagnostics.Debug.Assert(categories.All(c => c.Id > 0));
-
             return Ok(new
             {
                 status = 200,
@@ -89,9 +86,6 @@ namespace ProductAuction.API.Controllers
 
             _context.Categories.Add(category);
             await _context.SaveChangesAsync();
-
-
-            // System.Diagnostics.Debug.Assert(category.Id > 0);
 
             // _logger.LogInformation("CreateCategory: category #{CategoryId} '{Name}' created.", category.Id, category.Name);
 

@@ -54,7 +54,6 @@ namespace ProductAuction.API.Controllers
             if (wallet == null)
             {
 
-
                 return NotFound(new
                 {
                     status = 404,
@@ -62,7 +61,6 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // only send what the user actually needs
             var response = new WalletResponseDto
             {
                 Id = wallet.Id,
@@ -132,10 +130,6 @@ namespace ProductAuction.API.Controllers
 
             _context.DepositRequests.Add(depositRequest);
             await _context.SaveChangesAsync();
-
-
-            // System.Diagnostics.Debug.Assert(depositRequest.Id > 0);
-            // System.Diagnostics.Debug.Assert(depositRequest.Status == "PendingVerification");
 
             // _logger.LogInformation("CreateDepositRequest: deposit request #{DepositRequestId} created for wallet #{WalletId}.",
             //     depositRequest.Id, wallet.Id);
@@ -246,9 +240,6 @@ namespace ProductAuction.API.Controllers
                 })
                 .ToListAsync();
 
-
-            // System.Diagnostics.Debug.Assert(requests.Count <= pageSize);
-
             // _logger.LogInformation("GetMyDepositRequests returned {Count} of {Total} request(s) for user {UserId}.",
             //     requests.Count, totalCount, userId);
 
@@ -326,7 +317,7 @@ namespace ProductAuction.API.Controllers
                 txQuery = txQuery.Where(t => t.Type == filter);
             }
 
-            // apply search filter — matches reference or transaction type
+            // apply search filte
             if (!string.IsNullOrWhiteSpace(search))
             {
                 var term = search.Trim();
@@ -353,9 +344,6 @@ namespace ProductAuction.API.Controllers
                     CreatedAt = t.CreatedAt
                 })
                 .ToListAsync();
-
-
-            // System.Diagnostics.Debug.Assert(transactions.Count <= pageSize);
 
             // _logger.LogInformation("GetMyTransactions returned {Count} of {Total} transaction(s) for user {UserId}.",
             //     transactions.Count, totalCount, userId);
@@ -434,7 +422,7 @@ namespace ProductAuction.API.Controllers
                 reservationsQuery = reservationsQuery.Where(r => r.Status == filter);
             }
 
-            // apply search filter — matches reservation type or product title
+            // apply search filter
             if (!string.IsNullOrWhiteSpace(search))
             {
                 var term = search.Trim();
@@ -474,9 +462,6 @@ namespace ProductAuction.API.Controllers
                     r.Status
                 })
                 .ToListAsync();
-
-
-            // System.Diagnostics.Debug.Assert(reservations.Count <= pageSize);
 
             // _logger.LogInformation("GetMyReservations returned {Count} of {Total} reservation(s) for user {UserId}.",
             //     reservations.Count, totalCount, userId);

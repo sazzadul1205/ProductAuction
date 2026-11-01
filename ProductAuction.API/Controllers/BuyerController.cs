@@ -75,10 +75,6 @@ namespace ProductAuction.API.Controllers
             var availableBalance = wallet != null ? (wallet.Balance - wallet.ReservedBalance) : 0;
             var reservedBalance = wallet?.ReservedBalance ?? 0;
 
-
-            // System.Diagnostics.Debug.Assert(activeBids >= leadingBids);
-            // System.Diagnostics.Debug.Assert(wonCount == sales.Count);
-
             // _logger.LogInformation("GetDashboard for {UserId}: activeBids={ActiveBids}, leadingBids={LeadingBids}, wonCount={WonCount}, totalSpent={TotalSpent}.",
             //     userId, activeBids, leadingBids, wonCount, totalSpent);
 
@@ -212,10 +208,6 @@ namespace ProductAuction.API.Controllers
                 })
                 .ToListAsync();
 
-
-            // System.Diagnostics.Debug.Assert(bids.Count <= pageSize);
-            // System.Diagnostics.Debug.Assert(highestBidsCount <= totalBidsCount);
-
             // _logger.LogInformation("GetMyBids returned {Count} of {Total} bid(s) for {BuyerId} (totalBids={TotalBids}, active={Active}, highest={Highest}).",
             //     bids.Count, totalCount, buyerId, totalBidsCount, activeBidsCount, highestBidsCount);
 
@@ -324,9 +316,6 @@ namespace ProductAuction.API.Controllers
                         .FirstOrDefault()
                 })
                 .ToListAsync();
-
-
-            // System.Diagnostics.Debug.Assert(auctions.All(a => a.auctionId > 0));
 
             // _logger.LogInformation("GetWonAuctions returned {Count} won auction(s) for {BuyerId}.", auctions.Count, buyerId);
 

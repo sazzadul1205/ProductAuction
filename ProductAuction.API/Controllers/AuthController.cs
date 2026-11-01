@@ -45,7 +45,6 @@ namespace ProductAuction.API.Controllers
         [HttpPost("register")]
         public async Task<IActionResult> Register(RegisterDto dto)
         {
-            // _logger.LogInformation("Register called for {Email} (role={Role}).", dto.Email, dto.Role);
 
             // check if this email is already taken
             var existingUser = await _userManager.FindByEmailAsync(dto.Email);
@@ -133,11 +132,6 @@ namespace ProductAuction.API.Controllers
 
             await _context.SaveChangesAsync();
 
-
-            // System.Diagnostics.Debug.Assert(await _context.UserProfiles.AnyAsync(p => p.UserId == user.Id));
-            // System.Diagnostics.Debug.Assert(await _context.Wallets.AnyAsync(w => w.UserId == user.Id));
-            // System.Diagnostics.Debug.Assert(await _userManager.IsInRoleAsync(user, dto.Role));
-
             // _logger.LogInformation("Register: account {Email} created with role {Role}.", dto.Email, dto.Role);
 
             return Ok(new
@@ -156,15 +150,12 @@ namespace ProductAuction.API.Controllers
         [EnableRateLimiting("login")]
         public async Task<IActionResult> Login(LoginDto dto)
         {
-            // _logger.LogInformation("Login attempt for {Email}.", dto.Email);
-
             // find the account by email
             var user = await _userManager.FindByEmailAsync(dto.Email);
 
             // don't reveal whether the email or password was wrong
             if (user == null)
             {
-                // _logger.LogWarning("Login failed: no account for {Email}.", dto.Email);
 
                 return Unauthorized(new
                 {
@@ -176,7 +167,6 @@ namespace ProductAuction.API.Controllers
             // locked accounts can't log in even with the right password
             if (await _userManager.IsLockedOutAsync(user))
             {
-                // _logger.LogWarning("Login blocked: account {Email} is locked out.", dto.Email);
 
                 return Unauthorized(new
                 {
@@ -190,7 +180,6 @@ namespace ProductAuction.API.Controllers
 
             if (!passwordIsValid)
             {
-                // _logger.LogWarning("Login failed: invalid password for {Email}.", dto.Email);
 
                 return Unauthorized(new
                 {
@@ -231,9 +220,6 @@ namespace ProductAuction.API.Controllers
             // turn it into a string for the client
             var tokenString = new JwtSecurityTokenHandler().WriteToken(token);
 
-            // System.Diagnostics.Debug.Assert(!string.IsNullOrWhiteSpace(tokenString));
-            // System.Diagnostics.Debug.Assert(claims.Any(c => c.Type == ClaimTypes.NameIdentifier && c.Value == user.Id));
-
             // _logger.LogInformation("Login successful for {Email} (roles: {Roles}).", dto.Email, string.Join(",", roles));
 
             return Ok(new
@@ -253,8 +239,6 @@ namespace ProductAuction.API.Controllers
         [HttpGet("test-token")]
         public IActionResult TestToken()
         {
-            // _logger.LogInformation("TestToken called by user {UserId}.", User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
-
             return Ok(new
             {
                 status = 200,
@@ -277,7 +261,6 @@ namespace ProductAuction.API.Controllers
 
             if (string.IsNullOrEmpty(userId))
             {
-                // _logger.LogWarning("Me: user identity missing from token.");
 
                 return Unauthorized(new
                 {
@@ -293,8 +276,6 @@ namespace ProductAuction.API.Controllers
 
             if (user == null)
             {
-                // _logger.LogWarning("Me: account {UserId} not found.", userId);
-
                 return Unauthorized(new
                 {
                     status = 401,
@@ -307,8 +288,6 @@ namespace ProductAuction.API.Controllers
 
             // get all roles for this account
             var roles = await _userManager.GetRolesAsync(user);
-
-            // System.Diagnostics.Debug.Assert(roles.Any());
 
             return Ok(new
             {
@@ -418,9 +397,6 @@ namespace ProductAuction.API.Controllers
             }
 
             await _context.SaveChangesAsync();
-
-            // System.Diagnostics.Debug.Assert(profile.UpdatedAt != null);
-            // System.Diagnostics.Debug.Assert(profile.FullName == dto.FullName);
 
             // _logger.LogInformation("UpdateMe: profile for user {UserId} updated successfully.", userId);
 

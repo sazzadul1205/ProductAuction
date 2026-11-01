@@ -252,9 +252,6 @@ namespace ProductAuction.API.Controllers
 
             await _context.SaveChangesAsync();
 
-            // System.Diagnostics.Debug.Assert(auction.CurrentHighestBid == dto.Amount);
-            // System.Diagnostics.Debug.Assert(auction.CurrentHighestBidderId == userId);
-
             // _logger.LogInformation("PlaceBid: bid #{BidId} of {Amount} placed by user {UserId} on auction #{AuctionId}.",
             //     bid.Id, bid.Amount, userId, auction.Id);
 
@@ -667,10 +664,6 @@ namespace ProductAuction.API.Controllers
             await _context.SaveChangesAsync();
 
             await transaction.CommitAsync();
-
-            // System.Diagnostics.Debug.Assert(auction.Status == "Completed" && auction.Result == "Sold");
-            // System.Diagnostics.Debug.Assert(auction.WinnerId == userId);
-            // System.Diagnostics.Debug.Assert(product.Status == "Unavailable");
 
             // _logger.LogInformation("Buyout: auction #{AuctionId} sold to user {UserId} for {Amount}.",
             //     auction.Id, userId, product.BuyoutPrice);

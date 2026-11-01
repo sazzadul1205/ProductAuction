@@ -107,9 +107,6 @@ namespace ProductAuction.API.Controllers
                         .FirstOrDefault()
                 }).ToListAsync();
 
-
-            // System.Diagnostics.Debug.Assert(products.All(p => p.Id > 0));
-
             // _logger.LogInformation("GetMyProducts returned {Count} product(s) for seller {SellerId}.", products.Count, userId);
 
             return Ok(new
@@ -293,12 +290,6 @@ namespace ProductAuction.API.Controllers
                 await _context.SaveChangesAsync();
             }
 
-
-            // System.Diagnostics.Debug.Assert(product.Id > 0);
-            // System.Diagnostics.Debug.Assert(product.ApprovalStatus == "Draft");
-            // System.Diagnostics.Debug.Assert(dto.Images == null || dto.Images.Count == 0
-            //     || await _context.ProductImages.CountAsync(i => i.ProductId == product.Id) == dto.Images.Count);
-
             // _logger.LogInformation("CreateProduct: draft product #{ProductId} created for seller {SellerId}.", product.Id, userId);
 
             return Ok(new
@@ -453,8 +444,6 @@ namespace ProductAuction.API.Controllers
                     {
                         ProductId = product.Id,
                         ImageUrl = imageUrl,
-
-                        // new uploads aren't main by default
                         IsMain = false
                     };
 
@@ -466,7 +455,7 @@ namespace ProductAuction.API.Controllers
                 //     dto.NewImages.Count, id);
             }
 
-            // if the client explicitly chose a main image, promote it
+            // if the client explicitly chose a main image
             if (dto.MainImageId.HasValue)
             {
                 var chosen = images.FirstOrDefault(i => i.Id == dto.MainImageId.Value);
@@ -483,7 +472,7 @@ namespace ProductAuction.API.Controllers
                     });
                 }
 
-                // clear all mains, then set the chosen one
+                // clear all mains
                 foreach (var img in images)
                 {
                     img.IsMain = false;
@@ -508,9 +497,6 @@ namespace ProductAuction.API.Controllers
             }
 
             await _context.SaveChangesAsync();
-
-
-            // System.Diagnostics.Debug.Assert(images.Count == 0 || images.Any(i => i.IsMain));
 
             // _logger.LogInformation("UpdateProduct: product #{ProductId} updated by seller {SellerId}.", id, userId);
 
@@ -627,14 +613,9 @@ namespace ProductAuction.API.Controllers
 
             _context.WalletReservations.Add(reservation);
 
-            // send it to the admin review queue
             product.ApprovalStatus = "PendingApproval";
 
             await _context.SaveChangesAsync();
-
-
-            // System.Diagnostics.Debug.Assert(wallet.ReservedBalance >= reservationAmount);
-            // System.Diagnostics.Debug.Assert(product.ApprovalStatus == "PendingApproval");
 
             // _logger.LogInformation("SubmitForApproval: product #{ProductId} submitted with {Deposit} reserved.",
             //     id, reservationAmount);
@@ -726,7 +707,7 @@ namespace ProductAuction.API.Controllers
                     });
                 }
 
-                // sanity check before releasing
+                // check before releasing
                 if (wallet.ReservedBalance < reservation.Amount)
                 {
                     // _logger.LogError("WithdrawSubmission: wallet #{WalletId} reserved balance inconsistent ({Reserved} < {Amount}).",
@@ -749,11 +730,6 @@ namespace ProductAuction.API.Controllers
 
             await _context.SaveChangesAsync();
 
-
-            // System.Diagnostics.Debug.Assert(product.ApprovalStatus == "Draft");
-            // System.Diagnostics.Debug.Assert(!await _context.WalletReservations.AnyAsync(r =>
-            //     r.ProductId == id && r.Type == "SellerDeposit" && r.Status == "Reserved"));
-
             // _logger.LogInformation("WithdrawSubmission: product #{ProductId} withdrawn back to Draft.", id);
 
             return Ok(new
@@ -765,7 +741,7 @@ namespace ProductAuction.API.Controllers
 
 
         // DELETE: api/product/{id}
-        // Deletes a draft or rejected product (no reservation to release).
+        // Deletes a draft or rejected product
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteProduct(int id)
         {
@@ -825,14 +801,12 @@ namespace ProductAuction.API.Controllers
                 .Where(i => i.ProductId == product.Id)
                 .ToListAsync();
 
-            // remove the DB records first
             _context.ProductImages.RemoveRange(images);
             _context.Products.Remove(product);
 
             await _context.SaveChangesAsync();
 
             // only delete files from storage after the DB commit succeeds.
-            // if the commit fails, files are preserved and can be retried.
             foreach (var image in images)
             {
                 await _imageUploadService.DeleteImageAsync(image.ImageUrl);
@@ -840,8 +814,6 @@ namespace ProductAuction.API.Controllers
                 // _logger.LogDebug("DeleteProduct: image #{ImageId} removed from storage for product #{ProductId}.", image.Id, id);
             }
 
-
-            // System.Diagnostics.Debug.Assert(!await _context.Products.AnyAsync(p => p.Id == id));
 
             // _logger.LogInformation("DeleteProduct: product #{ProductId} and {ImageCount} image(s) deleted.", id, images.Count);
 
@@ -888,9 +860,6 @@ namespace ProductAuction.API.Controllers
 
             // _logger.LogInformation("GetPendingApprovalProducts returned {Count} product(s).", products.Count);
 
-
-            // System.Diagnostics.Debug.Assert(products.All(p => p.ApprovalStatus == "PendingApproval"));
-
             return Ok(new
             {
                 status = 200,
@@ -931,8 +900,6 @@ namespace ProductAuction.API.Controllers
                     ApprovalStatus = p.ApprovalStatus,
                     RejectionReason = p.RejectionReason,
                     CreatedAt = p.CreatedAt,
-
-                    // all images for this product
                     Images = _context.ProductImages
                         .Where(i => i.ProductId == p.Id)
                         .Select(i => new ProductImageResponseDto
@@ -1117,7 +1084,7 @@ namespace ProductAuction.API.Controllers
             }
             else
             {
-                // approved — reservation stays in place, and we spin up an auction
+                // approved 
                 product.RejectionReason = null;
                 product.Status = "Available";
 
@@ -1141,11 +1108,6 @@ namespace ProductAuction.API.Controllers
             }
 
             await _context.SaveChangesAsync();
-
-
-            // System.Diagnostics.Debug.Assert(product.ApprovalStatus == dto.Status);
-            // System.Diagnostics.Debug.Assert(dto.Status != "Approved"
-            //     || await _context.Auctions.AnyAsync(a => a.ProductId == product.Id));
 
             // _logger.LogInformation("ReviewProduct: product #{ProductId} reviewed with decision '{Status}'.", id, dto.Status);
 

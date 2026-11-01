@@ -181,10 +181,6 @@ namespace ProductAuction.API.Controllers
                 })
                 .ToListAsync();
 
-
-            // System.Diagnostics.Debug.Assert(sales.Count <= pageSize);
-            // System.Diagnostics.Debug.Assert(totalSalesCount >= totalCount);
-
             // _logger.LogInformation("GetSales returned {Count} of {Total} sale(s) (totalSales={TotalSales}, awaitingPayment={Awaiting}, activeDeliveries={Active}, completed={Completed}).",
             //     sales.Count, totalCount, totalSalesCount, awaitingPaymentCount, activeDeliveriesCount, completedCount);
 
@@ -366,10 +362,6 @@ namespace ProductAuction.API.Controllers
                         .FirstOrDefault()
                 })
                 .ToListAsync();
-
-
-            // System.Diagnostics.Debug.Assert(sales.Count <= pageSize);
-            // System.Diagnostics.Debug.Assert(sales.All(s => s.BuyerId == userId || s.SellerId == userId));
 
             // _logger.LogInformation("GetMySales returned {Count} of {Total} sale(s) for {UserId} (awaitingDispatch={Awaiting}, revenue={Revenue}).",
             //     sales.Count, totalCount, userId, awaitingDispatchCount, totalRevenue);
@@ -577,10 +569,6 @@ namespace ProductAuction.API.Controllers
             await _context.SaveChangesAsync();
             await transaction.CommitAsync();
 
-
-            // System.Diagnostics.Debug.Assert(sale.Status == "Paid");
-            // System.Diagnostics.Debug.Assert(wallet.Balance == newBalance && wallet.ReservedBalance == newReservedBalance);
-
             // _logger.LogInformation("PayForSale: sale #{SaleId} paid ({Amount}); escrow created; seller notified at {NotifiedAt}.",
             //     id, sale.FinalAmount, now);
 
@@ -739,10 +727,6 @@ namespace ProductAuction.API.Controllers
 
             await _context.SaveChangesAsync();
 
-
-            // System.Diagnostics.Debug.Assert(sale.Status == "Dispatched");
-            // System.Diagnostics.Debug.Assert(delivery.DispatchedAt.HasValue);
-
             // _logger.LogInformation("DispatchSale: sale #{SaleId} dispatched (info='{Info}', evidenceUrl='{Evidence}').",
             //     id, delivery.DispatchInfo, delivery.TrackingEvidence);
 
@@ -863,10 +847,6 @@ namespace ProductAuction.API.Controllers
             sale.Status = "Disputed";
 
             await _context.SaveChangesAsync();
-
-
-            // System.Diagnostics.Debug.Assert(sale.Status == "Disputed");
-            // System.Diagnostics.Debug.Assert(delivery.Status == "NonDeliveryReported");
 
             // _logger.LogInformation("ReportNonDelivery: sale #{SaleId} reported for non-delivery; awaiting admin review.", id);
 
@@ -1085,7 +1065,7 @@ namespace ProductAuction.API.Controllers
                 CreatedAt = now
             });
 
-            // release the seller's deposit (if one exists)
+            // release the seller's deposit
             var sellerDeposit = await _context.WalletReservations
                 .FirstOrDefaultAsync(r =>
                     r.ProductId == sale.ProductId &&
@@ -1095,9 +1075,7 @@ namespace ProductAuction.API.Controllers
 
             if (sellerDeposit != null)
             {
-                // if the reserved balance is somehow out of sync, clamp to 0
-                // (can happen if an admin manually adjusted balances).
-                // the seller deposit is non-critical here, so we recover gracefully.
+                // if the reserved balance is somehow out of sync, return to 0
                 if (sellerWallet.ReservedBalance < sellerDeposit.Amount)
                 {
                     sellerWallet.ReservedBalance = 0;
@@ -1125,9 +1103,6 @@ namespace ProductAuction.API.Controllers
             }
 
             // release every buyer's eligibility reservation for this auction.
-            // NOTE: unlike the seller deposit above, we hard-fail here on mismatch.
-            // Buyer reservations must be exact — a shortfall means data corruption
-            // and silently clamping would hide the bug.
             var buyerReservations = await _context.WalletReservations
                 .Where(r =>
                     r.AuctionId == sale.AuctionId &&
@@ -1166,8 +1141,6 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // wrap it up — this is the terminal state; the status check at the top
-            // means a second call here will be rejected
             escrow.Status = "Released";
             delivery.Status = "ReceiptConfirmed";
             delivery.ReceiptConfirmedAt = now;
@@ -1177,12 +1150,6 @@ namespace ProductAuction.API.Controllers
 
             await _context.SaveChangesAsync();
             await transaction.CommitAsync();
-
-
-            // System.Diagnostics.Debug.Assert(sale.Status == "Completed");
-            // System.Diagnostics.Debug.Assert(delivery.Status == "ReceiptConfirmed");
-            // System.Diagnostics.Debug.Assert(escrow.Status == "Released");
-            // System.Diagnostics.Debug.Assert(sellerWallet.Balance >= sellerProceeds);
 
             // _logger.LogInformation("ConfirmReceipt: sale #{SaleId} completed; seller paid {SellerProceeds}, platform {Commission}.",
             //     id, sellerProceeds, commission);

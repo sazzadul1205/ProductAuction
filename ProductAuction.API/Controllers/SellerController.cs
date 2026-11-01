@@ -32,15 +32,10 @@ namespace ProductAuction.API.Controllers
 
             if (string.IsNullOrEmpty(userId))
             {
-                // _logger.LogWarning("GetDashboard: user identity missing from token.");
 
                 return Unauthorized();
             }
 
-            // _logger.LogInformation("GetDashboard called by seller {SellerId}.", userId);
-
-            //  product stats
-            // pull all products listed by this seller
             var products = await _context.Products
                 .Where(p => p.SellerId == userId)
                 .ToListAsync();
@@ -51,38 +46,24 @@ namespace ProductAuction.API.Controllers
             var rejected = products.Count(p => p.ApprovalStatus == "Rejected");
 
             // auction stats
-            // count the seller's currently live auctions
             var activeAuctions = await _context.Auctions
                 .CountAsync(a => a.SellerId == userId && a.Status == "Active");
 
             // sales & earnings
-            // pull all sales for this seller
             var sales = await _context.Sales
                 .Where(s => s.SellerId == userId)
                 .ToListAsync();
 
             var soldCount = sales.Count(s => s.Status == "Completed");
             var awaitingDispatch = sales.Count(s => s.Status == "Paid");
-
-            // only completed sales count toward earnings
             var totalEarnings = sales
                 .Where(s => s.Status == "Completed")
                 .Sum(s => s.SellerProceeds);
 
             // wallet stats
-            // what the seller can actually spend right now
-            var wallet = await _context.Wallets
-                .FirstOrDefaultAsync(w => w.UserId == userId);
+            var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == userId);
 
             var availableBalance = wallet != null ? (wallet.Balance - wallet.ReservedBalance) : 0;
-
-
-            // System.Diagnostics.Debug.Assert(totalProducts == pendingApproval + approved + rejected
-            //     || totalProducts >= pendingApproval + approved + rejected); // drafts also exist
-            // System.Diagnostics.Debug.Assert(soldCount <= sales.Count);
-
-            // _logger.LogInformation("GetDashboard for {SellerId}: products={Total}, activeAuctions={Active}, sold={Sold}, earnings={Earnings}, available={Available}.",
-            //     userId, totalProducts, activeAuctions, soldCount, totalEarnings, availableBalance);
 
             return Ok(new
             {

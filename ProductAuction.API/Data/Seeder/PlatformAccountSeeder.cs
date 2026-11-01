@@ -70,8 +70,6 @@ namespace ProductAuction.API.Data.Seeder
                 await context.SaveChangesAsync();
 
                 // logger.LogInformation("Platform wallet created for user {UserId}.", platformUser.Id);
-
-                // System.Diagnostics.Debug.Assert(await context.Wallets.AnyAsync(w => w.UserId == platformUser.Id));
             }
 
             // logger.LogInformation("PlatformAccountSeeder completed at {Time}.", DateTime.UtcNow);

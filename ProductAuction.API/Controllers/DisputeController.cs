@@ -76,7 +76,7 @@ namespace ProductAuction.API.Controllers
                 .Where(ur => allUserIds.Contains(ur.UserId))
                 .Join(_context.Roles, ur => ur.RoleId, r => r.Id, (ur, r) => new { ur.UserId, RoleName = r.Name })
                 .GroupBy(x => x.UserId)
-                .Select(g => new { UserId = g.Key, RoleName = g.First().RoleName })
+                .Select(g => new { UserId = g.Key, g.First().RoleName })
                 .ToDictionaryAsync(x => x.UserId, x => x.RoleName);
 
             // fetch penalties for these disputes
@@ -92,7 +92,7 @@ namespace ProductAuction.API.Controllers
                     p.AgainstUserId
                 });
 
-            // combine everything in memory
+            // combine everything
             var result = disputes.Select(d =>
             {
                 sales.TryGetValue(d.SaleId, out var sale);
@@ -132,9 +132,6 @@ namespace ProductAuction.API.Controllers
                     Penalty = penalty
                 };
             }).ToList();
-
-
-            // System.Diagnostics.Debug.Assert(result.Count == disputes.Count);
 
             // _logger.LogInformation("GetAllDisputes returned {Count} dispute(s).", result.Count);
 
@@ -190,7 +187,7 @@ namespace ProductAuction.API.Controllers
                 return Forbid();
             }
 
-            // can't dispute before payment — nothing has gone wrong yet
+            // can't dispute before payment
             if (sale.Status == "AwaitingPayment")
             {
                 // _logger.LogWarning("CreateDispute: sale #{SaleId} is still AwaitingPayment.", sale.Id);
@@ -242,7 +239,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // evidence is image-only — upload it if the user attached one
+            // evidence is image-only
             string? evidenceUrl = null;
 
             if (dto.EvidenceImage != null)
@@ -270,10 +267,6 @@ namespace ProductAuction.API.Controllers
             _context.Disputes.Add(dispute);
 
             await _context.SaveChangesAsync();
-
-
-            // System.Diagnostics.Debug.Assert(dispute.Id > 0);
-            // System.Diagnostics.Debug.Assert(sale.Status == "Disputed");
 
             // _logger.LogInformation("CreateDispute: dispute #{DisputeId} created for sale #{SaleId} by user {UserId}.",
             //     dispute.Id, sale.Id, userId);
@@ -342,7 +335,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // system fault can't get a penalty — nobody's fault
+            // system fault can't get a penalty 
             if (dto.FaultType == "System" && dto.ApplyPenalty)
             {
                 // _logger.LogWarning("ResolveDispute: system fault cannot be penalized for dispute #{DisputeId}.", id);
@@ -982,12 +975,6 @@ namespace ProductAuction.API.Controllers
 
             await _context.SaveChangesAsync();
             await transaction.CommitAsync();
-
-
-            // System.Diagnostics.Debug.Assert(dispute.Status == "Resolved");
-            // System.Diagnostics.Debug.Assert(sale.Status == "Refunded");
-            // System.Diagnostics.Debug.Assert(product.Status == "Unavailable");
-            // System.Diagnostics.Debug.Assert(!dto.ApplyPenalty || await _context.Penalties.AnyAsync(p => p.DisputeId == dispute.Id));
 
             // _logger.LogInformation("ResolveDispute: dispute #{DisputeId} resolved (fault={Fault}, penaltyApplied={Apply}).",
             //     id, dto.FaultType, dto.ApplyPenalty);
