@@ -352,7 +352,10 @@ namespace ProductAuction.API.Controllers
 
             //nupdate the UserProfile fields
             profile.FullName = dto.FullName;
-            profile.ProfilePhotoUrl = dto.ProfilePhotoUrl;
+            if (dto.ProfilePhotoUrl != null)
+            {
+                profile.ProfilePhotoUrl = dto.ProfilePhotoUrl;
+            }
             profile.Address = dto.Address;
             profile.City = dto.City;
             profile.NationalIdNumber = dto.NationalIdNumber;

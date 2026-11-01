@@ -11,6 +11,7 @@ namespace ProductAuction.API.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
+    [Authorize]
     public class ProductController : ControllerBase
     {
         private readonly AppDbContext _context;
@@ -215,6 +216,16 @@ namespace ProductAuction.API.Controllers
 
             // _logger.LogInformation("CreateProduct called by seller {SellerId} (title='{Title}', images={ImageCount}).",
             //     userId, dto.Title, dto.Images?.Count ?? 0);
+
+            // at least one image is required
+            if (dto.Images == null || dto.Images.Count == 0)
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "At least one product image is required."
+                });
+            }
 
             // buyout price has to be at least the starting price
             if (dto.BuyoutPrice < dto.StartingPrice)

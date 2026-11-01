@@ -1075,16 +1075,17 @@ namespace ProductAuction.API.Controllers
 
             if (sellerDeposit != null)
             {
-                // if the reserved balance is somehow out of sync, return to 0
                 if (sellerWallet.ReservedBalance < sellerDeposit.Amount)
                 {
-                    sellerWallet.ReservedBalance = 0;
+                    return BadRequest(new
+                    {
+                        status = 400,
+                        message = "Seller wallet reserved balance is inconsistent with the reserved deposit."
+                    });
                 }
-                else
-                {
-                    // un-reserve — money stays in balance, just spendable again
-                    sellerWallet.ReservedBalance -= sellerDeposit.Amount;
-                }
+
+                // un-reserve — money stays in balance, just spendable again
+                sellerWallet.ReservedBalance -= sellerDeposit.Amount;
 
                 sellerDeposit.Status = "Released";
 

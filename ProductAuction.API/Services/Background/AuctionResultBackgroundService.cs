@@ -29,40 +29,44 @@ namespace ProductAuction.API.Services.Background
             {
                 try
                 {
-                    // Create a scope because AppDbContext is scoped.
+                    // Current UTC time.
+                    var now = DateTime.UtcNow;
+
+                    // Find active auctions whose end time has passed.
+                    List<int> auctionIds;
                     using (var scope = _scopeFactory.CreateScope())
                     {
-                        // Get the database context.
                         var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
-                        // Current UTC time.
-                        var now = DateTime.UtcNow;
-
-                        // Find active auctions whose end time has passed.
-                        var auctions = await context.Auctions
+                        auctionIds = await context.Auctions
                             .Where(a =>
                                 a.Status == "Active" &&
                                 a.EndTime.HasValue &&
                                 a.EndTime.Value <= now)
+                            .Select(a => a.Id)
                             .ToListAsync(stoppingToken);
+                    }
 
-                        if (auctions.Count > 0)
+                    if (auctionIds.Count > 0)
+                    {
+                        _logger.LogInformation("Found {Count} ended auction(s) to process.", auctionIds.Count);
+                    }
+
+                    // Process each ended auction independently — one failure
+                    // must not block the others. Use a fresh scope/context per
+                    // auction so a rollback in one does not leak tracked state.
+                    foreach (var auctionId in auctionIds)
+                    {
+                        try
                         {
-                            _logger.LogInformation("Found {Count} ended auction(s) to process.", auctions.Count);
+                            using var scope = _scopeFactory.CreateScope();
+                            var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                            var auction = await context.Auctions.FindAsync(new object[] { auctionId }, stoppingToken);
+                            if (auction == null) continue;
+                            await ProcessAuctionAsync(context, auction, now, stoppingToken);
                         }
-
-                        // Process each ended auction independently — one failure
-                        // must not block the others.
-                        foreach (var auction in auctions)
+                        catch (Exception ex)
                         {
-                            try
-                            {
-                                await ProcessAuctionAsync(context, auction, now, stoppingToken);
-                            }
-                            catch (Exception ex)
-                            {
-                                _logger.LogError(ex, "Failed to process auction #{AuctionId}.", auction.Id);
-                            }
+                            _logger.LogError(ex, "Failed to process auction #{AuctionId}.", auctionId);
                         }
                     }
                 }
@@ -248,6 +252,13 @@ namespace ProductAuction.API.Services.Background
                 if (wallet == null)
                 {
                     _logger.LogWarning("Reservation #{ReservationId} skipped: wallet #{WalletId} not found.", reservation.Id, reservation.WalletId);
+                    continue;
+                }
+
+                // Guard against inconsistent reserved balance.
+                if (wallet.ReservedBalance < reservation.Amount)
+                {
+                    _logger.LogWarning("Reservation #{ReservationId} skipped: wallet #{WalletId} reserved balance inconsistent.", reservation.Id, reservation.WalletId);
                     continue;
                 }
 
