@@ -1,0 +1,11 @@
+~ Admin #1 ~
+: admin@gmail.com
+: Admin@123
+
+~ Buyer #1 ~
+: TestBuyer@gmail.com
+: @Test1205
+
+~ Seller #1 ~
+: TestSeller@gmail.com
+: @Test1205
