@@ -1,0 +1,267 @@
+# Bidora — Product Auction API
+
+A RESTful backend API for **Bidora**, an online auction platform where sellers list products, buyers place bids, and administrators manage auctions, payments, verification, and disputes.
+
+Built with **ASP.NET Core 10**, **Entity Framework Core**, **SQL Server**, and **JWT authentication**.
+
+## Features
+
+### Authentication and User Management
+
+- User registration and login using JWT authentication.
+- ASP.NET Core Identity integration.
+- Role-based authorization for Admin, Buyer, and Seller.
+- Profile management and password changes.
+- NID image submission and profile verification.
+- Login rate limiting.
+
+### Product and Category Management
+
+- Seller product creation and editing.
+- Product image uploads.
+- Product submission for admin approval.
+- Product availability and lifecycle management.
+- Category listing and administration.
+
+### Auction Management
+
+- Public auction listing and details.
+- Active and upcoming auction filtering.
+- Auction configuration and cancellation.
+- Seller-specific auction details.
+- Automatic auction status management.
+- Automatic auction result processing.
+
+### Bidding
+
+- Buyer bid placement.
+- Auction bid history.
+- Administrative bid-history access.
+- Buyout functionality.
+- Bid validation and wallet eligibility checks.
+
+### Wallet and Financial Management
+
+- User wallet information.
+- Deposit requests and administrative review.
+- Wallet transaction history.
+- Wallet reservation tracking.
+- Platform wallet management.
+- Balance validation during financial operations.
+
+### Sales and Delivery
+
+- Winning auction to sale workflow.
+- Buyer payment submission.
+- Seller dispatch and tracking information.
+- Buyer receipt confirmation.
+- Non-delivery reporting.
+- Overdue payment and dispatch monitoring.
+
+### Dispute Management
+
+- Dispute submission and review.
+- Evidence image uploads.
+- Administrative dispute resolution.
+- Penalty and wallet settlement handling.
+
+### Background Processing
+
+Hosted background services handle:
+
+- Auction activation.
+- Auction result processing.
+- Overdue payment monitoring.
+- Overdue dispatch monitoring.
+
+## Technology Stack
+
+| Technology                | Purpose                            |
+| ------------------------- | ---------------------------------- |
+| C#                        | Backend programming language       |
+| ASP.NET Core 10           | REST API framework                 |
+| Entity Framework Core 10  | ORM and database access            |
+| Microsoft SQL Server      | Relational database                |
+| ASP.NET Core Identity     | User and role management           |
+| JWT Bearer Authentication | API authentication                 |
+| Swashbuckle.AspNetCore    | OpenAPI/Swagger tooling dependency |
+| .NET Hosted Services      | Background processing              |
+
+## Project Structure
+
+```text
+ProductAuction/
+│
+├── ProductAuction.API/
+│   ├── Controllers/
+│   │   ├── AdminController.cs
+│   │   ├── AuctionController.cs
+│   │   ├── AuthController.cs
+│   │   ├── BidController.cs
+│   │   ├── BuyerController.cs
+│   │   ├── CategoryController.cs
+│   │   ├── DisputeController.cs
+│   │   ├── ProductController.cs
+│   │   ├── ProfileController.cs
+│   │   ├── SaleController.cs
+│   │   ├── SellerController.cs
+│   │   └── WalletController.cs
+│   │
+│   ├── DTOs/
+│   ├── Data/
+│   │   └── Seeder/
+│   ├── Migrations/
+│   ├── Models/
+│   ├── Services/
+│   │   └── Background/
+│   ├── wwwroot/
+│   ├── Program.cs
+│   ├── appsettings.json
+│   └── ProductAuction.API.csproj
+│
+├── Scripts/
+│   └── Test-Endpoints.ps1
+│
+├── ProductAuction.slnx
+└── WorkLog.md
+```
+
+## API Controller Overview
+
+All controllers use the `/api/[controller]` route convention.
+
+| Controller | Main responsibilities                                                                   |
+| ---------- | --------------------------------------------------------------------------------------- |
+| Auth       | Registration, login, current user, profile update, password change                      |
+| Admin      | Dashboard, user management, auction administration, deposits, disputes, platform wallet |
+| Auction    | Public auction listing, details, configuration, cancellation                            |
+| Product    | Seller product management and admin approval                                            |
+| Category   | Category listing and administration                                                     |
+| Bid        | Bid placement, bid history, buyout                                                      |
+| Buyer      | Buyer dashboard, bids, won auctions                                                     |
+| Seller     | Seller dashboard                                                                        |
+| Profile    | Verification submission and admin verification                                          |
+| Wallet     | Wallet details, deposit requests, transactions, reservations                            |
+| Sale       | Sales listing, payment, dispatch, receipt confirmation, non-delivery reports            |
+| Dispute    | Dispute listing, submission, and resolution                                             |
+
+## Getting Started
+
+### Prerequisites
+
+Install the following:
+
+- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
+- Microsoft SQL Server or SQL Server LocalDB
+- Visual Studio 2026 or another compatible .NET IDE
+- Git
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/sazzadul1205/ProductAuction.git
+cd ProductAuction
+```
+
+### 2. Configure Application Secrets
+
+Do not commit database credentials or JWT signing keys.
+
+Initialize User Secrets from the API project directory:
+
+```bash
+cd ProductAuction.API
+dotnet user-secrets init
+```
+
+Configure the database connection string and JWT settings:
+
+```bash
+dotnet user-secrets set "ConnectionStrings:DefaultConnection" "YOUR_SQL_SERVER_CONNECTION_STRING"
+
+dotnet user-secrets set "Jwt:Key" "YOUR_LONG_RANDOM_SECRET_KEY"
+
+dotnet user-secrets set "Jwt:Issuer" "ProductAuction.API"
+
+dotnet user-secrets set "Jwt:Audience" "ProductAuction.React"
+```
+
+Use a newly generated, sufficiently long random JWT signing key. Never reuse a key that has been exposed in a public repository.
+
+### 3. Restore Dependencies
+
+```bash
+dotnet restore
+```
+
+### 4. Apply Database Migrations
+
+```bash
+dotnet ef database update
+```
+
+If the EF Core CLI tool is not installed:
+
+```bash
+dotnet tool install --global dotnet-ef
+```
+
+### 5. Run the API
+
+```bash
+dotnet run
+```
+
+The application uses the configured ASP.NET Core launch profile and exposes its API according to the selected environment and launch settings.
+
+## Authentication
+
+Most protected endpoints require a JWT access token.
+
+Include the token in the request header:
+
+```http
+Authorization: Bearer YOUR_ACCESS_TOKEN
+```
+
+Access is restricted according to the authenticated user's role where role-based authorization is configured.
+
+## Database
+
+The API uses Entity Framework Core with SQL Server.
+
+Database-related code is organized into:
+
+- `Models/` — Entity models.
+- `Data/` — Application database context and seeders.
+- `Migrations/` — Entity Framework Core migration history.
+
+The application seeds default roles, an administrator account, and a platform account during startup. Configure the required environment settings securely before running the application.
+
+## Testing
+
+A PowerShell endpoint testing script is available:
+
+```text
+Scripts/Test-Endpoints.ps1
+```
+
+The backend work log records 48 passing smoke tests and a build with zero warnings and errors for the changes documented on 29 October 2026. These are historical recorded results, not a guarantee that the current checkout has been tested in every environment.
+
+## Development Notes
+
+- API endpoints are organized into separate controllers.
+- DTOs are grouped by feature.
+- JWT authentication and role-based authorization protect restricted operations.
+- Background services handle scheduled auction and overdue-work processing.
+- Uploaded images are served through the application's static-file configuration.
+
+## Repository
+
+**GitHub:** https://github.com/sazzadul1205/ProductAuction
+
+**Project:** Bidora — Product Auction System
+
+---
+
+_This README describes the backend implementation visible in the repository. Update it as the API, configuration, and business workflows evolve._
