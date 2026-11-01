@@ -29,7 +29,7 @@ namespace ProductAuction.API.Controllers
         [Authorize(Roles = "Buyer")]
         public async Task<IActionResult> PlaceBid(PlaceBidDto dto)
         {
-            // get the logged-in user's id
+            // get the logged-in users id
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             if (userId == null)
@@ -125,7 +125,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // bids at or above the buyout price should use the buyout endpoint instead
+            // bids must not be at or above the buyout price
             if (product.BuyoutPrice > 0 && dto.Amount >= product.BuyoutPrice)
             {
                 // _logger.LogWarning("PlaceBid: amount {Amount} >= buyout {Buyout} for auction #{AuctionId}.",
@@ -151,7 +151,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // subsequent bids need to clear the minimum increment
+            // next bids need to clear the minimum increment
             if (auction.CurrentHighestBid.HasValue)
             {
                 var highestBid = auction.CurrentHighestBid.Value;
@@ -245,7 +245,7 @@ namespace ProductAuction.API.Controllers
 
             _context.Bids.Add(bid);
 
-            // bump the auction's highest bid info
+            // the auction's highest bid info
             auction.CurrentHighestBid = dto.Amount;
             auction.CurrentHighestBidderId = userId;
             auction.BidCount++;
@@ -302,8 +302,6 @@ namespace ProductAuction.API.Controllers
                 .Select(b => new BidHistoryDto
                 {
                     BidderId = b.BidderId,
-
-                    // pull the bidder's name from their profile
                     BidderName = _context.UserProfiles
                         .Where(p => p.UserId == b.BidderId)
                         .Select(p => p.FullName)
@@ -438,7 +436,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // auction has to be active and not past its end time
+            // auction has to be active
             if (auction.Status != "Active")
             {
                 // _logger.LogWarning("Buyout: auction #{AuctionId} is not Active (status={Status}).",
@@ -515,8 +513,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // don't let the same auction be sold twice —
-            // a Sale row means the auction already produced a sale, so it's closed
+            // don't let the same auction be sold twice
             var existingSale = await _context.Sales.AnyAsync(s => s.AuctionId == auctionId);
 
             if (existingSale)
@@ -556,8 +553,6 @@ namespace ProductAuction.API.Controllers
                     r.Status == "Reserved");
 
             // first time participating? reserve 25% of the starting price.
-            // this is the same 25% "eligibility deposit" used everywhere in the system
-            // (bid, buyout, dispute penalty) — keep the number in sync if it ever changes.
             if (reservation == null)
             {
                 decimal requiredAmount = product.StartingPrice * 0.25m;
@@ -617,7 +612,6 @@ namespace ProductAuction.API.Controllers
             product.Status = "Unavailable";
 
             // platform takes 10%, seller gets the rest.
-            // this 10% is locked here — the Sale row is created now, so the split is fixed.
             decimal commissionAmount = Math.Round(product.BuyoutPrice * 0.10m, 2);
             decimal sellerProceeds = product.BuyoutPrice - commissionAmount;
 
@@ -650,8 +644,7 @@ namespace ProductAuction.API.Controllers
 
             foreach (var buyerReservation in reservations)
             {
-                // skip the winner — their funds stay locked because
-                // the 25% counts toward their payment obligation later
+                // skip the winner
                 if (buyerReservation.WalletId == wallet.Id)
                 {
                     continue;

@@ -80,7 +80,7 @@ namespace ProductAuction.API.Controllers
                 Email = dto.Email
             };
 
-            // create the account (Identity hashes the password for us)
+            // create the account
             var result = await _userManager.CreateAsync(user, dto.Password);
 
             if (!result.Succeeded)
@@ -371,14 +371,14 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // 1. update the UserProfile fields
+            //nupdate the UserProfile fields
             profile.FullName = dto.FullName;
             profile.ProfilePhotoUrl = dto.ProfilePhotoUrl;
             profile.Address = dto.Address;
             profile.City = dto.City;
             profile.NationalIdNumber = dto.NationalIdNumber;
 
-            // upload new NID images if any were sent
+            // upload new NID images
             if (dto.NationalIdFrontImage != null)
             {
                 profile.NationalIdFrontImageUrl = await _imageUploadService.UploadImageAsync(dto.NationalIdFrontImage);
@@ -395,7 +395,7 @@ namespace ProductAuction.API.Controllers
 
             profile.UpdatedAt = DateTime.UtcNow;
 
-            // 2. update the phone number on the Identity side
+            // update the phone number on the Identity
             if (!string.IsNullOrEmpty(dto.PhoneNumber))
             {
                 var user = await _userManager.FindByIdAsync(userId);

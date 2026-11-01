@@ -39,8 +39,6 @@ namespace ProductAuction.API.Controllers
 
             if (userId == null)
             {
-                // _logger.LogWarning("GetMyWallet: user identity missing from token.");
-
                 return Unauthorized(new
                 {
                     status = 401,
@@ -55,7 +53,7 @@ namespace ProductAuction.API.Controllers
 
             if (wallet == null)
             {
-                // _logger.LogWarning("GetMyWallet: wallet for user {UserId} not found.", userId);
+
 
                 return NotFound(new
                 {
@@ -189,16 +187,16 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Normalize the page number — never below 1
+            // Normalize the page number Set Search 
             var page = query.Page;
             if (page < 1) page = 1;
 
-            // Normalize the page size — default 20, hard cap at 100
+            // Normalize the page size 
             var pageSize = query.PageSize;
             if (pageSize < 1) pageSize = 20;
             if (pageSize > 100) pageSize = 100;
 
-            // Free-text search term (may be null or empty)
+            // Set Search 
             var search = query.Search;
 
             // Optional status filter
@@ -217,7 +215,7 @@ namespace ProductAuction.API.Controllers
                 requestsQuery = requestsQuery.Where(d => d.Status == filter);
             }
 
-            // apply search filter — matches method or transaction reference
+            // apply search filter 
             if (!string.IsNullOrWhiteSpace(search))
             {
                 var term = search.Trim();
@@ -300,16 +298,16 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Normalize the page number — never below 1
+            // Normalize the page number
             var page = query.Page;
             if (page < 1) page = 1;
 
-            // Normalize the page size — default 20, hard cap at 100
+            // Normalize the page size 
             var pageSize = query.PageSize;
             if (pageSize < 1) pageSize = 20;
             if (pageSize > 100) pageSize = 100;
 
-            // Free-text search term
+            // Set Search 
             var search = query.Search;
 
             // Optional type filter
@@ -408,16 +406,16 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Normalize the page number — never below 1
+            // Normalize the page number Set Search 
             var page = query.Page;
             if (page < 1) page = 1;
 
-            // Normalize the page size — default 20, hard cap at 100
+            // Normalize the page size 
             var pageSize = query.PageSize;
             if (pageSize < 1) pageSize = 20;
             if (pageSize > 100) pageSize = 100;
 
-            // Free-text search term (may be null or empty)
+            // Set Search 
             var search = query.Search;
 
             // Optional status filter

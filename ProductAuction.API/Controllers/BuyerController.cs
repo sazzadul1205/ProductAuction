@@ -118,16 +118,16 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Normalize the page number — never below 1
+            // Normalize the page number Set Search 
             var page = query.Page;
             if (page < 1) page = 1;
 
-            // Normalize the page size — default 20, hard cap at 100
+            // Normalize the page size 
             var pageSize = query.PageSize;
             if (pageSize < 1) pageSize = 20;
             if (pageSize > 100) pageSize = 100;
 
-            // Free-text search term
+            // Set Search 
             var search = query.Search;
 
             // Optional auction-status filter: Active / Ended
@@ -158,7 +158,7 @@ namespace ProductAuction.API.Controllers
                 }
             }
 
-            // apply search filter — matches product title
+            // apply search filter 
             if (!string.IsNullOrWhiteSpace(search))
             {
                 var term = search.Trim();
@@ -177,7 +177,7 @@ namespace ProductAuction.API.Controllers
 
             var totalCount = await bidsQuery.CountAsync();
 
-            // Global counts across ALL of this buyer's bids (ignores status/search filters).
+            // Global counts across ALL of this buyer's bids 
             var totalBidsCount = await _context.Bids.CountAsync(b =>
                 b.BidderId == buyerId);
             var activeBidsCount = await _context.Bids.CountAsync(b =>
@@ -278,7 +278,7 @@ namespace ProductAuction.API.Controllers
                     startTime = a.StartTime,
                     endTime = a.EndTime,
 
-                    // sale record for this auction + buyer (may not exist yet)
+                    // sale record for this auction + buyer
                     saleId = _context.Sales
                         .Where(s => s.AuctionId == a.Id && s.BuyerId == buyerId)
                         .Select(s => (int?)s.Id)
@@ -289,7 +289,7 @@ namespace ProductAuction.API.Controllers
                         .Select(s => s.Status)
                         .FirstOrDefault() ?? "AwaitingPayment",
 
-                    // delivery info — only exists after the seller dispatches
+                    // delivery info
                     dispatchInfo = _context.DeliveryRecords
                         .Where(d => d.SaleId == _context.Sales
                             .Where(s => s.AuctionId == a.Id && s.BuyerId == buyerId)

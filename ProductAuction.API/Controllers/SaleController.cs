@@ -36,22 +36,22 @@ namespace ProductAuction.API.Controllers
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> GetSales([FromQuery] SalesQueryDto query)
         {
-            // Normalize the page number — never below 1
+            // Normalize the page number Set Search 
             var page = query.Page;
             if (page < 1) page = 1;
 
-            // Normalize the page size — default 20, hard cap at 100
+            // Normalize the page size 
             var pageSize = query.PageSize;
             if (pageSize < 1) pageSize = 20;
             if (pageSize > 100) pageSize = 100;
 
-            // Free-text search term (may be null or empty)
+            // Set Search 
             var search = query.Search;
 
             // Optional sale-status filter (AwaitingPayment / Paid / Dispatched / etc.)
             var filter = query.Filter;
 
-            // Optional delivery-status filter
+            // status filter
             var deliveryStatus = query.DeliveryStatus;
 
             // _logger.LogInformation("GetSales called: page={Page}, pageSize={PageSize}, filter={Filter}, deliveryStatus={DeliveryStatus}, search={Search}.",
@@ -98,7 +98,7 @@ namespace ProductAuction.API.Controllers
                         .FirstOrDefault() == deliveryStatus);
             }
 
-            // apply search filter — matches product title, buyer name, or seller name
+            // apply search filter , buyer name, or seller name
             if (!string.IsNullOrWhiteSpace(search))
             {
                 var term = search.Trim();
@@ -126,8 +126,7 @@ namespace ProductAuction.API.Controllers
 
             var totalCount = await salesQuery.CountAsync();
 
-            // Global card stats — counted across ALL sales, unaffected by
-            // search/delivery/status filters or pagination.
+            // Global card stats
             var totalSalesCount = await _context.Sales.CountAsync();
             var awaitingPaymentCount = await _context.Sales.CountAsync(s =>
                 s.Status == "AwaitingPayment" || s.Status == "PaymentOverdue");
@@ -226,16 +225,16 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Normalize the page number — never below 1
+            // Normalize the page number Set Search 
             var page = query.Page;
             if (page < 1) page = 1;
 
-            // Normalize the page size — default 20, hard cap at 100
+            // Normalize the page size 
             var pageSize = query.PageSize;
             if (pageSize < 1) pageSize = 20;
             if (pageSize > 100) pageSize = 100;
 
-            // Free-text search term 
+            // Set Search 
             var search = query.Search;
 
             // Optional sale-status filter
@@ -279,7 +278,7 @@ namespace ProductAuction.API.Controllers
                 }
             }
 
-            // apply search filter — matches product title
+            // apply search filter 
             if (!string.IsNullOrWhiteSpace(search))
             {
                 var term = search.Trim();
@@ -299,7 +298,7 @@ namespace ProductAuction.API.Controllers
 
             var totalCount = await salesQuery.CountAsync();
 
-            // Global counts across ALL of this user's sales.
+            // Global counts
             var totalSalesCount = await _context.Sales.CountAsync(s =>
                 s.BuyerId == userId || s.SellerId == userId);
             var awaitingDispatchCount = await _context.Sales.CountAsync(s =>
@@ -486,8 +485,7 @@ namespace ProductAuction.API.Controllers
 
             var reservedAmount = reservations.Sum(r => r.Amount);
 
-            // sanity check: reserved balance should cover these reservations.
-            // if it doesn't, the data is inconsistent — reject rather than auto-fix.
+            // reserved balance should cover these reservations.
             if (reservedAmount > wallet.ReservedBalance)
             {
                 // _logger.LogError("PayForSale: reservation total {ReservedAmount} exceeds wallet reserved balance {ReservedBalance} for sale #{SaleId}.",
@@ -518,7 +516,6 @@ namespace ProductAuction.API.Controllers
             }
 
             // the buyer must still be able to cover their OTHER active reservations
-            // after this payment — otherwise their wallet would be over-committed
             if (newBalance < newReservedBalance)
             {
                 // _logger.LogWarning("PayForSale: available balance would fall below remaining reservations on sale #{SaleId}.", id);
@@ -534,8 +531,7 @@ namespace ProductAuction.API.Controllers
             wallet.Balance = newBalance;
             wallet.ReservedBalance = newReservedBalance;
 
-            // release the buyer's eligibility reservations for this auction —
-            // the payment supersedes them, so they're no longer "held"
+            // release the buyer's eligibility reservations for this auction 
             foreach (var reservation in reservations)
             {
                 reservation.Status = "Released";
@@ -568,9 +564,6 @@ namespace ProductAuction.API.Controllers
             // mark the sale as paid
             sale.Status = "Paid";
             sale.PaymentSubmittedAt = now;
-
-            // SellerNotifiedAt is load-bearing: the 5-day dispatch deadline
-            // and the 10-day pickup window are both counted from this timestamp.
             sale.SellerNotifiedAt = now;
 
             // seller has 5 days to dispatch
@@ -865,8 +858,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // lock the sale so the buyer can't confirm receipt now —
-            // the admin needs to review and decide
+            // lock the sale so the buyer can't confirm receipt now 
             delivery.Status = "NonDeliveryReported";
             sale.Status = "Disputed";
 
@@ -930,8 +922,7 @@ namespace ProductAuction.API.Controllers
             // all the wallet changes below need to succeed together
             await using var transaction = await _context.Database.BeginTransactionAsync();
 
-            var sale = await _context.Sales
-                .FirstOrDefaultAsync(s => s.Id == id);
+            var sale = await _context.Sales.FirstOrDefaultAsync(s => s.Id == id);
 
             if (sale == null)
             {
@@ -952,7 +943,6 @@ namespace ProductAuction.API.Controllers
             }
 
             // can only confirm receipt on a Paid or Dispatched sale.
-            // once settled the status flips to Completed, so a second call is rejected here.
             if (sale.Status != "Paid" && sale.Status != "Dispatched")
             {
                 // _logger.LogWarning("ConfirmReceipt: sale #{SaleId} has status {Status}; expected Paid or Dispatched.", id, sale.Status);
@@ -964,10 +954,8 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // the product must actually have been shipped —
-            // otherwise a buyer could "confirm receipt" of something that was never sent
-            var delivery = await _context.DeliveryRecords
-                .FirstOrDefaultAsync(d => d.SaleId == sale.Id);
+            // the product must actually have been shipped
+            var delivery = await _context.DeliveryRecords.FirstOrDefaultAsync(d => d.SaleId == sale.Id);
 
             if (delivery == null || delivery.Status != "Dispatched")
             {
@@ -981,7 +969,6 @@ namespace ProductAuction.API.Controllers
             }
 
             // escrow has to be there and match the sale amount.
-            // a mismatch means something went wrong and settlement must not proceed.
             var escrow = await _context.WalletReservations
                 .FirstOrDefaultAsync(r =>
                     r.SaleId == sale.Id &&
@@ -1003,10 +990,8 @@ namespace ProductAuction.API.Controllers
             var commission = sale.CommissionAmount;
             var sellerProceeds = sale.SellerProceeds;
 
-            // sanity check on the split — these two must add up to the final amount
-            if (commission < 0 ||
-                sellerProceeds < 0 ||
-                commission + sellerProceeds != sale.FinalAmount)
+            // these two must add up to the final amount
+            if (commission < 0 || sellerProceeds < 0 || commission + sellerProceeds != sale.FinalAmount)
             {
                 // _logger.LogError("ConfirmReceipt: commission/proceeds split invalid on sale #{SaleId} (commission={Commission}, proceeds={Proceeds}, total={Total}).",
                 //     id, commission, sellerProceeds, sale.FinalAmount);
@@ -1018,8 +1003,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            var sellerWallet = await _context.Wallets
-                .FirstOrDefaultAsync(w => w.UserId == sale.SellerId);
+            var sellerWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == sale.SellerId);
 
             if (sellerWallet == null)
             {
@@ -1032,8 +1016,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            var platformUser = await _context.Users
-                .FirstOrDefaultAsync(u => u.UserName == "platform-system-account");
+            var platformUser = await _context.Users.FirstOrDefaultAsync(u => u.UserName == "platform-system-account");
 
             if (platformUser == null)
             {
@@ -1046,8 +1029,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            var platformWallet = await _context.Wallets
-                .FirstOrDefaultAsync(w => w.UserId == platformUser.Id);
+            var platformWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == platformUser.Id);
 
             if (platformWallet == null)
             {

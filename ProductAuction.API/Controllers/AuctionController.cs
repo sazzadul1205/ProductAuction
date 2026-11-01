@@ -2,7 +2,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ProductAuction.API.Data;
-using ProductAuction.API.DTOs;
 using ProductAuction.API.DTOs.Auction;
 using ProductAuction.API.DTOs.Common;
 using ProductAuction.API.DTOs.Product;
@@ -30,16 +29,16 @@ namespace ProductAuction.API.Controllers
         [HttpGet]
         public async Task<IActionResult> GetAuctions([FromQuery] PaginationQueryDto query)
         {
-            // Normalize the page number — never below 1
+            // Normalize the page number
             var page = query.Page;
             if (page < 1) page = 1;
 
-            // Normalize the page size — default 20, hard cap at 100
+            // Normalize the page size 
             var pageSize = query.PageSize;
             if (pageSize < 1) pageSize = 20;
             if (pageSize > 100) pageSize = 100;
 
-            // Free-text search term (may be null or empty)
+            // Set Search 
             var search = query.Search;
 
             // Optional auction-status filter: Active / Upcoming / Ended / All
@@ -82,7 +81,7 @@ namespace ProductAuction.API.Controllers
                 }
             }
 
-            // apply search filter — matches product title
+            // apply search filter 
             if (!string.IsNullOrWhiteSpace(search))
             {
                 var term = search.Trim();
@@ -108,6 +107,8 @@ namespace ProductAuction.API.Controllers
             // Banner guarantee: if filters returned zero results, fall back to
             // all auctions so the home banner always has at least one product.
             var bannerFallback = totalCount == 0;
+
+
             if (bannerFallback)
             {
                 // _logger.LogDebug("GetAuctions: filters returned 0 results; applying banner fallback.");
@@ -469,8 +470,8 @@ namespace ProductAuction.API.Controllers
         }
 
         // PUT: api/auction/{id}/cancel
-        // Sellers can cancel upcoming auctions (deposit forfeited);
-        // admins can cancel upcoming or active auctions (all reservations released).
+        // Sellers can cancel upcoming auctions 
+        // admins can cancel upcoming or active auctions 
         [HttpPut("{id}/cancel")]
         [Authorize]
         public async Task<IActionResult> CancelAuction(int id, CancelAuctionDto dto)
@@ -561,8 +562,7 @@ namespace ProductAuction.API.Controllers
                     r.Type == "SellerDeposit" &&
                     r.Status == "Reserved");
 
-            // a seller without a reserved deposit has nothing to forfeit —
-            // block the cancel rather than allow a free exit
+            // a seller without a reserved deposit has nothing to forfeit 
             if (isSeller && reservation == null)
             {
                 // _logger.LogWarning("CancelAuction: no reserved seller deposit found for auction #{AuctionId}.", id);
@@ -576,8 +576,7 @@ namespace ProductAuction.API.Controllers
 
             if (reservation != null)
             {
-                var sellerWallet = await _context.Wallets
-                    .FirstOrDefaultAsync(w => w.Id == reservation.WalletId);
+                var sellerWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.Id == reservation.WalletId);
 
                 if (sellerWallet == null)
                 {
@@ -604,8 +603,7 @@ namespace ProductAuction.API.Controllers
                 if (isSeller)
                 {
                     // seller cancelling = deposit is forfeited to the platform.
-                    // ReservedBalance is only a hold — we need real Balance here
-                    // because the money is actually leaving the seller's wallet.
+                    // ReservedBalance is only a hold
                     if (sellerWallet.Balance < reservation.Amount)
                     {
                         // _logger.LogWarning("CancelAuction: seller wallet #{WalletId} balance insufficient to forfeit deposit.", sellerWallet.Id);
@@ -617,8 +615,7 @@ namespace ProductAuction.API.Controllers
                         });
                     }
 
-                    var platformUser = await _context.Users
-                        .FirstOrDefaultAsync(u => u.UserName == "platform-system-account");
+                    var platformUser = await _context.Users.FirstOrDefaultAsync(u => u.UserName == "platform-system-account");
 
                     if (platformUser == null)
                     {
@@ -631,8 +628,7 @@ namespace ProductAuction.API.Controllers
                         });
                     }
 
-                    var platformWallet = await _context.Wallets
-                        .FirstOrDefaultAsync(w => w.UserId == platformUser.Id);
+                    var platformWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == platformUser.Id);
 
                     if (platformWallet == null)
                     {
@@ -697,8 +693,7 @@ namespace ProductAuction.API.Controllers
 
                 foreach (var buyerReservation in buyerReservations)
                 {
-                    var buyerWallet = await _context.Wallets
-                        .FirstOrDefaultAsync(w => w.Id == buyerReservation.WalletId);
+                    var buyerWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.Id == buyerReservation.WalletId);
 
                     if (buyerWallet == null)
                     {

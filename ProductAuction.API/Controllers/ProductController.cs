@@ -233,8 +233,7 @@ namespace ProductAuction.API.Controllers
             }
 
             // category has to exist
-            var categoryExists = await _context.Categories
-                .AnyAsync(c => c.Id == dto.CategoryId);
+            var categoryExists = await _context.Categories.AnyAsync(c => c.Id == dto.CategoryId);
 
             if (!categoryExists)
             {
@@ -247,8 +246,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // create the product — drafts don't reserve any funds,
-            // the deposit is taken when the product is submitted
+            // create the product
             var product = new Product
             {
                 SellerId = userId,
