@@ -923,12 +923,20 @@ namespace ProductAuction.API.Controllers
         // GET: api/Admin/reservations
         // Returns all wallet reservations globally, for admin oversight.
         [HttpGet("reservations")]
-        public async Task<IActionResult> GetAllReservations()
+        public async Task<IActionResult> GetAllReservations([FromQuery] PaginationQueryDto query)
         {
-            // _logger.LogInformation("GetAllReservations called.");
+            var page = query.Page;
+            if (page < 1) page = 1;
+            var pageSize = query.PageSize;
+            if (pageSize < 1) pageSize = 20;
+            if (pageSize > 100) pageSize = 100;
+
+            var totalCount = await _context.WalletReservations.CountAsync();
 
             var reservations = await _context.WalletReservations
                 .OrderByDescending(wr => wr.Id)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
                 .Select(wr => new
                 {
                     wr.Id,
@@ -939,7 +947,6 @@ namespace ProductAuction.API.Controllers
                     wr.AuctionId,
                     wr.SaleId,
 
-                    // Look up the wallet's owner UserId, then fetch that user's FullName.
                     UserName = _context.UserProfiles
                         .Where(up => up.UserId == _context.Wallets
                             .Where(w => w.Id == wr.WalletId)
@@ -948,7 +955,6 @@ namespace ProductAuction.API.Controllers
                         .Select(p => p.FullName)
                         .FirstOrDefault(),
 
-                    // Product title
                     ProductTitle = wr.ProductId != null
                         ? _context.Products
                             .Where(p => p.Id == wr.ProductId)
@@ -958,13 +964,14 @@ namespace ProductAuction.API.Controllers
                 })
                 .ToListAsync();
 
-            // _logger.LogInformation("GetAllReservations returned {Count} reservation(s).", reservations.Count);
-
             return Ok(new
             {
                 status = 200,
                 message = "Reservations retrieved successfully.",
-                data = reservations
+                data = reservations,
+                page,
+                pageSize,
+                totalCount
             });
         }
 

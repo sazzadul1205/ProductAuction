@@ -25,55 +25,47 @@ namespace ProductAuction.API.Controllers
 
 
         // GET: api/auction
-        // Returns all auctions that are either already started or have a start time set.
+        // Returns all auctions with support for search, category filtering, and status tabs.
         [HttpGet]
         public async Task<IActionResult> GetAuctions([FromQuery] PaginationQueryDto query)
         {
-            // Normalize the page number
-            var page = query.Page;
-            if (page < 1) page = 1;
+            // Normalize pagination
+            var page = query.Page < 1 ? 1 : query.Page;
+            var pageSize = query.PageSize < 1 ? 20 : (query.PageSize > 100 ? 100 : query.PageSize);
 
-            // Normalize the page size 
-            var pageSize = query.PageSize;
-            if (pageSize < 1) pageSize = 20;
-            if (pageSize > 100) pageSize = 100;
-
-            // Set Search 
             var search = query.Search;
-
-            // Optional auction-status filter: Active / Upcoming / Ended / All
             var filter = query.Filter;
+            var now = DateTime.UtcNow;
 
-            // _logger.LogInformation("GetAuctions called: page={Page}, pageSize={PageSize}, filter={Filter}, search={Search}, categoryId={CategoryId}",
-            //     page, pageSize, filter, search, query.CategoryId);
-
+            // Base query
             var auctionsQuery = _context.Auctions
                 .Where(a => a.StartTime.HasValue)
                 .AsQueryable();
 
-            // apply status filter
-            // apply status filter
+            // Apply Status Filter
             if (!string.IsNullOrWhiteSpace(filter) && filter != "All")
             {
-                var now = DateTime.UtcNow;
-
                 if (filter == "Active" || filter == "Live")
                 {
-                    // Must be Active, but also must not have passed its end time
-                    auctionsQuery = auctionsQuery.Where(a => a.Status == "Active" && a.EndTime > now);
+                    auctionsQuery = auctionsQuery.Where(a =>
+                        a.Status == "Active" &&
+                        (!a.EndTime.HasValue || a.EndTime > now));
                 }
                 else if (filter == "Upcoming")
                 {
-                    // Must be Upcoming, OR the time hasn't passed yet
-                    auctionsQuery = auctionsQuery.Where(a => a.Status == "Upcoming" && a.StartTime > now);
+                    // Must be marked Upcoming AND the end time hasn't passed yet
+                    auctionsQuery = auctionsQuery.Where(a =>
+                        a.Status == "Upcoming" &&
+                        a.StartTime > now &&
+                        (!a.EndTime.HasValue || a.EndTime > now));
                 }
                 else if (filter == "Ended")
                 {
-                    // Must be Completed/Cancelled, OR the time is in the past
+                    // Show anything marked Completed/Cancelled OR anything whose time has run out
                     auctionsQuery = auctionsQuery.Where(a =>
                         a.Status == "Completed" ||
                         a.Status == "Cancelled" ||
-                        a.EndTime <= now);
+                        (a.EndTime.HasValue && a.EndTime <= now));
                 }
                 else
                 {
@@ -81,21 +73,20 @@ namespace ProductAuction.API.Controllers
                 }
             }
 
-            // apply search filter 
+            //  Apply Search Filter
             if (!string.IsNullOrWhiteSpace(search))
             {
                 var term = search.Trim();
-                auctionsQuery = auctionsQuery.Where(a =>
-                    a.Product.Title.Contains(term));
+                auctionsQuery = auctionsQuery.Where(a => a.Product.Title.Contains(term));
             }
 
-            // apply category filter
+            //  Apply Category Filter
             if (query.CategoryId.HasValue)
             {
                 auctionsQuery = auctionsQuery.Where(a => a.Product.CategoryId == query.CategoryId.Value);
             }
 
-            // Sort Before Returning
+            // Sort
             auctionsQuery = auctionsQuery
                 .OrderBy(a => a.Status == "Active" ? 1 :
                               a.Status == "Upcoming" ? 2 :
@@ -104,21 +95,24 @@ namespace ProductAuction.API.Controllers
 
             var totalCount = await auctionsQuery.CountAsync();
 
-            // Banner guarantee: if filters returned zero results, fall back to
-            // all auctions so the home banner always has at least one product.
-            var bannerFallback = totalCount == 0;
+            //  Home-Banner Fallback Logic
+            var isDefaultHomeRequest =
+                string.IsNullOrWhiteSpace(filter) &&
+                string.IsNullOrWhiteSpace(search) &&
+                !query.CategoryId.HasValue &&
+                page == 1;
 
+            var bannerFallback = isDefaultHomeRequest && totalCount == 0;
 
             if (bannerFallback)
             {
-                // _logger.LogDebug("GetAuctions: filters returned 0 results; applying banner fallback.");
-
                 auctionsQuery = _context.Auctions
                     .Where(a => a.Status != "Upcoming" || a.StartTime.HasValue)
                     .OrderByDescending(a => a.Id);
                 totalCount = await auctionsQuery.CountAsync();
             }
 
+            // Execute Query
             var auctions = await auctionsQuery
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
@@ -142,9 +136,6 @@ namespace ProductAuction.API.Controllers
                     CategoryName = a.Product.Category.Name
                 })
                 .ToListAsync();
-
-            // _logger.LogInformation("GetAuctions returned {Count} of {Total} auction(s) (bannerFallback={Fallback}).",
-            //     auctions.Count, totalCount, bannerFallback);
 
             return Ok(new
             {
@@ -204,9 +195,13 @@ namespace ProductAuction.API.Controllers
         [HttpGet("upcoming")]
         public async Task<IActionResult> GetUpcomingAuctions()
         {
+            var now = DateTime.UtcNow;
 
             var auctions = await _context.Auctions
-                .Where(a => a.Status == "Upcoming" && a.StartTime.HasValue)
+                .Where(a =>
+                    a.Status == "Upcoming" &&
+                    a.StartTime.HasValue &&
+                    a.EndTime > now)
                 .Select(a => new AuctionListDto
                 {
                     Id = a.Id,
@@ -235,7 +230,6 @@ namespace ProductAuction.API.Controllers
                 data = auctions
             });
         }
-
 
         // GET: api/auction/{id}
         // Returns full auction details (public view).

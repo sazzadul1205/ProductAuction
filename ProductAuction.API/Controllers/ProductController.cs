@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ProductAuction.API.Data;
+using ProductAuction.API.DTOs.Common;
 using ProductAuction.API.DTOs.Product;
 using ProductAuction.API.Models;
 using ProductAuction.API.Services;
@@ -840,13 +841,22 @@ namespace ProductAuction.API.Controllers
         // Admin: lists products waiting for approval.
         [HttpGet("pending-approval")]
         [Authorize(Roles = "Admin")]
-        public async Task<IActionResult> GetPendingApprovalProducts()
+        public async Task<IActionResult> GetPendingApprovalProducts([FromQuery] PaginationQueryDto query)
         {
-            // _logger.LogInformation("GetPendingApprovalProducts called.");
+            var page = query.Page;
+            if (page < 1) page = 1;
+            var pageSize = query.PageSize;
+            if (pageSize < 1) pageSize = 20;
+            if (pageSize > 100) pageSize = 100;
+
+            var totalCount = await _context.Products
+                .CountAsync(p => p.ApprovalStatus == "PendingApproval");
 
             var products = await _context.Products
                 .Where(p => p.ApprovalStatus == "PendingApproval")
                 .OrderByDescending(p => p.CreatedAt)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
                 .Select(p => new ProductListResponseDto
                 {
                     Id = p.Id,
@@ -875,7 +885,10 @@ namespace ProductAuction.API.Controllers
             {
                 status = 200,
                 message = "Pending approval products retrieved successfully.",
-                data = products
+                data = products,
+                page,
+                pageSize,
+                totalCount
             });
         }
 
