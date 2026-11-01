@@ -49,24 +49,32 @@ namespace ProductAuction.API.Controllers
             //     page, pageSize, filter, search, query.CategoryId);
 
             var auctionsQuery = _context.Auctions
-                .Where(a => a.Status != "Upcoming" || a.StartTime.HasValue)
+                .Where(a => a.StartTime.HasValue)
                 .AsQueryable();
 
             // apply status filter
+            // apply status filter
             if (!string.IsNullOrWhiteSpace(filter) && filter != "All")
             {
+                var now = DateTime.UtcNow;
+
                 if (filter == "Active" || filter == "Live")
                 {
-                    auctionsQuery = auctionsQuery.Where(a => a.Status == "Active");
+                    // Must be Active, but also must not have passed its end time
+                    auctionsQuery = auctionsQuery.Where(a => a.Status == "Active" && a.EndTime > now);
                 }
                 else if (filter == "Upcoming")
                 {
-                    auctionsQuery = auctionsQuery.Where(a => a.Status == "Upcoming");
+                    // Must be Upcoming, OR the time hasn't passed yet
+                    auctionsQuery = auctionsQuery.Where(a => a.Status == "Upcoming" && a.StartTime > now);
                 }
                 else if (filter == "Ended")
                 {
+                    // Must be Completed/Cancelled, OR the time is in the past
                     auctionsQuery = auctionsQuery.Where(a =>
-                        a.Status == "Completed" || a.Status == "Cancelled");
+                        a.Status == "Completed" ||
+                        a.Status == "Cancelled" ||
+                        a.EndTime <= now);
                 }
                 else
                 {
@@ -88,7 +96,12 @@ namespace ProductAuction.API.Controllers
                 auctionsQuery = auctionsQuery.Where(a => a.Product.CategoryId == query.CategoryId.Value);
             }
 
-            auctionsQuery = auctionsQuery.OrderByDescending(a => a.Id);
+            // Sort Before Returning
+            auctionsQuery = auctionsQuery
+                .OrderBy(a => a.Status == "Active" ? 1 :
+                              a.Status == "Upcoming" ? 2 :
+                              (a.Status == "Completed" || a.Status == "Cancelled") ? 3 : 4)
+                .ThenByDescending(a => a.Id);
 
             var totalCount = await auctionsQuery.CountAsync();
 
