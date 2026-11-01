@@ -931,9 +931,37 @@ namespace ProductAuction.API.Controllers
             if (pageSize < 1) pageSize = 20;
             if (pageSize > 100) pageSize = 100;
 
-            var totalCount = await _context.WalletReservations.CountAsync();
+            var search = query.Search;
 
-            var reservations = await _context.WalletReservations
+            var queryable = _context.WalletReservations
+                .Where(r => r.Status == "Reserved")
+                .AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var term = search.Trim().ToLower();
+                var nameMatchUserIds = await _context.UserProfiles
+                    .Where(p => p.FullName.ToLower().Contains(term))
+                    .Select(p => p.UserId)
+                    .ToListAsync();
+                var matchingWalletIds = await _context.Wallets
+                    .Where(w => nameMatchUserIds.Contains(w.UserId))
+                    .Select(w => w.Id)
+                    .ToListAsync();
+                var matchingProductIds = await _context.Products
+                    .Where(p => p.Title.ToLower().Contains(term))
+                    .Select(p => p.Id)
+                    .ToListAsync();
+
+                queryable = queryable.Where(r =>
+                    matchingWalletIds.Contains(r.WalletId) ||
+                    (r.ProductId.HasValue && matchingProductIds.Contains(r.ProductId.Value)) ||
+                    r.Type.ToLower().Contains(term));
+            }
+
+            var totalCount = await queryable.CountAsync();
+
+            var reservations = await queryable
                 .OrderByDescending(wr => wr.Id)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)

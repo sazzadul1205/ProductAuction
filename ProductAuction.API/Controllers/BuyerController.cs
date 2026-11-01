@@ -232,7 +232,7 @@ namespace ProductAuction.API.Controllers
         // GET: api/Buyer/won-auctions
         // Returns auctions this buyer won, plus sale / dispatch / dispute info for each.
         [HttpGet("won-auctions")]
-        public async Task<IActionResult> GetWonAuctions()
+        public async Task<IActionResult> GetWonAuctions([FromQuery] PaginationQueryDto query)
         {
             var buyerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
@@ -247,11 +247,27 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // _logger.LogInformation("GetWonAuctions called by {BuyerId}.", buyerId);
+            var page = query.Page < 1 ? 1 : query.Page;
+            var pageSize = query.PageSize < 1 ? 20 : (query.PageSize > 100 ? 100 : query.PageSize);
+            var search = query.Search;
+            var filter = query.Filter;
 
-            var auctions = await _context.Auctions
+            var auctionsQuery = _context.Auctions
                 .Where(a => a.WinnerId == buyerId)
+                .AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var term = search.Trim().ToLower();
+                auctionsQuery = auctionsQuery.Where(a => a.Product.Title.ToLower().Contains(term));
+            }
+
+            var totalCount = await auctionsQuery.CountAsync();
+
+            var auctions = await auctionsQuery
                 .OrderByDescending(a => a.EndTime)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
                 .Select(a => new
                 {
                     auctionId = a.Id,
@@ -281,7 +297,33 @@ namespace ProductAuction.API.Controllers
                         .Select(s => s.Status)
                         .FirstOrDefault() ?? "AwaitingPayment",
 
-                    // delivery info
+                    paymentDeadline = _context.Sales
+                        .Where(s => s.AuctionId == a.Id && s.BuyerId == buyerId)
+                        .Select(s => (DateTime?)s.PaymentDeadline)
+                        .FirstOrDefault(),
+
+                    finalAmount = _context.Sales
+                        .Where(s => s.AuctionId == a.Id && s.BuyerId == buyerId)
+                        .Select(s => (decimal?)s.FinalAmount)
+                        .FirstOrDefault(),
+
+                    deliveryRecord = _context.DeliveryRecords
+                        .Where(d => _context.Sales
+                            .Where(s => s.AuctionId == a.Id && s.BuyerId == buyerId)
+                            .Select(s => s.Id)
+                            .Contains(d.SaleId))
+                        .Select(d => new
+                        {
+                            d.Id,
+                            dispatchedAt = d.DispatchedAt,
+                            courierName = d.CourierName,
+                            trackingNumber = d.TrackingNumber,
+                            deliveryNote = d.DeliveryNote,
+                            dispatchInfo = d.DispatchInfo,
+                            trackingEvidence = d.TrackingEvidence
+                        })
+                        .FirstOrDefault(),
+
                     dispatchInfo = _context.DeliveryRecords
                         .Where(d => d.SaleId == _context.Sales
                             .Where(s => s.AuctionId == a.Id && s.BuyerId == buyerId)
@@ -298,7 +340,6 @@ namespace ProductAuction.API.Controllers
                         .Select(d => d.TrackingEvidence)
                         .FirstOrDefault(),
 
-                    // dispute for the sale, if the buyer filed one
                     dispute = _context.Disputes
                         .Where(d => _context.Sales.Any(s =>
                             s.AuctionId == a.Id &&
@@ -309,23 +350,41 @@ namespace ProductAuction.API.Controllers
                             id = d.Id,
                             complaint = d.Complaint,
                             evidenceUrl = d.EvidenceUrl,
+                            evidenceUrls = d.EvidenceUrls,
                             status = d.Status,
                             adminDecision = d.AdminDecision,
-                            createdAt = d.CreatedAt
+                            createdAt = d.CreatedAt,
+                            resolutionNotes = d.ResolutionNotes,
+                            resolvedAt = d.ResolvedAt,
+                            raisedBy = d.RaisedBy
                         })
                         .FirstOrDefault()
                 })
                 .ToListAsync();
 
-            // _logger.LogInformation("GetWonAuctions returned {Count} won auction(s) for {BuyerId}.", auctions.Count, buyerId);
+            if (!string.IsNullOrWhiteSpace(filter) && filter != "All")
+            {
+                auctions = filter switch
+                {
+                    "AwaitingPayment" => auctions.Where(a => a.paymentStatus == "AwaitingPayment" || a.paymentStatus == "PaymentOverdue").ToList(),
+                    "Action Required" => auctions.Where(a => (a.paymentStatus == "AwaitingPayment" || a.paymentStatus == "PaymentOverdue") || (a.paymentStatus == "Paid" && a.deliveryRecord == null && a.dispatchInfo == null) || ((a.deliveryRecord != null || a.dispatchInfo != null) && a.paymentStatus != "Completed" && a.dispute == null)).ToList(),
+                    "In Transit" => auctions.Where(a => (a.deliveryRecord != null || a.dispatchInfo != null) && a.paymentStatus != "Completed").ToList(),
+                    "Completed" => auctions.Where(a => a.paymentStatus == "Completed").ToList(),
+                    "Disputed" => auctions.Where(a => a.dispute != null).ToList(),
+                    _ => auctions.Where(a => a.paymentStatus == filter).ToList()
+                };
+            }
 
             return Ok(new
             {
                 status = 200,
-                message = "Your won auctions were retrieved successfully.",
+                message = "Won auctions retrieved successfully.",
                 data = new
                 {
-                    items = auctions
+                    items = auctions,
+                    page,
+                    pageSize,
+                    totalCount
                 }
             });
         }
