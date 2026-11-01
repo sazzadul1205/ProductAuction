@@ -22,49 +22,54 @@ namespace ProductAuction.API.Services.Background
         // Main loop of the background service. Runs until the app shuts down.
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            // _logger.LogInformation("AuctionStatusBackgroundService started at {Time}.", DateTime.UtcNow);
+            _logger.LogInformation("AuctionStatusBackgroundService started at {Time}.", DateTime.UtcNow);
 
             // Keep repeating until the application is stopping.
             while (!stoppingToken.IsCancellationRequested)
             {
-                // A background service is a singleton, so we cannot inject
-                using (var scope = _scopeFactory.CreateScope())
+                try
                 {
-                    // Get the database context from this scope.
-                    var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
-                    // Current UTC time, used to compare against auction start/end times.
-                    var now = DateTime.UtcNow;
-
-                    // Find scheduled auctions whose start time has arrived.
-                    var auctions = await context.Auctions
-                        .Where(a =>
-                            a.Status == "Upcoming" &&
-                            a.StartTime.HasValue &&
-                            a.StartTime.Value <= now)
-                        .ToListAsync(stoppingToken);
-
-                    // Flip each matching auction to "Active".
-                    foreach (var auction in auctions)
+                    // A background service is a singleton, so we cannot inject
+                    using (var scope = _scopeFactory.CreateScope())
                     {
-                        auction.Status = "Active";
-                        // _logger.LogInformation("Auction #{AuctionId} activated at {Time}.", auction.Id, now);
-                    }
+                        // Get the database context from this scope.
+                        var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-                    // Save only if we actually changed something.
-                    if (auctions.Count > 0)
-                    {
-                        await context.SaveChangesAsync(stoppingToken);
+                        // Current UTC time, used to compare against auction start/end times.
+                        var now = DateTime.UtcNow;
 
-                        // System.Diagnostics.Debug.Assert(auctions.All(a => a.Status == "Active"));
+                        // Find scheduled auctions whose start time has arrived.
+                        var auctions = await context.Auctions
+                            .Where(a =>
+                                a.Status == "Upcoming" &&
+                                a.StartTime.HasValue &&
+                                a.StartTime.Value <= now)
+                            .ToListAsync(stoppingToken);
+
+                        // Flip each matching auction to "Active".
+                        foreach (var auction in auctions)
+                        {
+                            auction.Status = "Active";
+                            _logger.LogInformation("Auction #{AuctionId} activated at {Time}.", auction.Id, now);
+                        }
+
+                        // Save only if we actually changed something.
+                        if (auctions.Count > 0)
+                        {
+                            await context.SaveChangesAsync(stoppingToken);
+                        }
                     }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error in auction status activation cycle.");
                 }
 
                 // Wait 30 seconds before checking again.
                 await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
             }
 
-            // _logger.LogInformation("AuctionStatusBackgroundService stopped at {Time}.", DateTime.UtcNow);
+            _logger.LogInformation("AuctionStatusBackgroundService stopped at {Time}.", DateTime.UtcNow);
         }
     }
 }

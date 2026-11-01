@@ -21,49 +21,54 @@ namespace ProductAuction.API.Services.Background
         // Main loop that runs until the application shuts down.
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            // _logger.LogInformation("DispatchOverdueBackgroundService started at {Time}.", DateTime.UtcNow);
+            _logger.LogInformation("DispatchOverdueBackgroundService started at {Time}.", DateTime.UtcNow);
 
             // Keep checking until the application is stopping.
             while (!stoppingToken.IsCancellationRequested)
             {
-                // Create a scope because AppDbContext is scoped.
-                using (var scope = _scopeFactory.CreateScope())
+                try
                 {
-                    // Get the database context.
-                    var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
-                    // Current UTC time.
-                    var now = DateTime.UtcNow;
-
-                    // Find deliveries whose dispatch deadline has passed
-                    // and that have not been dispatched.
-                    var overdueDeliveries = await context.DeliveryRecords
-                        .Where(d =>
-                            d.Status == "AwaitingDispatch" &&
-                            d.DispatchDeadline <= now)
-                        .ToListAsync(stoppingToken);
-
-                    // Mark each missed dispatch deadline.
-                    foreach (var delivery in overdueDeliveries)
+                    // Create a scope because AppDbContext is scoped.
+                    using (var scope = _scopeFactory.CreateScope())
                     {
-                        delivery.Status = "DispatchOverdue";
-                        // _logger.LogWarning("Delivery #{DeliveryId} marked DispatchOverdue at {Time}.", delivery.Id, now);
-                    }
+                        // Get the database context.
+                        var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-                    // Save changes only when there are overdue deliveries.
-                    if (overdueDeliveries.Count > 0)
-                    {
-                        await context.SaveChangesAsync(stoppingToken);
+                        // Current UTC time.
+                        var now = DateTime.UtcNow;
 
-                        // System.Diagnostics.Debug.Assert(overdueDeliveries.All(d => d.Status == "DispatchOverdue"));
+                        // Find deliveries whose dispatch deadline has passed
+                        // and that have not been dispatched.
+                        var overdueDeliveries = await context.DeliveryRecords
+                            .Where(d =>
+                                d.Status == "AwaitingDispatch" &&
+                                d.DispatchDeadline <= now)
+                            .ToListAsync(stoppingToken);
+
+                        // Mark each missed dispatch deadline.
+                        foreach (var delivery in overdueDeliveries)
+                        {
+                            delivery.Status = "DispatchOverdue";
+                            _logger.LogWarning("Delivery #{DeliveryId} marked DispatchOverdue at {Time}.", delivery.Id, now);
+                        }
+
+                        // Save changes only when there are overdue deliveries.
+                        if (overdueDeliveries.Count > 0)
+                        {
+                            await context.SaveChangesAsync(stoppingToken);
+                        }
                     }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error in dispatch overdue cycle.");
                 }
 
                 // Wait 30 seconds before checking again.
                 await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
             }
 
-            // _logger.LogInformation("DispatchOverdueBackgroundService stopped at {Time}.", DateTime.UtcNow);
+            _logger.LogInformation("DispatchOverdueBackgroundService stopped at {Time}.", DateTime.UtcNow);
         }
     }
 }

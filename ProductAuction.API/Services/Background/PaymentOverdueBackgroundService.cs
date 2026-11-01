@@ -21,49 +21,54 @@ namespace ProductAuction.API.Services.Background
         // Main loop that runs until the application shuts down.
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            // _logger.LogInformation("PaymentOverdueBackgroundService started at {Time}.", DateTime.UtcNow);
+            _logger.LogInformation("PaymentOverdueBackgroundService started at {Time}.", DateTime.UtcNow);
 
             // Keep checking until the application is stopping.
             while (!stoppingToken.IsCancellationRequested)
             {
-                // Create a scope because AppDbContext is scoped.
-                using (var scope = _scopeFactory.CreateScope())
+                try
                 {
-                    // Get the database context.
-                    var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
-                    // Current UTC time.
-                    var now = DateTime.UtcNow;
-
-                    // Find sales whose payment deadline has passed
-                    // and whose payment has not been completed.
-                    var overdueSales = await context.Sales
-                        .Where(s =>
-                            s.Status == "AwaitingPayment" &&
-                            s.PaymentDeadline <= now)
-                        .ToListAsync(stoppingToken);
-
-                    // Mark each unpaid sale as overdue.
-                    foreach (var sale in overdueSales)
+                    // Create a scope because AppDbContext is scoped.
+                    using (var scope = _scopeFactory.CreateScope())
                     {
-                        sale.Status = "PaymentOverdue";
-                        // _logger.LogWarning("Sale #{SaleId} marked PaymentOverdue at {Time}.", sale.Id, now);
-                    }
+                        // Get the database context.
+                        var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-                    // Save changes only when there are overdue sales.
-                    if (overdueSales.Count > 0)
-                    {
-                        await context.SaveChangesAsync(stoppingToken);
+                        // Current UTC time.
+                        var now = DateTime.UtcNow;
 
-                        // System.Diagnostics.Debug.Assert(overdueSales.All(s => s.Status == "PaymentOverdue"));
+                        // Find sales whose payment deadline has passed
+                        // and whose payment has not been completed.
+                        var overdueSales = await context.Sales
+                            .Where(s =>
+                                s.Status == "AwaitingPayment" &&
+                                s.PaymentDeadline <= now)
+                            .ToListAsync(stoppingToken);
+
+                        // Mark each unpaid sale as overdue.
+                        foreach (var sale in overdueSales)
+                        {
+                            sale.Status = "PaymentOverdue";
+                            _logger.LogWarning("Sale #{SaleId} marked PaymentOverdue at {Time}.", sale.Id, now);
+                        }
+
+                        // Save changes only when there are overdue sales.
+                        if (overdueSales.Count > 0)
+                        {
+                            await context.SaveChangesAsync(stoppingToken);
+                        }
                     }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error in payment overdue cycle.");
                 }
 
                 // Wait 30 seconds before checking again.
                 await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
             }
 
-            // _logger.LogInformation("PaymentOverdueBackgroundService stopped at {Time}.", DateTime.UtcNow);
+            _logger.LogInformation("PaymentOverdueBackgroundService stopped at {Time}.", DateTime.UtcNow);
         }
     }
 }
