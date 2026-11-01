@@ -363,6 +363,7 @@ namespace ProductAuction.API.Controllers
 
         // POST: api/sale/{id}/pay
         // The winning buyer pays for the sale from their wallet.
+        // Money leaves the buyer's balance and is held in escrow until receipt is confirmed.
         [HttpPost("{id}/pay")]
         public async Task<IActionResult> PayForSale(int id)
         {
@@ -402,7 +403,8 @@ namespace ProductAuction.API.Controllers
 
             var now = DateTime.UtcNow;
 
-            // if the deadline has already passed, flip it to overdue and stop
+            // if the deadline has already passed, flip it to overdue and stop.
+            // we still save the status change so the UI shows the correct state.
             if (now > sale.PaymentDeadline)
             {
                 sale.Status = "PaymentOverdue";
@@ -440,7 +442,8 @@ namespace ProductAuction.API.Controllers
 
             var reservedAmount = reservations.Sum(r => r.Amount);
 
-            // sanity check: reserved balance should cover these reservations
+            // sanity check: reserved balance should cover these reservations.
+            // if it doesn't, the data is inconsistent — reject rather than auto-fix.
             if (reservedAmount > wallet.ReservedBalance)
             {
                 return BadRequest(new
@@ -464,7 +467,8 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // other reservations must remain covered after payment
+            // the buyer must still be able to cover their OTHER active reservations
+            // after this payment — otherwise their wallet would be over-committed
             if (newBalance < newReservedBalance)
             {
                 return BadRequest(new
@@ -478,7 +482,8 @@ namespace ProductAuction.API.Controllers
             wallet.Balance = newBalance;
             wallet.ReservedBalance = newReservedBalance;
 
-            // release the buyer's eligibility reservations
+            // release the buyer's eligibility reservations for this auction —
+            // the payment supersedes them, so they're no longer "held"
             foreach (var reservation in reservations)
             {
                 reservation.Status = "Released";
@@ -495,7 +500,8 @@ namespace ProductAuction.API.Controllers
                 CreatedAt = now
             });
 
-            // lock the money in escrow until receipt is confirmed
+            // lock the money in escrow until receipt is confirmed.
+            // the seller does NOT get paid yet — the platform holds it.
             _context.WalletReservations.Add(new WalletReservation
             {
                 WalletId = wallet.Id,
@@ -510,6 +516,9 @@ namespace ProductAuction.API.Controllers
             // mark the sale as paid
             sale.Status = "Paid";
             sale.PaymentSubmittedAt = now;
+
+            // SellerNotifiedAt is load-bearing: the 5-day dispatch deadline
+            // and the 10-day pickup window are both counted from this timestamp.
             sale.SellerNotifiedAt = now;
 
             // seller has 5 days to dispatch
@@ -536,7 +545,6 @@ namespace ProductAuction.API.Controllers
                 }
             });
         }
-
 
         // POST: api/sale/{id}/dispatch
         // The seller records dispatch after the buyer has paid.
@@ -828,6 +836,8 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
+            // the product must actually have been shipped —
+            // otherwise a buyer could "confirm receipt" of something that was never sent
             var delivery = await _context.DeliveryRecords
                 .FirstOrDefaultAsync(d => d.SaleId == sale.Id);
 
@@ -840,7 +850,8 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // escrow has to be there and match the sale amount
+            // escrow has to be there and match the sale amount.
+            // a mismatch means something went wrong and settlement must not proceed.
             var escrow = await _context.WalletReservations
                 .FirstOrDefaultAsync(r =>
                     r.SaleId == sale.Id &&
@@ -859,7 +870,7 @@ namespace ProductAuction.API.Controllers
             var commission = sale.CommissionAmount;
             var sellerProceeds = sale.SellerProceeds;
 
-            // sanity check on the split
+            // sanity check on the split — these two must add up to the final amount
             if (commission < 0 ||
                 sellerProceeds < 0 ||
                 commission + sellerProceeds != sale.FinalAmount)
@@ -907,6 +918,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
+            // safety check — the platform wallet and seller wallet must be different
             if (platformWallet.Id == sellerWallet.Id)
             {
                 return BadRequest(new
@@ -958,7 +970,8 @@ namespace ProductAuction.API.Controllers
             if (sellerDeposit != null)
             {
                 // if the reserved balance is somehow out of sync, clamp to 0
-                // (can happen if an admin manually adjusted balances)
+                // (can happen if an admin manually adjusted balances).
+                // the seller deposit is non-critical here, so we recover gracefully.
                 if (sellerWallet.ReservedBalance < sellerDeposit.Amount)
                 {
                     sellerWallet.ReservedBalance = 0;
@@ -982,7 +995,10 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // release every buyer's eligibility reservation for this auction
+            // release every buyer's eligibility reservation for this auction.
+            // NOTE: unlike the seller deposit above, we hard-fail here on mismatch.
+            // Buyer reservations must be exact — a shortfall means data corruption
+            // and silently clamping would hide the bug.
             var buyerReservations = await _context.WalletReservations
                 .Where(r =>
                     r.AuctionId == sale.AuctionId &&
@@ -1018,7 +1034,8 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // wrap it up
+            // wrap it up — this is the terminal state; the status check at the top
+            // means a second call here will be rejected
             escrow.Status = "Released";
             delivery.Status = "ReceiptConfirmed";
             delivery.ReceiptConfirmedAt = now;

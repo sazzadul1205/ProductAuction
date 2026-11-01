@@ -713,7 +713,7 @@ namespace ProductAuction.API.Controllers
             if (pageSize < 1) pageSize = 20;
             if (pageSize > 100) pageSize = 100;
 
-            // Free-text search term (may be null or empty)
+            // Free-text search term
             var search = query.Search;
 
             // Optional transaction-type filter: Credit / Debit / Penalty / Release / Commission
@@ -759,9 +759,10 @@ namespace ProductAuction.API.Controllers
 
             var totalCount = await queryable.CountAsync();
 
-            // Global stats
+            // Global stats.
 
             // Total volume = sum of Credit + Debit across ALL transactions.
+            // the (decimal?) cast makes Sum null-safe; ?? 0 turns an empty table into 0.
             var totalVolume = await _context.WalletTransactions
                 .Where(t => t.Type == "Credit" || t.Type == "Debit")
                 .SumAsync(t => (decimal?)t.Amount) ?? 0;
@@ -781,7 +782,7 @@ namespace ProductAuction.API.Controllers
                 .Where(r => r.Type == "SellerDeposit" && r.Status == "Reserved")
                 .SumAsync(r => (decimal?)r.Amount) ?? 0;
 
-            // Count of active reservation
+            // Count of active reservations
             var totalActiveReservations = await _context.WalletReservations
                 .CountAsync(r => r.Status == "Reserved");
 

@@ -481,6 +481,8 @@ namespace ProductAuction.API.Controllers
                     r.Type == "SellerDeposit" &&
                     r.Status == "Reserved");
 
+            // a seller without a reserved deposit has nothing to forfeit —
+            // block the cancel rather than allow a free exit
             if (isSeller && reservation == null)
             {
                 return BadRequest(new
@@ -515,7 +517,9 @@ namespace ProductAuction.API.Controllers
 
                 if (isSeller)
                 {
-                    // seller cancelling = deposit is forfeited to the platform
+                    // seller cancelling = deposit is forfeited to the platform.
+                    // ReservedBalance is only a hold — we need real Balance here
+                    // because the money is actually leaving the seller's wallet.
                     if (sellerWallet.Balance < reservation.Amount)
                     {
                         return BadRequest(new

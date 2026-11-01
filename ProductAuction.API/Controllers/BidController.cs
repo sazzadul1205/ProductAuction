@@ -19,7 +19,7 @@ namespace ProductAuction.API.Controllers
         {
             _context = context;
         }
-            
+
 
         // POST: api/bid
         // Places a bid on an active auction.
@@ -342,6 +342,7 @@ namespace ProductAuction.API.Controllers
 
         // POST: api/bid/{auctionId}/buyout
         // Lets a buyer immediately buy the product at its buyout price.
+        // This is the "instant win" path — it skips bidding and creates the sale directly.
         [HttpPost("{auctionId}/buyout")]
         [Authorize(Roles = "Buyer")]
         public async Task<IActionResult> Buyout(int auctionId)
@@ -432,7 +433,8 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // don't let the same auction be sold twice
+            // don't let the same auction be sold twice —
+            // a Sale row means the auction already produced a sale, so it's closed
             var existingSale = await _context.Sales.AnyAsync(s => s.AuctionId == auctionId);
 
             if (existingSale)
@@ -467,7 +469,9 @@ namespace ProductAuction.API.Controllers
                     r.Type == "BuyerFunds" &&
                     r.Status == "Reserved");
 
-            // first time participating? reserve 25% of the starting price
+            // first time participating? reserve 25% of the starting price.
+            // this is the same 25% "eligibility deposit" used everywhere in the system
+            // (bid, buyout, dispute penalty) — keep the number in sync if it ever changes.
             if (reservation == null)
             {
                 decimal requiredAmount = product.StartingPrice * 0.25m;
@@ -517,16 +521,17 @@ namespace ProductAuction.API.Controllers
             auction.CurrentHighestBidderId = userId;
             auction.BidCount++;
 
-            // Mark product as unavailable after sale
+            // lock the product now so it can't be relisted or bid on while payment is pending
             product.Status = "Unavailable";
 
-            // platform takes 10%, seller gets the rest
+            // platform takes 10%, seller gets the rest.
+            // this 10% is locked here — the Sale row is created now, so the split is fixed.
             decimal commissionAmount = Math.Round(product.BuyoutPrice * 0.10m, 2);
             decimal sellerProceeds = product.BuyoutPrice - commissionAmount;
 
             var now = DateTime.UtcNow;
 
-            // create the sale record
+            // create the sale record — buyer has 3 days to pay before it flips to PaymentOverdue
             var sale = new Sale
             {
                 AuctionId = auction.Id,
@@ -553,7 +558,8 @@ namespace ProductAuction.API.Controllers
 
             foreach (var buyerReservation in reservations)
             {
-                // skip the winner — their funds stay locked until payment
+                // skip the winner — their funds stay locked because
+                // the 25% counts toward their payment obligation later
                 if (buyerReservation.WalletId == wallet.Id)
                 {
                     continue;
@@ -589,7 +595,6 @@ namespace ProductAuction.API.Controllers
                 }
             });
         }
-
 
         // Works out the minimum bid increment based on where the current bid sits
         // within the price range (starting → buyout). Range is split into thirds:
