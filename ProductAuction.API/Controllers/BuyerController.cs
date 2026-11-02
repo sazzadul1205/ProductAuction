@@ -247,22 +247,82 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            var page = query.Page < 1 ? 1 : query.Page;
-            var pageSize = query.PageSize < 1 ? 20 : (query.PageSize > 100 ? 100 : query.PageSize);
-            var search = query.Search;
-            var filter = query.Filter;
+        var page = query.Page < 1 ? 1 : query.Page;
+        var pageSize = query.PageSize < 1 ? 20 : (query.PageSize > 100 ? 100 : query.PageSize);
+        var search = query.Search;
+        var filter = query.Filter;
 
-            var auctionsQuery = _context.Auctions
-                .Where(a => a.WinnerId == buyerId)
-                .AsQueryable();
+        var auctionsQuery = _context.Auctions
+            .Where(a => a.WinnerId == buyerId)
+            .AsNoTracking()
+            .AsQueryable();
 
-            if (!string.IsNullOrWhiteSpace(search))
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim().ToLower();
+            auctionsQuery = auctionsQuery.Where(a => a.Product.Title.ToLower().Contains(term));
+        }
+
+        // Compute summary counts from full context for cards
+        var allWonAuctionIds = await _context.Auctions
+            .Where(a => a.WinnerId == buyerId)
+            .Select(a => a.Id)
+            .ToListAsync();
+
+        var salesForBuyer = await _context.Sales
+            .Where(s => s.BuyerId == buyerId && allWonAuctionIds.Contains(s.AuctionId))
+            .ToListAsync();
+
+        var totalWon = allWonAuctionIds.Count;
+        var pendingPaymentCount = salesForBuyer.Count(s => s.Status == "AwaitingPayment" || s.Status == "PaymentOverdue");
+        var totalSpent = salesForBuyer
+            .Where(s => s.Status == "Paid" || s.Status == "Completed")
+            .Sum(s => s.FinalAmount);
+
+        // Apply filter based on derived status
+        if (!string.IsNullOrWhiteSpace(filter) && filter != "All")
+        {
+            var saleByAuction = salesForBuyer.GroupBy(s => s.AuctionId).ToDictionary(g => g.Key, g => g.First());
+            var auctionIdsWithDisputes = await _context.Disputes
+                .Where(d => salesForBuyer.Select(s => s.Id).Contains(d.SaleId))
+                .Select(d => _context.Sales.Where(s => s.Id == d.SaleId).Select(s => s.AuctionId).FirstOrDefault())
+                .Distinct()
+                .ToListAsync();
+
+            var deliveryBySaleId = await _context.DeliveryRecords
+                .Where(dr => salesForBuyer.Select(s => s.Id).Contains(dr.SaleId))
+                .ToDictionaryAsync(dr => dr.SaleId);
+
+            if (filter == "AwaitingPayment")
             {
-                var term = search.Trim().ToLower();
-                auctionsQuery = auctionsQuery.Where(a => a.Product.Title.ToLower().Contains(term));
+                var ids = salesForBuyer.Where(s => s.Status == "AwaitingPayment" || s.Status == "PaymentOverdue").Select(s => s.AuctionId).ToList();
+                auctionsQuery = auctionsQuery.Where(a => ids.Contains(a.Id));
             }
+            else if (filter == "Completed")
+            {
+                var ids = salesForBuyer.Where(s => s.Status == "Completed").Select(s => s.AuctionId).ToList();
+                auctionsQuery = auctionsQuery.Where(a => ids.Contains(a.Id));
+            }
+            else if (filter == "Disputed")
+            {
+                auctionsQuery = auctionsQuery.Where(a => auctionIdsWithDisputes.Contains(a.Id));
+            }
+            else if (filter == "In Transit")
+            {
+                var inTransitSaleIds = deliveryBySaleId.Keys;
+                var inTransitAuctionIds = salesForBuyer.Where(s => inTransitSaleIds.Contains(s.Id)).Select(s => s.AuctionId).ToList();
+                auctionsQuery = auctionsQuery.Where(a => inTransitAuctionIds.Contains(a.Id) && !salesForBuyer.Any(s => s.AuctionId == a.Id && (s.Status == "Completed")));
+            }
+            else if (filter == "Action Required")
+            {
+                var awaitingIds = salesForBuyer.Where(s => s.Status == "AwaitingPayment" || s.Status == "PaymentOverdue").Select(s => s.AuctionId).ToList();
+                var paidNoDelivery = salesForBuyer.Where(s => (s.Status == "Paid") && !deliveryBySaleId.ContainsKey(s.Id)).Select(s => s.AuctionId).ToList();
+                var allAction = awaitingIds.Union(paidNoDelivery).Distinct().ToList();
+                auctionsQuery = auctionsQuery.Where(a => allAction.Contains(a.Id));
+            }
+        }
 
-            var totalCount = await auctionsQuery.CountAsync();
+        var totalCount = await auctionsQuery.CountAsync();
 
             var auctions = await auctionsQuery
                 .OrderByDescending(a => a.EndTime)
@@ -356,19 +416,6 @@ namespace ProductAuction.API.Controllers
                 })
                 .ToListAsync();
 
-            if (!string.IsNullOrWhiteSpace(filter) && filter != "All")
-            {
-                auctions = filter switch
-                {
-                    "AwaitingPayment" => auctions.Where(a => a.paymentStatus == "AwaitingPayment" || a.paymentStatus == "PaymentOverdue").ToList(),
-                    "Action Required" => auctions.Where(a => (a.paymentStatus == "AwaitingPayment" || a.paymentStatus == "PaymentOverdue") || (a.paymentStatus == "Paid" && a.deliveryRecord == null && a.dispatchInfo == null) || ((a.deliveryRecord != null || a.dispatchInfo != null) && a.paymentStatus != "Completed" && a.dispute == null)).ToList(),
-                    "In Transit" => auctions.Where(a => (a.deliveryRecord != null || a.dispatchInfo != null) && a.paymentStatus != "Completed").ToList(),
-                    "Completed" => auctions.Where(a => a.paymentStatus == "Completed").ToList(),
-                    "Disputed" => auctions.Where(a => a.dispute != null).ToList(),
-                    _ => auctions.Where(a => a.paymentStatus == filter).ToList()
-                };
-            }
-
             return Ok(new
             {
                 status = 200,
@@ -378,7 +425,10 @@ namespace ProductAuction.API.Controllers
                     items = auctions,
                     page,
                     pageSize,
-                    totalCount
+                    totalCount,
+                    totalWon,
+                    pendingPaymentCount,
+                    totalSpent
                 }
             });
         }
