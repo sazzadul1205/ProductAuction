@@ -34,13 +34,52 @@ namespace ProductAuction.API.Controllers
         // Admin views all disputes.
         [HttpGet]
         [Authorize(Roles = "Admin")]
-        public async Task<IActionResult> GetAllDisputes()
+        public async Task<IActionResult> GetAllDisputes([FromQuery] ProductAuction.API.DTOs.Common.PaginationQueryDto query)
         {
-            // _logger.LogInformation("GetAllDisputes called.");
+            var page = query.Page;
+            if (page < 1) page = 1;
+            var pageSize = query.PageSize;
+            if (pageSize < 1) pageSize = 20;
+            if (pageSize > 100) pageSize = 100;
 
             // fetch base dispute data
-            var disputes = await _context.Disputes
+            var disputesQuery = _context.Disputes.AsNoTracking().AsQueryable();
+
+            // filter by status if provided
+            if (!string.IsNullOrWhiteSpace(query.Filter))
+            {
+                disputesQuery = disputesQuery.Where(d => d.Status.ToLower() == query.Filter.ToLower());
+            }
+            else if (!string.IsNullOrWhiteSpace(query.Status))
+            {
+                disputesQuery = disputesQuery.Where(d => d.Status.ToLower() == query.Status.ToLower());
+            }
+
+            // search by complaint, evidence, dispute id, sale id etc if search provided
+            if (!string.IsNullOrWhiteSpace(query.Search))
+            {
+                var searchLower = query.Search.Trim().ToLower();
+                disputesQuery = disputesQuery.Where(d =>
+                    (d.Complaint != null && d.Complaint.ToLower().Contains(searchLower)) ||
+                    d.Id.ToString().Contains(searchLower) ||
+                    d.SaleId.ToString().Contains(searchLower) ||
+                    d.ProductId.ToString().Contains(searchLower) ||
+                    (d.EvidenceUrl != null && d.EvidenceUrl.ToLower().Contains(searchLower))
+                );
+            }
+
+            var totalCount = await disputesQuery.CountAsync();
+
+            // Get counts for all statuses regardless of current filter (for cards)
+            var allDisputesQuery = _context.Disputes.AsNoTracking();
+            var openCount = await allDisputesQuery.CountAsync(d => d.Status == "Open");
+            var underReviewCount = await allDisputesQuery.CountAsync(d => d.Status == "UnderReview");
+            var resolvedCount = await allDisputesQuery.CountAsync(d => d.Status == "Resolved" || d.Status == "Rejected");
+
+            var disputes = await disputesQuery
                 .OrderByDescending(d => d.CreatedAt)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
                 .ToListAsync();
 
             // fetch all the sales these disputes point to
@@ -139,7 +178,13 @@ namespace ProductAuction.API.Controllers
             {
                 status = 200,
                 message = "Disputes retrieved successfully.",
-                data = result
+                data = result,
+                page,
+                pageSize,
+                totalCount,
+                openCount,
+                underReviewCount,
+                resolvedCount
             });
         }
 

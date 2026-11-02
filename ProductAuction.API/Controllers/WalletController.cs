@@ -70,11 +70,19 @@ namespace ProductAuction.API.Controllers
                 ReservedBalance = wallet.ReservedBalance
             };
 
+            var availableBalance = wallet.Balance - wallet.ReservedBalance;
+
             return Ok(new
             {
                 status = 200,
                 message = "Wallet retrieved successfully.",
-                data = response
+                data = new
+                {
+                    id = wallet.Id,
+                    balance = wallet.Balance,
+                    reservedBalance = wallet.ReservedBalance,
+                    availableBalance = availableBalance
+                }
             });
         }
 

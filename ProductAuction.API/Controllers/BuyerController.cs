@@ -316,9 +316,6 @@ namespace ProductAuction.API.Controllers
                         {
                             d.Id,
                             dispatchedAt = d.DispatchedAt,
-                            courierName = d.CourierName,
-                            trackingNumber = d.TrackingNumber,
-                            deliveryNote = d.DeliveryNote,
                             dispatchInfo = d.DispatchInfo,
                             trackingEvidence = d.TrackingEvidence
                         })
@@ -350,12 +347,9 @@ namespace ProductAuction.API.Controllers
                             id = d.Id,
                             complaint = d.Complaint,
                             evidenceUrl = d.EvidenceUrl,
-                            evidenceUrls = d.EvidenceUrls,
                             status = d.Status,
                             adminDecision = d.AdminDecision,
                             createdAt = d.CreatedAt,
-                            resolutionNotes = d.ResolutionNotes,
-                            resolvedAt = d.ResolvedAt,
                             raisedBy = d.RaisedBy
                         })
                         .FirstOrDefault()
