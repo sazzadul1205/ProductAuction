@@ -238,7 +238,6 @@ namespace ProductAuction.API.Controllers
 
             if (buyerId == null)
             {
-                // _logger.LogWarning("GetWonAuctions: user identity missing from token.");
 
                 return Unauthorized(new
                 {
@@ -263,7 +262,6 @@ namespace ProductAuction.API.Controllers
             auctionsQuery = auctionsQuery.Where(a => a.Product.Title.ToLower().Contains(term));
         }
 
-        // Compute summary counts from full context for cards
         var allWonAuctionIds = await _context.Auctions
             .Where(a => a.WinnerId == buyerId)
             .Select(a => a.Id)
@@ -282,7 +280,6 @@ namespace ProductAuction.API.Controllers
         // Apply filter based on derived status
         if (!string.IsNullOrWhiteSpace(filter) && filter != "All")
         {
-            var saleByAuction = salesForBuyer.GroupBy(s => s.AuctionId).ToDictionary(g => g.Key, g => g.First());
             var auctionIdsWithDisputes = await _context.Disputes
                 .Where(d => salesForBuyer.Select(s => s.Id).Contains(d.SaleId))
                 .Select(d => _context.Sales.Where(s => s.Id == d.SaleId).Select(s => s.AuctionId).FirstOrDefault())
@@ -295,8 +292,10 @@ namespace ProductAuction.API.Controllers
 
             if (filter == "AwaitingPayment")
             {
-                var ids = salesForBuyer.Where(s => s.Status == "AwaitingPayment" || s.Status == "PaymentOverdue").Select(s => s.AuctionId).ToList();
-                auctionsQuery = auctionsQuery.Where(a => ids.Contains(a.Id));
+                var awaitingIds = salesForBuyer.Where(s => s.Status == "AwaitingPayment" || s.Status == "PaymentOverdue").Select(s => s.AuctionId).ToList();
+                var paidNoDelivery = salesForBuyer.Where(s => (s.Status == "Paid") && !deliveryBySaleId.ContainsKey(s.Id)).Select(s => s.AuctionId).ToList();
+                var allAction = awaitingIds.Union(paidNoDelivery).Distinct().ToList();
+                auctionsQuery = auctionsQuery.Where(a => allAction.Contains(a.Id));
             }
             else if (filter == "Completed")
             {
@@ -338,7 +337,7 @@ namespace ProductAuction.API.Controllers
                     mainImageUrl = _context.ProductImages
                         .Where(i => i.ProductId == a.Product.Id && i.IsMain)
                         .Select(i => i.ImageUrl)
-                        .FirstOrDefault() ?? "",
+                        .FirstOrDefault(),
 
                     winningAmount = a.CurrentHighestBid,
                     auctionStatus = a.Status,
@@ -359,12 +358,12 @@ namespace ProductAuction.API.Controllers
 
                     paymentDeadline = _context.Sales
                         .Where(s => s.AuctionId == a.Id && s.BuyerId == buyerId)
-                        .Select(s => (DateTime?)s.PaymentDeadline)
+                        .Select(s => s.PaymentDeadline)
                         .FirstOrDefault(),
 
                     finalAmount = _context.Sales
                         .Where(s => s.AuctionId == a.Id && s.BuyerId == buyerId)
-                        .Select(s => (decimal?)s.FinalAmount)
+                        .Select(s =>s.FinalAmount)
                         .FirstOrDefault(),
 
                     deliveryRecord = _context.DeliveryRecords
