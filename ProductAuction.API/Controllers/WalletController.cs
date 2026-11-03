@@ -36,7 +36,6 @@ namespace ProductAuction.API.Controllers
         [HttpGet("me")]
         public async Task<IActionResult> GetMyWallet()
         {
-            // grab the user id from the JWT
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             if (userId == null)
@@ -48,14 +47,11 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // _logger.LogInformation("GetMyWallet called by user {UserId}.", userId);
-
             // find the wallet linked to this user
             var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == userId);
 
             if (wallet == null)
             {
-
                 return NotFound(new
                 {
                     status = 404,
@@ -81,7 +77,7 @@ namespace ProductAuction.API.Controllers
                     id = wallet.Id,
                     balance = wallet.Balance,
                     reservedBalance = wallet.ReservedBalance,
-                    availableBalance = availableBalance
+                    availableBalance
                 }
             });
         }
@@ -92,12 +88,10 @@ namespace ProductAuction.API.Controllers
         [HttpPost("deposit-request")]
         public async Task<IActionResult> CreateDepositRequest([FromForm] CreateDepositRequestDto dto)
         {
-            // grab the user id from the JWT
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             if (userId == null)
             {
-                // _logger.LogWarning("CreateDepositRequest: user identity missing from token.");
 
                 return Unauthorized(new
                 {
@@ -106,16 +100,11 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // _logger.LogInformation("CreateDepositRequest called by user {UserId} (method='{Method}', amount={Amount}).",
-            //     userId, dto.Method, dto.Amount);
-
             // find the user's wallet
             var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == userId);
 
             if (wallet == null)
             {
-                // _logger.LogWarning("CreateDepositRequest: wallet for user {UserId} not found.", userId);
-
                 return NotFound(new
                 {
                     status = 404,
@@ -169,8 +158,6 @@ namespace ProductAuction.API.Controllers
 
             if (userId == null)
             {
-                // _logger.LogWarning("GetMyDepositRequests: user identity missing from token.");
-
                 return Unauthorized(new
                 {
                     status = 401,
@@ -182,8 +169,6 @@ namespace ProductAuction.API.Controllers
 
             if (wallet == null)
             {
-                // _logger.LogWarning("GetMyDepositRequests: wallet for user {UserId} not found.", userId);
-
                 return NotFound(new
                 {
                     status = 404,
@@ -277,8 +262,6 @@ namespace ProductAuction.API.Controllers
 
             if (userId == null)
             {
-                // _logger.LogWarning("GetMyTransactions: user identity missing from token.");
-
                 return Unauthorized(new
                 {
                     status = 401,
@@ -290,8 +273,6 @@ namespace ProductAuction.API.Controllers
 
             if (wallet == null)
             {
-                // _logger.LogWarning("GetMyTransactions: wallet for user {UserId} not found.", userId);
-
                 return NotFound(new
                 {
                     status = 404,
@@ -382,8 +363,6 @@ namespace ProductAuction.API.Controllers
 
             if (userId == null)
             {
-                // _logger.LogWarning("GetMyReservations: user identity missing from token.");
-
                 return Unauthorized(new
                 {
                     status = 401,
@@ -395,8 +374,6 @@ namespace ProductAuction.API.Controllers
 
             if (wallet == null)
             {
-                // _logger.LogWarning("GetMyReservations: wallet for user {UserId} not found.", userId);
-
                 return NotFound(new
                 {
                     status = 404,

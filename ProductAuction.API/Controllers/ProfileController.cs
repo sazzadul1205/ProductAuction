@@ -26,13 +26,10 @@ namespace ProductAuction.API.Controllers
         [HttpPut("submit-verification")]
         public async Task<IActionResult> SubmitVerification()
         {
-            // grab the user id from the JWT
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             if (userId == null)
             {
-                // _logger.LogWarning("SubmitVerification: user identity missing from token.");
-
                 return Unauthorized(new
                 {
                     status = 401,
@@ -40,15 +37,11 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // _logger.LogInformation("SubmitVerification called by user {UserId}.", userId);
-
             // find this user's profile
             var profile = await _context.UserProfiles.FirstOrDefaultAsync(p => p.UserId == userId);
 
             if (profile == null)
             {
-                // _logger.LogWarning("SubmitVerification: profile for user {UserId} not found.", userId);
-
                 return NotFound(new
                 {
                     status = 404,
@@ -61,12 +54,6 @@ namespace ProductAuction.API.Controllers
                 string.IsNullOrEmpty(profile.NationalIdFrontImageUrl) ||
                 string.IsNullOrEmpty(profile.NationalIdBackImageUrl))
             {
-                // _logger.LogWarning("SubmitVerification: user {UserId} missing NID fields (number={HasNumber}, front={HasFront}, back={HasBack}).",
-                //     userId,
-                //     !string.IsNullOrEmpty(profile.NationalIdNumber),
-                //     !string.IsNullOrEmpty(profile.NationalIdFrontImageUrl),
-                //     !string.IsNullOrEmpty(profile.NationalIdBackImageUrl));
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -74,7 +61,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // move it into the review queue and clear any leftover review state
+            // move it into the review queue
             profile.VerificationStatus = "PendingReview";
             profile.VerifiedBy = null;
             profile.VerifiedAt = null;
@@ -82,8 +69,6 @@ namespace ProductAuction.API.Controllers
             profile.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
-
-            // _logger.LogInformation("SubmitVerification: profile #{ProfileId} for user {UserId} submitted for review.", profile.Id, userId);
 
             return Ok(new
             {
@@ -105,7 +90,6 @@ namespace ProductAuction.API.Controllers
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> GetPendingVerificationProfiles()
         {
-            // _logger.LogInformation("GetPendingVerificationProfiles called.");
 
             var profiles = await _context.UserProfiles
                 .Where(p => p.VerificationStatus == "PendingReview")
@@ -139,8 +123,6 @@ namespace ProductAuction.API.Controllers
                 })
                 .ToListAsync();
 
-            // _logger.LogInformation("GetPendingVerificationProfiles returned {Count} profile(s).", profiles.Count);
-
             return Ok(new
             {
                 status = 200,
@@ -156,13 +138,9 @@ namespace ProductAuction.API.Controllers
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> VerifyProfile(int id, VerifyProfileDto dto)
         {
-            // _logger.LogInformation("VerifyProfile called for profile #{ProfileId} with decision '{Status}'.", id, dto.Status);
-
             // only two decisions are allowed
             if (dto.Status != "Verified" && dto.Status != "Rejected")
             {
-                // _logger.LogWarning("VerifyProfile: invalid decision '{Status}' for profile #{ProfileId}.", dto.Status, id);
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -173,8 +151,6 @@ namespace ProductAuction.API.Controllers
             // rejection needs a reason
             if (dto.Status == "Rejected" && string.IsNullOrEmpty(dto.RejectionReason))
             {
-                // _logger.LogWarning("VerifyProfile: rejection reason missing for profile #{ProfileId}.", id);
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -187,8 +163,6 @@ namespace ProductAuction.API.Controllers
 
             if (profile == null)
             {
-                // _logger.LogWarning("VerifyProfile: profile #{ProfileId} not found.", id);
-
                 return NotFound(new
                 {
                     status = 404,
@@ -199,8 +173,6 @@ namespace ProductAuction.API.Controllers
             // grab the admin's id from the JWT so we can record who decided
             var adminId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-            // _logger.LogDebug("VerifyProfile: profile #{ProfileId} reviewed by admin {AdminId}.", id, adminId);
-
             profile.VerificationStatus = dto.Status;
             profile.VerifiedBy = adminId;
             profile.VerifiedAt = DateTime.UtcNow;
@@ -210,9 +182,6 @@ namespace ProductAuction.API.Controllers
             profile.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
-
-            // _logger.LogInformation("VerifyProfile: profile #{ProfileId} marked '{Status}' by admin {AdminId}.",
-            //     id, dto.Status, adminId);
 
             return Ok(new
             {

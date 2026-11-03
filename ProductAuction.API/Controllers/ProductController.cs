@@ -36,7 +36,6 @@ namespace ProductAuction.API.Controllers
         [Authorize(Roles = "Seller")]
         public async Task<IActionResult> GetMyProducts([FromQuery] PaginationQueryDto query)
         {
-            // grab the user id from the JWT
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             if (userId == null)
@@ -163,12 +162,8 @@ namespace ProductAuction.API.Controllers
 
             if (userId == null)
             {
-                // _logger.LogWarning("GetMyProductById: user identity missing from token.");
-
                 return Unauthorized();
             }
-
-            // _logger.LogInformation("GetMyProductById called for product #{ProductId} by seller {SellerId}.", id, userId);
 
             var product = await _context.Products
                 .Where(p => p.Id == id && p.SellerId == userId)
@@ -210,8 +205,6 @@ namespace ProductAuction.API.Controllers
 
             if (product == null)
             {
-                // _logger.LogWarning("GetMyProductById: product #{ProductId} not found for seller {SellerId}.", id, userId);
-
                 return NotFound(new
                 {
                     status = 404,
@@ -239,17 +232,12 @@ namespace ProductAuction.API.Controllers
 
             if (userId == null)
             {
-                // _logger.LogWarning("CreateProduct: user identity missing from token.");
-
                 return Unauthorized(new
                 {
                     status = 401,
                     message = "User identity was not found in the token."
                 });
             }
-
-            // _logger.LogInformation("CreateProduct called by seller {SellerId} (title='{Title}', images={ImageCount}).",
-            //     userId, dto.Title, dto.Images?.Count ?? 0);
 
             // at least one image is required
             if (dto.Images == null || dto.Images.Count == 0)
@@ -264,8 +252,6 @@ namespace ProductAuction.API.Controllers
             // buyout price has to be at least the starting price
             if (dto.BuyoutPrice < dto.StartingPrice)
             {
-                // _logger.LogWarning("CreateProduct: buyout {Buyout} < starting {Starting} for seller {SellerId}.",
-                //     dto.BuyoutPrice, dto.StartingPrice, userId);
 
                 return BadRequest(new
                 {
@@ -279,8 +265,6 @@ namespace ProductAuction.API.Controllers
 
             if (!categoryExists)
             {
-                // _logger.LogWarning("CreateProduct: category #{CategoryId} does not exist.", dto.CategoryId);
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -335,8 +319,6 @@ namespace ProductAuction.API.Controllers
                 await _context.SaveChangesAsync();
             }
 
-            // _logger.LogInformation("CreateProduct: draft product #{ProductId} created for seller {SellerId}.", product.Id, userId);
-
             return Ok(new
             {
                 status = 200,
@@ -355,8 +337,6 @@ namespace ProductAuction.API.Controllers
 
             if (userId == null)
             {
-                // _logger.LogWarning("UpdateProduct: user identity missing from token.");
-
                 return Unauthorized(new
                 {
                     status = 401,
@@ -364,15 +344,11 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // _logger.LogInformation("UpdateProduct called for product #{ProductId} by user {UserId}.", id, userId);
-
             // find the product
             var product = await _context.Products.FirstOrDefaultAsync(p => p.Id == id);
 
             if (product == null)
             {
-                // _logger.LogWarning("UpdateProduct: product #{ProductId} not found.", id);
-
                 return NotFound(new
                 {
                     status = 404,
@@ -383,17 +359,12 @@ namespace ProductAuction.API.Controllers
             // only the seller who owns it can edit
             if (product.SellerId != userId)
             {
-                // _logger.LogWarning("UpdateProduct: user {UserId} is not the owner of product #{ProductId}.", userId, id);
-
                 return Forbid();
             }
 
             // only drafts and rejected products are editable
             if (product.ApprovalStatus != "Draft" && product.ApprovalStatus != "Rejected")
             {
-                // _logger.LogWarning("UpdateProduct: product #{ProductId} has status {Status}; only Draft/Rejected are editable.",
-                //     id, product.ApprovalStatus);
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -404,9 +375,6 @@ namespace ProductAuction.API.Controllers
             // buyout price check
             if (dto.BuyoutPrice < dto.StartingPrice)
             {
-                // _logger.LogWarning("UpdateProduct: buyout {Buyout} < starting {Starting} for product #{ProductId}.",
-                //     dto.BuyoutPrice, dto.StartingPrice, id);
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -415,13 +383,10 @@ namespace ProductAuction.API.Controllers
             }
 
             // category check
-            var categoryExists = await _context.Categories
-                .AnyAsync(c => c.Id == dto.CategoryId);
+            var categoryExists = await _context.Categories.AnyAsync(c => c.Id == dto.CategoryId);
 
             if (!categoryExists)
             {
-                // _logger.LogWarning("UpdateProduct: category #{CategoryId} does not exist.", dto.CategoryId);
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -554,7 +519,7 @@ namespace ProductAuction.API.Controllers
 
 
         // POST: api/product/{id}/submit-for-approval
-        // Submits a draft product for admin approval (reserves the seller deposit).
+        // Submits a draft product for admin approval
         [HttpPost("{id}/submit-for-approval")]
         public async Task<IActionResult> SubmitForApproval(int id)
         {
@@ -563,8 +528,6 @@ namespace ProductAuction.API.Controllers
 
             if (userId == null)
             {
-                // _logger.LogWarning("SubmitForApproval: user identity missing from token.");
-
                 return Unauthorized(new
                 {
                     status = 401,
@@ -572,15 +535,11 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // _logger.LogInformation("SubmitForApproval called for product #{ProductId} by user {UserId}.", id, userId);
-
             // find the product
             var product = await _context.Products.FirstOrDefaultAsync(p => p.Id == id);
 
             if (product == null)
             {
-                // _logger.LogWarning("SubmitForApproval: product #{ProductId} not found.", id);
-
                 return NotFound(new
                 {
                     status = 404,
@@ -591,17 +550,12 @@ namespace ProductAuction.API.Controllers
             // only the owner can submit
             if (product.SellerId != userId)
             {
-                // _logger.LogWarning("SubmitForApproval: user {UserId} is not the owner of product #{ProductId}.", userId, id);
-
                 return Forbid();
             }
 
             // only drafts can be submitted
             if (product.ApprovalStatus != "Draft")
             {
-                // _logger.LogWarning("SubmitForApproval: product #{ProductId} has status {Status}; only Draft is submittable.",
-                //     id, product.ApprovalStatus);
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -614,8 +568,6 @@ namespace ProductAuction.API.Controllers
 
             if (wallet == null)
             {
-                // _logger.LogError("SubmitForApproval: seller wallet for user {UserId} not found.", userId);
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -631,8 +583,6 @@ namespace ProductAuction.API.Controllers
 
             if (availableBalance < reservationAmount)
             {
-                // _logger.LogWarning("SubmitForApproval: insufficient balance for user {UserId} (available={Available}, required={Required}).",
-                //     userId, availableBalance, reservationAmount);
 
                 return BadRequest(new
                 {
@@ -683,8 +633,6 @@ namespace ProductAuction.API.Controllers
 
             if (userId == null)
             {
-                // _logger.LogWarning("WithdrawSubmission: user identity missing from token.");
-
                 return Unauthorized(new
                 {
                     status = 401,
@@ -692,15 +640,11 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // _logger.LogInformation("WithdrawSubmission called for product #{ProductId} by user {UserId}.", id, userId);
-
             // find the product
             var product = await _context.Products.FirstOrDefaultAsync(p => p.Id == id);
 
             if (product == null)
             {
-                // _logger.LogWarning("WithdrawSubmission: product #{ProductId} not found.", id);
-
                 return NotFound(new
                 {
                     status = 404,
@@ -711,17 +655,12 @@ namespace ProductAuction.API.Controllers
             // only the owner can withdraw
             if (product.SellerId != userId)
             {
-                // _logger.LogWarning("WithdrawSubmission: user {UserId} is not the owner of product #{ProductId}.", userId, id);
-
                 return Forbid();
             }
 
             // can only withdraw while still waiting for review
             if (product.ApprovalStatus != "PendingApproval")
             {
-                // _logger.LogWarning("WithdrawSubmission: product #{ProductId} has status {Status}; only PendingApproval can be withdrawn.",
-                //     id, product.ApprovalStatus);
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -742,9 +681,6 @@ namespace ProductAuction.API.Controllers
 
                 if (wallet == null)
                 {
-                    // _logger.LogError("WithdrawSubmission: wallet #{WalletId} for reservation #{ReservationId} not found.",
-                    //     reservation.WalletId, reservation.Id);
-
                     return BadRequest(new
                     {
                         status = 400,
@@ -755,9 +691,6 @@ namespace ProductAuction.API.Controllers
                 // check before releasing
                 if (wallet.ReservedBalance < reservation.Amount)
                 {
-                    // _logger.LogError("WithdrawSubmission: wallet #{WalletId} reserved balance inconsistent ({Reserved} < {Amount}).",
-                    //     wallet.Id, wallet.ReservedBalance, reservation.Amount);
-
                     return BadRequest(new
                     {
                         status = 400,
@@ -775,8 +708,6 @@ namespace ProductAuction.API.Controllers
 
             await _context.SaveChangesAsync();
 
-            // _logger.LogInformation("WithdrawSubmission: product #{ProductId} withdrawn back to Draft.", id);
-
             return Ok(new
             {
                 status = 200,
@@ -790,13 +721,10 @@ namespace ProductAuction.API.Controllers
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteProduct(int id)
         {
-            // grab the user id from the JWT
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             if (userId == null)
             {
-                // _logger.LogWarning("DeleteProduct: user identity missing from token.");
-
                 return Unauthorized(new
                 {
                     status = 401,
@@ -804,15 +732,11 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // _logger.LogInformation("DeleteProduct called for product #{ProductId} by user {UserId}.", id, userId);
-
             // find the product
             var product = await _context.Products.FirstOrDefaultAsync(p => p.Id == id);
 
             if (product == null)
             {
-                // _logger.LogWarning("DeleteProduct: product #{ProductId} not found.", id);
-
                 return NotFound(new
                 {
                     status = 404,
@@ -823,17 +747,12 @@ namespace ProductAuction.API.Controllers
             // only the seller who owns it can delete
             if (product.SellerId != userId)
             {
-                // _logger.LogWarning("DeleteProduct: user {UserId} is not the owner of product #{ProductId}.", userId, id);
-
                 return Forbid();
             }
 
             // only drafts and rejected products can be deleted
             if (product.ApprovalStatus != "Draft" && product.ApprovalStatus != "Rejected")
             {
-                // _logger.LogWarning("DeleteProduct: product #{ProductId} has status {Status}; only Draft/Rejected can be deleted.",
-                //     id, product.ApprovalStatus);
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -855,12 +774,7 @@ namespace ProductAuction.API.Controllers
             foreach (var image in images)
             {
                 await _imageUploadService.DeleteImageAsync(image.ImageUrl);
-
-                // _logger.LogDebug("DeleteProduct: image #{ImageId} removed from storage for product #{ProductId}.", image.Id, id);
             }
-
-
-            // _logger.LogInformation("DeleteProduct: product #{ProductId} and {ImageCount} image(s) deleted.", id, images.Count);
 
             return Ok(new
             {
@@ -940,8 +854,6 @@ namespace ProductAuction.API.Controllers
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> GetPendingApprovalProductById(int id)
         {
-            // _logger.LogInformation("GetPendingApprovalProductById called for product #{ProductId}.", id);
-
             var product = await _context.Products
                 .Where(p => p.Id == id && p.ApprovalStatus == "PendingApproval")
                 .Select(p => new ProductResponseDto
@@ -979,8 +891,6 @@ namespace ProductAuction.API.Controllers
 
             if (product == null)
             {
-                // _logger.LogWarning("GetPendingApprovalProductById: product #{ProductId} not found in PendingApproval state.", id);
-
                 return NotFound(new
                 {
                     status = 404,
@@ -1003,15 +913,11 @@ namespace ProductAuction.API.Controllers
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> ReviewProduct(int id, [FromBody] ProductApprovalDto dto)
         {
-            // _logger.LogInformation("ReviewProduct called for product #{ProductId} with decision '{Status}'.", id, dto.Status);
-
             // find the product
             var product = await _context.Products.FirstOrDefaultAsync(p => p.Id == id);
 
             if (product == null)
             {
-                // _logger.LogWarning("ReviewProduct: product #{ProductId} not found.", id);
-
                 return NotFound(new
                 {
                     status = 404,
@@ -1022,9 +928,6 @@ namespace ProductAuction.API.Controllers
             // only pending products can be reviewed
             if (product.ApprovalStatus != "PendingApproval")
             {
-                // _logger.LogWarning("ReviewProduct: product #{ProductId} has status {Status}; only PendingApproval is reviewable.",
-                //     id, product.ApprovalStatus);
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -1035,8 +938,6 @@ namespace ProductAuction.API.Controllers
             // decision has to be Approved or Rejected
             if (dto.Status != "Approved" && dto.Status != "Rejected")
             {
-                // _logger.LogWarning("ReviewProduct: invalid decision '{Status}' for product #{ProductId}.", dto.Status, id);
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -1047,8 +948,6 @@ namespace ProductAuction.API.Controllers
             // rejection needs a reason
             if (dto.Status == "Rejected" && string.IsNullOrEmpty(dto.RejectionReason))
             {
-                // _logger.LogWarning("ReviewProduct: rejection reason missing for product #{ProductId}.", id);
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -1069,9 +968,6 @@ namespace ProductAuction.API.Controllers
 
                 if (reservation == null || reservation.Amount != requiredDeposit)
                 {
-                    // _logger.LogError("ReviewProduct: seller deposit missing or mismatched for product #{ProductId} (expected={Expected}).",
-                    //     id, requiredDeposit);
-
                     return BadRequest(new
                     {
                         status = 400,
@@ -1088,9 +984,6 @@ namespace ProductAuction.API.Controllers
                     wallet.ReservedBalance < reservation.Amount ||
                     wallet.Balance < reservation.Amount)
                 {
-                    // _logger.LogError("ReviewProduct: seller wallet #{WalletId} invalid or insufficient for product #{ProductId}.",
-                    //     reservation.WalletId, id);
-
                     return BadRequest(new
                     {
                         status = 400,
@@ -1119,9 +1012,6 @@ namespace ProductAuction.API.Controllers
 
                     if (wallet == null)
                     {
-                        // _logger.LogError("ReviewProduct (Reject): wallet #{WalletId} for reservation #{ReservationId} not found.",
-                        //     reservation.WalletId, reservation.Id);
-
                         return BadRequest(new
                         {
                             status = 400,
@@ -1131,9 +1021,6 @@ namespace ProductAuction.API.Controllers
 
                     if (wallet.ReservedBalance < reservation.Amount)
                     {
-                        // _logger.LogError("ReviewProduct (Reject): wallet #{WalletId} reserved balance inconsistent ({Reserved} < {Amount}).",
-                        //     wallet.Id, wallet.ReservedBalance, reservation.Amount);
-
                         return BadRequest(new
                         {
                             status = 400,
@@ -1144,8 +1031,6 @@ namespace ProductAuction.API.Controllers
                     wallet.ReservedBalance -= reservation.Amount;
                     reservation.Status = "Released";
                 }
-
-                // _logger.LogInformation("ReviewProduct: product #{ProductId} rejected; seller deposit released.", id);
             }
             else
             {

@@ -27,7 +27,6 @@ namespace ProductAuction.API.Controllers
         [HttpGet("dashboard")]
         public async Task<IActionResult> GetDashboard()
         {
-            // grab the seller id from the JWT
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             if (string.IsNullOrEmpty(userId))
