@@ -32,12 +32,8 @@ namespace ProductAuction.API.Controllers
 
             if (string.IsNullOrEmpty(userId))
             {
-                // _logger.LogWarning("GetDashboard: user identity missing from token.");
-
                 return Unauthorized();
             }
-
-            // _logger.LogInformation("GetDashboard called by user {UserId}.", userId);
 
             //  bid stats
             // grab all of this user's bids along with their auctions
@@ -100,13 +96,10 @@ namespace ProductAuction.API.Controllers
         [HttpGet("my-bids")]
         public async Task<IActionResult> GetMyBids([FromQuery] PaginationQueryDto query)
         {
-            // grab the buyer id from the JWT
             var buyerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             if (buyerId == null)
             {
-                // _logger.LogWarning("GetMyBids: user identity missing from token.");
-
                 return Unauthorized(new
                 {
                     status = 401,
@@ -173,7 +166,7 @@ namespace ProductAuction.API.Controllers
 
             var totalCount = await bidsQuery.CountAsync();
 
-            // Global counts across ALL of this buyer's bids 
+            // Global counts
             var totalBidsCount = await _context.Bids.CountAsync(b =>
                 b.BidderId == buyerId);
             var activeBidsCount = await _context.Bids.CountAsync(b =>
@@ -333,7 +326,7 @@ namespace ProductAuction.API.Controllers
                     productId = a.Product.Id,
                     productTitle = a.Product.Title,
 
-                    // main product image (blank if none)
+                    // main product image
                     mainImageUrl = _context.ProductImages
                         .Where(i => i.ProductId == a.Product.Id && i.IsMain)
                         .Select(i => i.ImageUrl)

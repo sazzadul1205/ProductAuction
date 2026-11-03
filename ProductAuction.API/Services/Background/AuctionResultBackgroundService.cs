@@ -51,16 +51,14 @@ namespace ProductAuction.API.Services.Background
                         _logger.LogInformation("Found {Count} ended auction(s) to process.", auctionIds.Count);
                     }
 
-                    // Process each ended auction independently — one failure
-                    // must not block the others. Use a fresh scope/context per
-                    // auction so a rollback in one does not leak tracked state.
+                    // Process each ended auction independently 
                     foreach (var auctionId in auctionIds)
                     {
                         try
                         {
                             using var scope = _scopeFactory.CreateScope();
                             var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-                            var auction = await context.Auctions.FindAsync(new object[] { auctionId }, stoppingToken);
+                            var auction = await context.Auctions.FindAsync([auctionId], stoppingToken);
                             if (auction == null) continue;
                             await ProcessAuctionAsync(context, auction, now, stoppingToken);
                         }
@@ -137,8 +135,7 @@ namespace ProductAuction.API.Services.Background
                     var sellerWallet = await context.Wallets
                         .FirstOrDefaultAsync(w => w.UserId == product.SellerId, stoppingToken);
 
-                    // Find the reserved deposit belonging to this
-                    // seller and product, not another user's wallet.
+                    // Find the reserved deposit belonging to this seller and product
                     var sellerDeposit = sellerWallet == null
                         ? null
                         : await context.WalletReservations
@@ -149,8 +146,6 @@ namespace ProductAuction.API.Services.Background
                                 r.Status == "Reserved", stoppingToken);
 
                     // Do not complete the auction if the seller's
-                    // wallet is missing or its reserved balance
-                    // cannot cover the deposit being released.
                     if (sellerWallet == null ||
                         (sellerDeposit != null && sellerWallet.ReservedBalance < sellerDeposit.Amount))
                     {

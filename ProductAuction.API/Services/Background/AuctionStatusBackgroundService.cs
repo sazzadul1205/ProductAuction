@@ -53,11 +53,7 @@ namespace ProductAuction.API.Services.Background
                             _logger.LogInformation("Auction #{AuctionId} activated at {Time}.", auction.Id, now);
                         }
 
-                        // Save only if we actually changed something.
-                        if (auctions.Count > 0)
-                        {
-                            await context.SaveChangesAsync(stoppingToken);
-                        }
+                        await context.SaveChangesAsync(stoppingToken);
                     }
                 }
                 catch (Exception ex)

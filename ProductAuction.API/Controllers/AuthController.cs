@@ -51,8 +51,6 @@ namespace ProductAuction.API.Controllers
 
             if (existingUser != null)
             {
-                // _logger.LogWarning("Register: email {Email} is already registered.", dto.Email);
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -63,8 +61,6 @@ namespace ProductAuction.API.Controllers
             // public registration only allows Buyer or Seller
             if (dto.Role != "Buyer" && dto.Role != "Seller")
             {
-                // _logger.LogWarning("Register: invalid role {Role} requested for {Email}.", dto.Role, dto.Email);
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -84,9 +80,6 @@ namespace ProductAuction.API.Controllers
 
             if (!result.Succeeded)
             {
-                // _logger.LogWarning("Register: Identity create failed for {Email}: {Errors}",
-                //     dto.Email, string.Join("; ", result.Errors.Select(e => e.Description)));
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -100,9 +93,6 @@ namespace ProductAuction.API.Controllers
 
             if (!roleResult.Succeeded)
             {
-                // _logger.LogWarning("Register: role assignment '{Role}' failed for {Email}: {Errors}",
-                //     dto.Role, dto.Email, string.Join("; ", roleResult.Errors.Select(e => e.Description)));
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -220,8 +210,6 @@ namespace ProductAuction.API.Controllers
             // turn it into a string for the client
             var tokenString = new JwtSecurityTokenHandler().WriteToken(token);
 
-            // _logger.LogInformation("Login successful for {Email} (roles: {Roles}).", dto.Email, string.Join(",", roles));
-
             return Ok(new
             {
                 status = 200,
@@ -234,7 +222,7 @@ namespace ProductAuction.API.Controllers
 
 
         // GET: api/auth/test-token
-        // Requires a valid JWT token — just to confirm auth is working.
+        // Requires a valid JWT token
         [Authorize]
         [HttpGet("test-token")]
         public IActionResult TestToken()
@@ -268,9 +256,6 @@ namespace ProductAuction.API.Controllers
                     message = "User identity was not found in the token."
                 });
             }
-
-            // _logger.LogInformation("Me called for user {UserId}.", userId);
-
             // find the Identity account
             var user = await _userManager.FindByIdAsync(userId);
 
@@ -322,7 +307,7 @@ namespace ProductAuction.API.Controllers
 
 
         // PUT: api/auth/me
-        // Updates the editable profile fields (and optionally uploads NID images).
+        // Updates the editable profile fields
         [Authorize]
         [HttpPut("me")]
         public async Task<IActionResult> UpdateMe([FromForm] UpdateProfileDto dto)
@@ -331,19 +316,13 @@ namespace ProductAuction.API.Controllers
 
             if (string.IsNullOrEmpty(userId))
             {
-                // _logger.LogWarning("UpdateMe: user identity missing from token.");
-
                 return Unauthorized();
             }
-
-            // _logger.LogInformation("UpdateMe called for user {UserId}.", userId);
 
             var profile = await _context.UserProfiles.FirstOrDefaultAsync(p => p.UserId == userId);
 
             if (profile == null)
             {
-                // _logger.LogWarning("UpdateMe: profile for user {UserId} not found.", userId);
-
                 return NotFound(new
                 {
                     message = "User profile not found."
@@ -422,8 +401,6 @@ namespace ProductAuction.API.Controllers
 
             if (string.IsNullOrEmpty(userId))
             {
-                // _logger.LogWarning("ChangePassword: user identity missing from token.");
-
                 return Unauthorized(new
                 {
                     status = 401,
@@ -431,15 +408,11 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // _logger.LogInformation("ChangePassword called for user {UserId}.", userId);
-
             // find the current Identity account
             var user = await _userManager.FindByIdAsync(userId);
 
             if (user == null)
             {
-                // _logger.LogWarning("ChangePassword: account {UserId} not found.", userId);
-
                 return NotFound(new
                 {
                     status = 404,
@@ -452,9 +425,6 @@ namespace ProductAuction.API.Controllers
 
             if (!result.Succeeded)
             {
-                // _logger.LogWarning("ChangePassword: failed for user {UserId}: {Errors}",
-                //     userId, string.Join("; ", result.Errors.Select(e => e.Description)));
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -462,9 +432,7 @@ namespace ProductAuction.API.Controllers
                     errors = result.Errors.Select(e => e.Description)
                 });
             }
-
-            // _logger.LogInformation("ChangePassword: password updated for user {UserId}.", userId);
-
+            
             return Ok(new
             {
                 status = 200,

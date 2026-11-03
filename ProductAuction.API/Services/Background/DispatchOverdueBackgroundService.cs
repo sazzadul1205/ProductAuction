@@ -52,11 +52,8 @@ namespace ProductAuction.API.Services.Background
                             _logger.LogWarning("Delivery #{DeliveryId} marked DispatchOverdue at {Time}.", delivery.Id, now);
                         }
 
-                        // Save changes only when there are overdue deliveries.
-                        if (overdueDeliveries.Count > 0)
-                        {
-                            await context.SaveChangesAsync(stoppingToken);
-                        }
+                        await context.SaveChangesAsync(stoppingToken);
+
                     }
                 }
                 catch (Exception ex)

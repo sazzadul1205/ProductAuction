@@ -38,10 +38,10 @@ namespace ProductAuction.API.Services
                 throw new ArgumentException("Only JPG, JPEG, PNG, and WEBP images are allowed.");
             }
 
-            // Resolve the web root (wwwroot). Fall back to ContentRoot/wwwroot if not set.
+            // Resolve the web root (wwwroot)
             var webRoot = _environment.WebRootPath ?? Path.Combine(_environment.ContentRootPath, "wwwroot");
 
-            // Build the path to the uploads folder (single "wwwroot", no duplication).
+            // Build the path to the uploads folder 
             var uploadFolder = Path.Combine(webRoot, "uploads");
 
             // Create the uploads folder if it does not exist yet.
@@ -80,7 +80,7 @@ namespace ProductAuction.API.Services
                 return Task.FromResult(false);
             }
 
-            // Resolve the web root (wwwroot). Fall back to ContentRoot/wwwroot if not set.
+            // Resolve the web root (wwwroot).
             var webRoot = _environment.WebRootPath ?? Path.Combine(_environment.ContentRootPath, "wwwroot");
 
             // Build the full path to the file on disk.

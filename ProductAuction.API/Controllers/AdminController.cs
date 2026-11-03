@@ -31,45 +31,28 @@ namespace ProductAuction.API.Controllers
 
 
         // GET: api/Admin/dashboard
-        // Returns aggregated stats for the admin dashboard:
-        // user counts, pending moderation items, and the platform wallet balance.
+        // Returns aggregated admin dashboard stats.
         [HttpGet("dashboard")]
         public async Task<IActionResult> GetDashboard()
         {
-            // _logger.LogInformation("GetDashboard called.");
-
-            // total registered users (excluding the system platform account)
+            // Total users, excluding the platform system account.
             var totalUsers = await _context.Users.CountAsync(u => u.UserName != "platform-system-account");
 
-            // items that need admin review / action
-            // Pending Products
+            // Pending moderation items.
             var pendingProducts = await _context.Products.CountAsync(p => p.ApprovalStatus == "PendingApproval");
-
-            //pending Deposit Verification
             var pendingDeposits = await _context.DepositRequests.CountAsync(d => d.Status == "PendingVerification");
-
-            // pending User Profile Verifications
             var pendingVerifications = await _context.UserProfiles.CountAsync(p => p.VerificationStatus == "PendingReview");
-
-            // Pending Dispute Resolve
             var openDisputes = await _context.Disputes.CountAsync(d => d.Status == "Open" || d.Status == "UnderReview");
 
-            // auctions currently running
+            // Active auctions.
             var activeAuctions = await _context.Auctions.CountAsync(a => a.Status == "Active");
 
-            // Get User Account Of the Platform
+            // Platform wallet balance
             var platformUser = await _context.Users.FirstOrDefaultAsync(u => u.UserName == "platform-system-account");
-
-            // Get The Ballance of the Platform Account
             var platformWallet = platformUser != null
                 ? await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == platformUser.Id)
                 : null;
-
-            // Safety check Balance Either has Value or 0
-            var platformBalance = platformWallet?.Balance ?? 0;
-
-            // _logger.LogInformation("GetDashboard: users={Users}, pendingProducts={Products}, pendingDeposits={Deposits}, pendingVerifications={Verifications}, activeAuctions={Active}, openDisputes={Disputes}, platformBalance={Balance}.",
-            //     totalUsers, pendingProducts, pendingDeposits, pendingVerifications, activeAuctions, openDisputes, platformBalance);
+            var platformBalance = platformWallet?.Balance;
 
             return Ok(new
             {
@@ -90,17 +73,13 @@ namespace ProductAuction.API.Controllers
 
         // POST: api/Admin/create-admin
         // Creates a new user account with the Admin role.
-        // Also creates the UserProfile and Wallet records so everything stays consistent.
+        // Also creates the UserProfile record.
         [HttpPost("create-admin")]
         public async Task<IActionResult> CreateAdmin([FromBody] CreateAdminDto dto)
         {
-            // _logger.LogInformation("CreateAdmin called for {Email}.", dto.Email);
-
-            // basic field checks
+            // Basic field checks.
             if (string.IsNullOrEmpty(dto.Email) || string.IsNullOrEmpty(dto.Password) || string.IsNullOrEmpty(dto.FullName))
             {
-                // _logger.LogWarning("CreateAdmin: missing required fields.");
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -108,13 +87,11 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // make sure this email isn't taken yet
+            // Ensure the email isn't already taken.
             var existingUser = await _userManager.FindByEmailAsync(dto.Email);
 
             if (existingUser != null)
             {
-                // _logger.LogWarning("CreateAdmin: email {Email} is already registered.", dto.Email);
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -122,7 +99,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // create the Identity account
+            // Create the Identity account.
             var user = new IdentityUser
             {
                 UserName = dto.Email,
@@ -134,9 +111,6 @@ namespace ProductAuction.API.Controllers
 
             if (!result.Succeeded)
             {
-                // _logger.LogWarning("CreateAdmin: Identity create failed for {Email}: {Errors}",
-                //     dto.Email, string.Join("; ", result.Errors.Select(e => e.Description)));
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -145,10 +119,10 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // give them the Admin role
+            // Assign the Admin role.
             await _userManager.AddToRoleAsync(user, "Admin");
 
-            // create the profile and wallet
+            // Create the user profile.
             _context.UserProfiles.Add(new UserProfile
             {
                 UserId = user.Id,
@@ -156,16 +130,7 @@ namespace ProductAuction.API.Controllers
                 CreatedAt = DateTime.UtcNow
             });
 
-            _context.Wallets.Add(new Wallet
-            {
-                UserId = user.Id,
-                Balance = 0,
-                ReservedBalance = 0
-            });
-
             await _context.SaveChangesAsync();
-
-            // _logger.LogInformation("CreateAdmin: admin account {Email} created successfully.", dto.Email);
 
             return Ok(new
             {
@@ -251,7 +216,6 @@ namespace ProductAuction.API.Controllers
 
             var userList = new List<object>();
 
-            // build the response
             foreach (var user in users)
             {
                 var roles = await _userManager.GetRolesAsync(user);
@@ -325,22 +289,7 @@ namespace ProductAuction.API.Controllers
         [HttpPut("user/{id}/lock")]
         public async Task<IActionResult> SetUserLock(string id, [FromBody] AdminUserLockDto request)
         {
-            // _logger.LogInformation("SetUserLock called for user {UserId} (locked={IsLocked}, permanent={IsPermanent}).",
-            //     id, request.IsLocked, request.IsPermanent);
-
             var user = await _userManager.FindByIdAsync(id);
-
-            // don't let anyone touch the platform system account
-            if (user == null || user.UserName == "platform-system-account")
-            {
-                // _logger.LogWarning("SetUserLock: user {UserId} not found or is the platform account.", id);
-
-                return NotFound(new
-                {
-                    status = 404,
-                    message = "User not found."
-                });
-            }
 
             // temporary lock needs a positive duration
             if (request.IsLocked && !request.IsPermanent)
@@ -392,12 +341,10 @@ namespace ProductAuction.API.Controllers
             {
                 if (request.IsPermanent)
                 {
-                    // "forever"
                     lockoutEnd = DateTimeOffset.MaxValue;
                 }
                 else
                 {
-                    // lock for the given number of minutes
                     lockoutEnd = DateTimeOffset.UtcNow.AddMinutes(request.DurationMinutes!.Value);
                 }
             }
@@ -578,14 +525,10 @@ namespace ProductAuction.API.Controllers
         [HttpPost("disputes/{id}/start-review")]
         public async Task<IActionResult> StartDisputeReview(int id)
         {
-            // _logger.LogInformation("StartDisputeReview called for dispute #{DisputeId}.", id);
-
             var dispute = await _context.Disputes.FirstOrDefaultAsync(d => d.Id == id);
 
             if (dispute == null)
             {
-                // _logger.LogWarning("StartDisputeReview: dispute #{DisputeId} not found.", id);
-
                 return NotFound(new
                 {
                     status = 404,
@@ -596,8 +539,6 @@ namespace ProductAuction.API.Controllers
             // can only start review on an open dispute
             if (dispute.Status != "Open")
             {
-                // _logger.LogWarning("StartDisputeReview: dispute #{DisputeId} has status {Status}; expected Open.",
-                //     id, dispute.Status);
 
                 return BadRequest(new
                 {
@@ -606,12 +547,9 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Set Under Dispute What Ever
             dispute.Status = "UnderReview";
 
             await _context.SaveChangesAsync();
-
-            // _logger.LogInformation("StartDisputeReview: dispute #{DisputeId} moved to UnderReview.", id);
 
             return Ok(new
             {
@@ -660,15 +598,11 @@ namespace ProductAuction.API.Controllers
         [HttpPut("deposit-requests/{id}/review")]
         public async Task<IActionResult> ReviewDepositRequest(int id, [FromBody] ReviewDepositRequestDto dto)
         {
-            // _logger.LogInformation("ReviewDepositRequest called for request #{RequestId} with decision '{Status}'.", id, dto.Status);
-
             // find the deposit request
             var depositRequest = await _context.DepositRequests.FirstOrDefaultAsync(d => d.Id == id);
 
             if (depositRequest == null)
             {
-                // _logger.LogWarning("ReviewDepositRequest: request #{RequestId} not found.", id);
-
                 return NotFound(new
                 {
                     status = 404,
@@ -692,8 +626,6 @@ namespace ProductAuction.API.Controllers
             // only Approved or Rejected are allowed
             if (dto.Status != "Approved" && dto.Status != "Rejected")
             {
-                // _logger.LogWarning("ReviewDepositRequest: invalid decision '{Status}' for request #{RequestId}.", dto.Status, id);
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -704,8 +636,6 @@ namespace ProductAuction.API.Controllers
             // rejection needs a reason
             if (dto.Status == "Rejected" && string.IsNullOrEmpty(dto.RejectionReason))
             {
-                // _logger.LogWarning("ReviewDepositRequest: rejection reason missing for request #{RequestId}.", id);
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -718,9 +648,6 @@ namespace ProductAuction.API.Controllers
 
             if (wallet == null)
             {
-                // _logger.LogError("ReviewDepositRequest: wallet #{WalletId} for request #{RequestId} not found.",
-                //     depositRequest.WalletId, id);
-
                 return NotFound(new
                 {
                     status = 404,
@@ -776,7 +703,7 @@ namespace ProductAuction.API.Controllers
 
 
         // GET: api/Admin/transactions
-        // Returns every wallet transaction globally, for admin oversight.
+        // Returns every wallet transaction globally
         [HttpGet("transactions")]
         public async Task<IActionResult> GetAllTransactions([FromQuery] PaginationQueryDto query)
         {
@@ -842,12 +769,12 @@ namespace ProductAuction.API.Controllers
 
             // Global stats.
 
-            // Total volume = sum of Credit + Debit across ALL transactions.
+            // Total volume
             var totalVolume = await _context.WalletTransactions
                 .Where(t => t.Type == "Credit" || t.Type == "Debit")
                 .SumAsync(t => (decimal?)t.Amount) ?? 0;
 
-            // Escrow currently held = sum of active SaleEscrow reservations.
+            // Escrow currently held
             var totalEscrow = await _context.WalletReservations
                 .Where(r => r.Type == "SaleEscrow" && r.Status == "Reserved")
                 .SumAsync(r => (decimal?)r.Amount) ?? 0;
@@ -921,7 +848,7 @@ namespace ProductAuction.API.Controllers
         }
 
         // GET: api/Admin/reservations
-        // Returns all wallet reservations globally, for admin oversight.
+        // Returns all wallet reservations globally
         [HttpGet("reservations")]
         public async Task<IActionResult> GetAllReservations([FromQuery] PaginationQueryDto query)
         {
@@ -1029,22 +956,10 @@ namespace ProductAuction.API.Controllers
 
             var platformUser = await _userManager.FindByNameAsync("platform-system-account");
 
-            if (platformUser == null)
-            {
-                // _logger.LogError("GetPlatformWallet: platform system account not found.");
-
-                return NotFound(new
-                {
-                    status = 404,
-                    message = "Platform account not found."
-                });
-            }
-
             var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == platformUser.Id);
 
             if (wallet == null)
             {
-                // _logger.LogError("GetPlatformWallet: wallet for platform user {UserId} not found.", platformUser.Id);
 
                 return NotFound(new
                 {
@@ -1063,7 +978,7 @@ namespace ProductAuction.API.Controllers
                 txQuery = txQuery.Where(t => t.Type == filter);
             }
 
-            // apply search filter — matches reference or transaction type
+            // apply search filter 
             if (!string.IsNullOrWhiteSpace(search))
             {
                 var term = search.Trim();
@@ -1119,12 +1034,10 @@ namespace ProductAuction.API.Controllers
 
 
         // GET: api/Admin/user/role-counts
-        // Returns global counts of users per role (Admin / Seller / Buyer),
-        // ignoring any search or filter — used by the stats cards on the Users page.
+        // Returns global counts of users per role
         [HttpGet("user/role-counts")]
         public async Task<IActionResult> GetUserRoleCounts()
         {
-            // _logger.LogInformation("GetUserRoleCounts called.");
 
             // Get the IDs of every user, excluding the platform system account.
             var allUserIds = await _userManager.Users

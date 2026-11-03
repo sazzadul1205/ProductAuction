@@ -34,8 +34,6 @@ namespace ProductAuction.API.Controllers
 
             if (userId == null)
             {
-                // _logger.LogWarning("PlaceBid: user identity missing from token.");
-
                 return Unauthorized(new
                 {
                     status = 401,
@@ -51,8 +49,6 @@ namespace ProductAuction.API.Controllers
 
             if (auction == null)
             {
-                // _logger.LogWarning("PlaceBid: auction #{AuctionId} not found.", dto.AuctionId);
-
                 return NotFound(new
                 {
                     status = 404,
@@ -65,8 +61,6 @@ namespace ProductAuction.API.Controllers
 
             if (product == null)
             {
-                // _logger.LogWarning("PlaceBid: product #{ProductId} for auction #{AuctionId} not found.",
-                //     auction.ProductId, auction.Id);
 
                 return NotFound(new
                 {
@@ -78,8 +72,6 @@ namespace ProductAuction.API.Controllers
             // only active auctions accept bids
             if (auction.Status != "Active")
             {
-                // _logger.LogWarning("PlaceBid: auction #{AuctionId} is not Active (status={Status}).",
-                //     auction.Id, auction.Status);
 
                 return BadRequest(new
                 {
@@ -90,8 +82,6 @@ namespace ProductAuction.API.Controllers
 
             if (auction.EndTime == null || auction.EndTime <= DateTime.UtcNow)
             {
-                // _logger.LogWarning("PlaceBid: auction #{AuctionId} has already ended.", auction.Id);
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -102,26 +92,11 @@ namespace ProductAuction.API.Controllers
             // product has to be approved and available
             if (product.ApprovalStatus != "Approved" || product.Status != "Available")
             {
-                // _logger.LogWarning("PlaceBid: product #{ProductId} not approved/available (approval={Approval}, status={Status}).",
-                //     product.Id, product.ApprovalStatus, product.Status);
 
                 return BadRequest(new
                 {
                     status = 400,
                     message = "This product is not approved or available for bidding."
-                });
-            }
-
-            // sellers can't bid on their own stuff
-            if (auction.SellerId == userId)
-            {
-                // _logger.LogWarning("PlaceBid: user {UserId} tried to bid on their own auction #{AuctionId}.",
-                //     userId, auction.Id);
-
-                return BadRequest(new
-                {
-                    status = 400,
-                    message = "You cannot bid on your own product."
                 });
             }
 
@@ -181,8 +156,6 @@ namespace ProductAuction.API.Controllers
 
             if (wallet == null)
             {
-                // _logger.LogWarning("PlaceBid: wallet for user {UserId} not found.", userId);
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -198,7 +171,7 @@ namespace ProductAuction.API.Controllers
                     r.Type == "BuyerFunds" &&
                     r.Status == "Reserved");
 
-            // reserve 25% of the starting price, but only once per auction
+            // reserve 25% of the starting price,
             if (reservation == null)
             {
                 var requiredAmount = product.StartingPrice * 0.25m;
@@ -277,15 +250,11 @@ namespace ProductAuction.API.Controllers
         [HttpGet("auction/{auctionId}/bids")]
         public async Task<IActionResult> GetAuctionBidHistory(int auctionId)
         {
-            // _logger.LogInformation("GetAuctionBidHistory called for auction #{AuctionId}.", auctionId);
-
             // make sure the auction exists
             var auction = await _context.Auctions.FirstOrDefaultAsync(a => a.Id == auctionId);
 
             if (auction == null)
             {
-                // _logger.LogWarning("GetAuctionBidHistory: auction #{AuctionId} not found.", auctionId);
-
                 return NotFound(new
                 {
                     status = 404,
@@ -327,16 +296,12 @@ namespace ProductAuction.API.Controllers
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> GetAuctionBidHistoryForAdmin(int auctionId)
         {
-            // _logger.LogInformation("GetAuctionBidHistoryForAdmin called for auction #{AuctionId}.", auctionId);
-
             var auction = await _context.Auctions
                 .Include(a => a.Product)
                 .FirstOrDefaultAsync(a => a.Id == auctionId);
 
             if (auction == null)
             {
-                // _logger.LogWarning("GetAuctionBidHistoryForAdmin: auction #{AuctionId} not found.", auctionId);
-
                 return NotFound(new
                 {
                     status = 404,
@@ -374,9 +339,6 @@ namespace ProductAuction.API.Controllers
                 })
                 .ToListAsync();
 
-            // _logger.LogInformation("GetAuctionBidHistoryForAdmin returned {Count} bid(s) for auction #{AuctionId}.",
-            //     bids.Count, auctionId);
-
             return Ok(new
             {
                 status = 200,
@@ -402,12 +364,10 @@ namespace ProductAuction.API.Controllers
         [Authorize(Roles = "Buyer")]
         public async Task<IActionResult> Buyout(int auctionId)
         {
-            // get the logged-in user's id
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             if (userId == null)
             {
-                // _logger.LogWarning("Buyout: user identity missing from token.");
 
                 return Unauthorized(new
                 {
@@ -416,16 +376,12 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // _logger.LogInformation("Buyout called by user {UserId} for auction #{AuctionId}.", userId, auctionId);
-
             // find the auction
             var auction = await _context.Auctions
                 .FirstOrDefaultAsync(a => a.Id == auctionId);
 
             if (auction == null)
             {
-                // _logger.LogWarning("Buyout: auction #{AuctionId} not found.", auctionId);
-
                 return NotFound(new
                 {
                     status = 404,
@@ -436,9 +392,6 @@ namespace ProductAuction.API.Controllers
             // auction has to be active
             if (auction.Status != "Active")
             {
-                // _logger.LogWarning("Buyout: auction #{AuctionId} is not Active (status={Status}).",
-                //     auction.Id, auction.Status);
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -448,8 +401,6 @@ namespace ProductAuction.API.Controllers
 
             if (!auction.EndTime.HasValue || auction.EndTime.Value <= DateTime.UtcNow)
             {
-                // _logger.LogWarning("Buyout: auction #{AuctionId} has already ended.", auction.Id);
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -462,26 +413,10 @@ namespace ProductAuction.API.Controllers
 
             if (product == null)
             {
-                // _logger.LogWarning("Buyout: product #{ProductId} for auction #{AuctionId} not found.",
-                //     auction.ProductId, auction.Id);
-
                 return NotFound(new
                 {
                     status = 404,
                     message = "Product not found."
-                });
-            }
-
-            // sellers can't buy their own product
-            if (auction.SellerId == userId)
-            {
-                // _logger.LogWarning("Buyout: user {UserId} tried to buy out their own auction #{AuctionId}.",
-                //     userId, auction.Id);
-
-                return BadRequest(new
-                {
-                    status = 400,
-                    message = "You cannot buy out your own product."
                 });
             }
 
@@ -495,18 +430,6 @@ namespace ProductAuction.API.Controllers
                 {
                     status = 400,
                     message = "This product is not approved or available for purchase."
-                });
-            }
-
-            // and it actually needs a buyout price
-            if (product.BuyoutPrice <= 0)
-            {
-                // _logger.LogWarning("Buyout: product #{ProductId} has no valid buyout price.", product.Id);
-
-                return BadRequest(new
-                {
-                    status = 400,
-                    message = "This product has no valid buyout price."
                 });
             }
 
@@ -524,7 +447,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // all the wallet + sale changes below need to succeed together
+            // Start Transaction
             await using var transaction = await _context.Database.BeginTransactionAsync();
 
             // find the buyer's wallet
@@ -549,7 +472,7 @@ namespace ProductAuction.API.Controllers
                     r.Type == "BuyerFunds" &&
                     r.Status == "Reserved");
 
-            // first time participating? reserve 25% of the starting price.
+            // first time participating reserve 25% of the starting price.
             if (reservation == null)
             {
                 decimal requiredAmount = product.StartingPrice * 0.25m;

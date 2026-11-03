@@ -26,12 +26,12 @@ namespace ProductAuction.API.Data.Seeder
             var password = "Admin@123";
             var fullName = "System Administrator";
 
-            // Start a transaction so all database changes succeed or roll back together.
+            // Start a transaction 
             await using var transaction = await context.Database.BeginTransactionAsync();
 
             try
             {
-                // 1. Check whether the admin account already exists.
+                // Check whether the admin account already exists.
                 var adminUser = await userManager.FindByEmailAsync(email);
 
                 if (adminUser == null)
@@ -67,8 +67,6 @@ namespace ProductAuction.API.Data.Seeder
                 }
                 else
                 {
-                    // logger.LogDebug("Admin account {Email} already exists; verifying role.", email);
-
                     // If the account exists, ensure it has the Admin role
                     bool isAdmin = await userManager.IsInRoleAsync(adminUser, "Admin");
 
@@ -86,7 +84,7 @@ namespace ProductAuction.API.Data.Seeder
                     }
                 }
 
-                // 2. Ensure the UserProfile exists
+                // Ensure the UserProfile exists
                 var profileExists = await context.UserProfiles.AnyAsync(p => p.UserId == adminUser.Id);
 
                 if (!profileExists)
@@ -103,24 +101,7 @@ namespace ProductAuction.API.Data.Seeder
                     // logger.LogInformation("UserProfile created for admin {Email}.", email);
                 }
 
-                // 3. Ensure the Wallet exists
-                var walletExists = await context.Wallets.AnyAsync(w => w.UserId == adminUser.Id);
-
-                if (!walletExists)
-                {
-                    var wallet = new Wallet
-                    {
-                        UserId = adminUser.Id,
-                        Balance = 0,
-                        ReservedBalance = 0
-                    };
-
-                    context.Wallets.Add(wallet);
-
-                    // logger.LogInformation("Wallet created for admin {Email}.", email);
-                }
-
-                // Save profile and wallet changes to the database.
+                // Save profile changes to the database.
                 await context.SaveChangesAsync();
                 await transaction.CommitAsync();
 
@@ -130,12 +111,9 @@ namespace ProductAuction.API.Data.Seeder
             {
                 // logger.LogError(ex, "AdminAccountSeeder failed for {Email}; rolling back.", email);
 
-                // Undo the database changes if an unexpected error occurs.
                 await transaction.RollbackAsync();
                 throw;
             }
-
-            // logger.LogInformation("AdminAccountSeeder finished at {Time}.", DateTime.UtcNow);
         }
     }
 }

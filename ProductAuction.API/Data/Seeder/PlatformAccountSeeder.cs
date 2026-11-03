@@ -18,9 +18,8 @@ namespace ProductAuction.API.Data.Seeder
 
             var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-            // Logger resolved from the scope (static class cannot take it via ctor).
-            var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
-                .CreateLogger(nameof(PlatformAccountSeeder));
+            // Logger resolved from the scope 
+            var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger(nameof(PlatformAccountSeeder));
 
             // logger.LogInformation("PlatformAccountSeeder started at {Time}.", DateTime.UtcNow);
 
@@ -61,8 +60,8 @@ namespace ProductAuction.API.Data.Seeder
                 var platformWallet = new Wallet
                 {
                     UserId = platformUser.Id,
-                    Balance = 0m,
-                    ReservedBalance = 0m
+                    Balance = 0,
+                    ReservedBalance = 0
                 };
 
                 context.Wallets.Add(platformWallet);

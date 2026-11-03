@@ -232,7 +232,7 @@ namespace ProductAuction.API.Controllers
         }
 
         // GET: api/auction/{id}
-        // Returns full auction details (public view).
+        // Returns full auction details
         [HttpGet("{id}")]
         public async Task<IActionResult> GetAuctionById(int id)
         {
@@ -296,7 +296,7 @@ namespace ProductAuction.API.Controllers
 
 
         // GET: api/auction/{id}/seller
-        // Returns auction details for the seller who owns it (extra fields like cancellation reason).
+        // Returns auction details for the seller who owns it
         [HttpGet("{id}/seller")]
         [Authorize]
         public async Task<IActionResult> GetAuctionByIdForSeller(int id)
@@ -305,16 +305,12 @@ namespace ProductAuction.API.Controllers
 
             if (string.IsNullOrEmpty(userId))
             {
-                // _logger.LogWarning("GetAuctionByIdForSeller: user identity missing from token.");
-
                 return Unauthorized(new
                 {
                     status = 401,
                     message = "User identity was not found in the token."
                 });
             }
-
-            // _logger.LogInformation("GetAuctionByIdForSeller called for auction #{AuctionId} by user {UserId}.", id, userId);
 
             var auction = await _context.Auctions
                 .Where(a => a.Id == id && a.SellerId == userId)
@@ -400,8 +396,6 @@ namespace ProductAuction.API.Controllers
             // only upcoming auctions can be configured
             if (auction.Status != "Upcoming")
             {
-                // _logger.LogWarning("ConfigureAuction: auction #{AuctionId} is not Upcoming (status={Status}).", id, auction.Status);
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -411,8 +405,6 @@ namespace ProductAuction.API.Controllers
 
             if (dto.StartTime <= DateTime.UtcNow)
             {
-                // _logger.LogWarning("ConfigureAuction: start time for auction #{AuctionId} is not in the future.", id);
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -422,8 +414,6 @@ namespace ProductAuction.API.Controllers
 
             if (dto.EndTime <= dto.StartTime)
             {
-                // _logger.LogWarning("ConfigureAuction: end time for auction #{AuctionId} is not after start time.", id);
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -499,7 +489,6 @@ namespace ProductAuction.API.Controllers
 
             if (!isSeller && !isAdmin)
             {
-                // _logger.LogWarning("CancelAuction: user {UserId} is neither seller nor admin for auction #{AuctionId}.", userId, id);
 
                 return Forbid();
             }
@@ -578,7 +567,7 @@ namespace ProductAuction.API.Controllers
 
                 if (isSeller)
                 {
-                    // seller cancelling = deposit is forfeited to the platform.
+                    // seller cancelling 
                     if (sellerWallet.Balance < reservation.Amount)
                     {
                         // _logger.LogWarning("CancelAuction: seller wallet #{WalletId} balance insufficient to forfeit deposit.", sellerWallet.Id);
@@ -591,17 +580,6 @@ namespace ProductAuction.API.Controllers
                     }
 
                     var platformUser = await _context.Users.FirstOrDefaultAsync(u => u.UserName == "platform-system-account");
-
-                    if (platformUser == null)
-                    {
-                        // _logger.LogError("CancelAuction: platform system account not found.");
-
-                        return BadRequest(new
-                        {
-                            status = 400,
-                            message = "The platform account was not found."
-                        });
-                    }
 
                     var platformWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == platformUser.Id);
 
@@ -649,7 +627,7 @@ namespace ProductAuction.API.Controllers
                 }
                 else
                 {
-                    // admin cancelling = just release the deposit back to the seller
+                    // admin cancelling
                     sellerWallet.ReservedBalance -= reservation.Amount;
                     reservation.Status = "Released";
 

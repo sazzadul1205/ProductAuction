@@ -52,11 +52,8 @@ namespace ProductAuction.API.Services.Background
                             _logger.LogWarning("Sale #{SaleId} marked PaymentOverdue at {Time}.", sale.Id, now);
                         }
 
-                        // Save changes only when there are overdue sales.
-                        if (overdueSales.Count > 0)
-                        {
-                            await context.SaveChangesAsync(stoppingToken);
-                        }
+                        await context.SaveChangesAsync(stoppingToken);
+
                     }
                 }
                 catch (Exception ex)
