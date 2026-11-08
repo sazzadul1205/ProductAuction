@@ -738,7 +738,7 @@ namespace ProductAuction.API.Controllers
 
             // Total volume
             var totalVolume = await _context.WalletTransactions
-                .Where(t => t.Type == "Credit" || t.Type == "Debit")
+                .Where(t => t.Type == "Credit")
                 .SumAsync(t => (decimal?)t.Amount) ?? 0;
 
             // Escrow currently held
