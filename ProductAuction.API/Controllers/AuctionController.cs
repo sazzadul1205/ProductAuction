@@ -665,5 +665,124 @@ namespace ProductAuction.API.Controllers
                 }
             });
         }
+
+        // POST: api/auction/product/{productId}/reset-for-reauction
+        [HttpPost("product/{productId}/reset-for-reauction")]
+        [Authorize(Roles = "Seller")]
+        public async Task<IActionResult> ResetForReAuction(int productId)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (userId == null)
+                return Unauthorized(new
+                {
+                    status = 401,
+                    message = "Please log in first."
+                });
+
+            var product = await _context.Products.FirstOrDefaultAsync(p => p.Id == productId);
+            if (product == null || product.SellerId != userId)
+                return NotFound(new
+                {
+                    status = 404,
+                    message = "Product not found."
+                });
+
+            if (product.ApprovalStatus != "Approved" || product.Status != "Available")
+            {
+                // allow reset if previous auction settled; normalize status
+                if (product.ApprovalStatus == "Approved" && product.Status == "Unavailable")
+                {
+                    product.Status = "Available";
+                }
+                else
+                {
+                    return BadRequest(new { status = 400, message = $"Product not eligible. ApprovalStatus={product.ApprovalStatus}, Status={product.Status}." });
+                }
+            }
+
+            var hasLiveAuction = await _context.Auctions.AnyAsync(a =>
+                a.ProductId == productId &&
+                (a.Status == "Active" || a.Status == "Upcoming"));
+            if (hasLiveAuction)
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "Product already has an active or upcoming auction."
+                });
+
+            var previous = await _context.Auctions
+                .Where(a => a.ProductId == productId)
+                .OrderByDescending(a => a.Id)
+                .FirstOrDefaultAsync();
+            if (previous == null)
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "This product has no previous auction."
+                });
+
+            var previousSale = await _context.Sales
+                .FirstOrDefaultAsync(s => s.AuctionId == previous.Id);
+
+            var eligible =
+                previous.Result == "NoWinner" ||
+                (previous.Result == "Sold" &&
+                 previousSale != null &&
+                 previousSale.Status == "PaymentOverdue");
+
+            if (!eligible)
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "Previous auction has not settled into a re-actionable state."
+                });
+
+            product.ApprovalStatus = "Draft";
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                status = 200,
+                message = "Product is back in Draft. Edit it, then submit for approval when ready."
+            });
+        }
+
+        // GET: api/auction/product/{productId}
+        [HttpGet("product/{productId}")]
+        public async Task<IActionResult> GetAuctionsByProduct(int productId)
+        {
+            var auctions = await _context.Auctions
+                .Where(a => a.ProductId == productId)
+                .OrderByDescending(a => a.Id)
+                .Select(a => new AuctionListDto
+                {
+                    Id = a.Id,
+                    ProductId = a.ProductId,
+                    ProductTitle = a.Product.Title,
+                    StartingPrice = a.Product.StartingPrice,
+                    BuyoutPrice = a.Product.BuyoutPrice,
+                    StartTime = a.StartTime,
+                    EndTime = a.EndTime,
+                    Status = a.Status,
+                    CurrentHighestBid = a.CurrentHighestBid,
+                    BidCount = a.BidCount,
+                    MainImageUrl = _context.ProductImages
+                        .Where(i => i.ProductId == a.ProductId && i.IsMain)
+                        .Select(i => i.ImageUrl)
+                        .FirstOrDefault() ?? "",
+                    CategoryId = a.Product.CategoryId,
+                    CategoryName = a.Product.Category.Name
+                })
+                .ToListAsync();
+
+            return Ok(new
+            {
+                status = 200,
+                message = "Auctions retrieved successfully.",
+                data = auctions
+            });
+        }
+
     }
 }

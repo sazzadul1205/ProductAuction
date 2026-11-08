@@ -990,9 +990,11 @@ namespace ProductAuction.API.Controllers
                 product.RejectionReason = null;
                 product.Status = "Available";
 
-                var auctionExists = await _context.Auctions.AnyAsync(a => a.ProductId == product.Id);
+                var hasLiveAuction = await _context.Auctions.AnyAsync(a =>
+                    a.ProductId == product.Id &&
+                    (a.Status == "Active" || a.Status == "Upcoming"));
 
-                if (!auctionExists)
+                if (!hasLiveAuction)
                 {
                     var auction = new Auction
                     {

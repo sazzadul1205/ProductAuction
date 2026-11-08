@@ -293,4 +293,6 @@ The backend work log records 48 passing smoke tests and a build with zero warnin
 
 ---
 
-_This README describes the backend implementation visible in the repository. Update it as the API, configuration, and business workflows evolve._
+## Re-Auction Feature
+
+Sellers can reset eligible products (NoWinner or PaymentOverdue settled) back to Draft for re-approval via `POST /api/auction/product/{id}/reset-for-reauction`. Previous auctions are preserved and viewable via `GET /api/auction/product/{id}`.

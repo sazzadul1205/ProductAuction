@@ -150,6 +150,8 @@ namespace ProductAuction.API.Services.Background
                     auction.Status = "Completed";
                     auction.Result = "NoWinner";
                     auction.WinnerId = null;
+
+                    product.Status = "Available";
                 }
                 else
                 {
