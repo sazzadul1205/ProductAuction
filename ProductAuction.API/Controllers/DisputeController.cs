@@ -34,91 +34,113 @@ namespace ProductAuction.API.Controllers
         // Admin views all disputes.
         [HttpGet]
         [Authorize(Roles = "Admin")]
-        public async Task<IActionResult> GetAllDisputes([FromQuery] ProductAuction.API.DTOs.Common.PaginationQueryDto query)
+
+        public async Task<IActionResult> GetAllDisputes(
+    [FromQuery] ProductAuction.API.DTOs.Common.PaginationQueryDto query)
         {
-            var page = query.Page;
-            if (page < 1) page = 1;
-            var pageSize = query.PageSize;
-            if (pageSize < 1) pageSize = 20;
-            if (pageSize > 100) pageSize = 100;
+            // Pagination settings.
+            var page = query.Page < 1 ? 1 : query.Page;
+            var pageSize = query.PageSize < 1 ? 20 : Math.Min(query.PageSize, 100);
 
-            // fetch base dispute data
-            var disputesQuery = _context.Disputes.AsNoTracking().AsQueryable();
+            // Get all disputes.
+            var disputesQuery = _context.Disputes.AsNoTracking();
 
-            // filter by status if provided
-            if (!string.IsNullOrWhiteSpace(query.Filter))
+            // Filter by status.
+            var status = !string.IsNullOrWhiteSpace(query.Filter)
+                ? query.Filter
+                : query.Status;
+
+            if (!string.IsNullOrWhiteSpace(status))
             {
-                disputesQuery = disputesQuery.Where(d => d.Status.ToLower() == query.Filter.ToLower());
-            }
-            else if (!string.IsNullOrWhiteSpace(query.Status))
-            {
-                disputesQuery = disputesQuery.Where(d => d.Status.ToLower() == query.Status.ToLower());
+                var searchStatus = status.Trim().ToLower();
+
+                disputesQuery = disputesQuery.Where(d =>
+                    d.Status.ToLower() == searchStatus);
             }
 
-            // search by complaint, evidence, dispute id, sale id etc if search provided
+            // Search disputes.
             if (!string.IsNullOrWhiteSpace(query.Search))
             {
-                var searchLower = query.Search.Trim().ToLower();
+                var search = query.Search.Trim().ToLower();
+
                 disputesQuery = disputesQuery.Where(d =>
-                    (d.Complaint != null && d.Complaint.ToLower().Contains(searchLower)) ||
-                    d.Id.ToString().Contains(searchLower) ||
-                    d.SaleId.ToString().Contains(searchLower) ||
-                    d.ProductId.ToString().Contains(searchLower) ||
-                    (d.EvidenceUrl != null && d.EvidenceUrl.ToLower().Contains(searchLower))
+                    (d.Complaint != null && d.Complaint.ToLower().Contains(search)) ||
+                    d.Id.ToString().Contains(search) ||
+                    d.SaleId.ToString().Contains(search) ||
+                    d.ProductId.ToString().Contains(search) ||
+                    (d.EvidenceUrl != null && d.EvidenceUrl.ToLower().Contains(search))
                 );
             }
 
+            // Get total.
             var totalCount = await disputesQuery.CountAsync();
 
-            // Get counts for all statuses regardless of current filter (for cards)
-            var allDisputesQuery = _context.Disputes.AsNoTracking();
-            var openCount = await allDisputesQuery.CountAsync(d => d.Status == "Open");
-            var underReviewCount = await allDisputesQuery.CountAsync(d => d.Status == "UnderReview");
-            var resolvedCount = await allDisputesQuery.CountAsync(d => d.Status == "Resolved" || d.Status == "Rejected");
+            // Get counts for all dispute statuses.
+            var openCount = await _context.Disputes.CountAsync(d => d.Status == "Open");
+            var underReviewCount = await _context.Disputes.CountAsync(d => d.Status == "UnderReview");
+            var resolvedCount = await _context.Disputes.CountAsync(d => d.Status == "Resolved" || d.Status == "Rejected");
 
+            // Get paginated disputes.
             var disputes = await disputesQuery
                 .OrderByDescending(d => d.CreatedAt)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
                 .ToListAsync();
 
-            // fetch all the sales these disputes point to
+            // Get related sale information.
             var saleIds = disputes.Select(d => d.SaleId).Distinct().ToList();
 
             var sales = await _context.Sales
                 .Where(s => saleIds.Contains(s.Id))
                 .ToDictionaryAsync(s => s.Id);
 
-            // collect every user id involved (both sides of each sale)
+            // Find users involved in the disputes.
             var raisedByIds = disputes.Select(d => d.RaisedBy).Distinct().ToList();
             var againstUserIds = new List<string>();
 
-            foreach (var d in disputes)
+            foreach (var dispute in disputes)
             {
-                if (sales.TryGetValue(d.SaleId, out var sale))
+                if (sales.TryGetValue(dispute.SaleId, out var sale))
                 {
-                    var againstId = sale.BuyerId == d.RaisedBy ? sale.SellerId : sale.BuyerId;
+                    var againstUserId = sale.BuyerId == dispute.RaisedBy
+                        ? sale.SellerId
+                        : sale.BuyerId;
 
-                    if (!string.IsNullOrEmpty(againstId))
-                        againstUserIds.Add(againstId);
+                    if (!string.IsNullOrEmpty(againstUserId))
+                    {
+                        againstUserIds.Add(againstUserId);
+                    }
                 }
             }
 
-            var allUserIds = raisedByIds.Concat(againstUserIds).Distinct().ToList();
+            var allUserIds = raisedByIds
+                .Concat(againstUserIds)
+                .Distinct()
+                .ToList();
 
-            // fetch profiles and roles for those users
+            // Get user profiles.
             var profiles = await _context.UserProfiles
                 .Where(p => allUserIds.Contains(p.UserId))
                 .ToDictionaryAsync(p => p.UserId, p => p.FullName);
 
+            // Get user roles.
             var roles = await _context.UserRoles
                 .Where(ur => allUserIds.Contains(ur.UserId))
-                .Join(_context.Roles, ur => ur.RoleId, r => r.Id, (ur, r) => new { ur.UserId, RoleName = r.Name })
+                .Join(
+                    _context.Roles,
+                    ur => ur.RoleId,
+                    r => r.Id,
+                    (ur, r) => new { ur.UserId, RoleName = r.Name }
+                )
                 .GroupBy(x => x.UserId)
-                .Select(g => new { UserId = g.Key, g.First().RoleName })
+                .Select(g => new
+                {
+                    UserId = g.Key,
+                    g.First().RoleName
+                })
                 .ToDictionaryAsync(x => x.UserId, x => x.RoleName);
 
-            // fetch penalties for these disputes
+            // Get penalties for these disputes.
             var disputeIds = disputes.Select(d => d.Id).ToList();
 
             var penalties = await _context.Penalties
@@ -131,16 +153,15 @@ namespace ProductAuction.API.Controllers
                     p.AgainstUserId
                 });
 
-            // combine everything
+            // Prepare final response.
             var result = disputes.Select(d =>
             {
                 sales.TryGetValue(d.SaleId, out var sale);
-
-                var againstUserId = sale != null
-                    ? (sale.BuyerId == d.RaisedBy ? sale.SellerId : sale.BuyerId)
-                    : null;
-
                 penalties.TryGetValue(d.Id, out var penalty);
+
+                var againstUserId = sale == null
+                    ? null
+                    : (sale.BuyerId == d.RaisedBy ? sale.SellerId : sale.BuyerId);
 
                 return new
                 {
@@ -155,24 +176,29 @@ namespace ProductAuction.API.Controllers
                     d.DecidedBy,
                     d.CreatedAt,
 
-                    RaisedByName = profiles.TryGetValue(d.RaisedBy, out var rName) ? rName : "Unknown",
-                    RaisedByRole = roles.TryGetValue(d.RaisedBy, out var rRole) ? rRole : "User",
+                    RaisedByName = profiles.TryGetValue(d.RaisedBy, out var raisedName)
+                        ? raisedName
+                        : "Unknown",
+
+                    RaisedByRole = roles.TryGetValue(d.RaisedBy, out var raisedRole)
+                        ? raisedRole
+                        : "User",
 
                     AgainstUserId = againstUserId,
 
-                    AgainstName = !string.IsNullOrEmpty(againstUserId) && profiles.TryGetValue(againstUserId, out var aName)
-                        ? aName
+                    AgainstName = !string.IsNullOrEmpty(againstUserId) &&
+                                  profiles.TryGetValue(againstUserId, out var againstName)
+                        ? againstName
                         : "Unknown",
 
-                    AgainstRole = !string.IsNullOrEmpty(againstUserId) && roles.TryGetValue(againstUserId, out var aRole)
-                        ? aRole
+                    AgainstRole = !string.IsNullOrEmpty(againstUserId) &&
+                                  roles.TryGetValue(againstUserId, out var againstRole)
+                        ? againstRole
                         : "User",
 
                     Penalty = penalty
                 };
             }).ToList();
-
-            // _logger.LogInformation("GetAllDisputes returned {Count} dispute(s).", result.Count);
 
             return Ok(new
             {
@@ -195,7 +221,6 @@ namespace ProductAuction.API.Controllers
         public async Task<IActionResult> CreateDispute([FromForm] CreateDisputeDto dto)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-
             if (userId == null)
             {
 
@@ -206,9 +231,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // find the sale this dispute is about
             var sale = await _context.Sales.FirstOrDefaultAsync(s => s.Id == dto.SaleId);
-
             if (sale == null)
             {
                 return NotFound(new
@@ -223,8 +246,6 @@ namespace ProductAuction.API.Controllers
             {
                 return Forbid();
             }
-
-            // can't dispute before payment
             if (sale.Status == "AwaitingPayment")
             {
                 return BadRequest(new
@@ -233,8 +254,6 @@ namespace ProductAuction.API.Controllers
                     message = "A dispute cannot be submitted before payment."
                 });
             }
-
-            // can't dispute something that's already done
             if (sale.Status == "Completed")
             {
                 return BadRequest(new
@@ -244,9 +263,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // sellers have to wait until the payment window closes before accusing the buyer
             bool isSeller = sale.SellerId == userId;
-
             if (isSeller && DateTime.UtcNow <= sale.PaymentDeadline)
             {
                 return BadRequest(new
@@ -256,9 +273,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // one dispute per sale, no duplicates
             var existingDispute = await _context.Disputes.AnyAsync(d => d.SaleId == sale.Id);
-
             if (existingDispute)
             {
                 return BadRequest(new
@@ -268,9 +283,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // evidence is image-only
             string? evidenceUrl = null;
-
             if (dto.EvidenceImage != null)
             {
                 evidenceUrl = await _imageUploadService.UploadImageAsync(dto.EvidenceImage);
@@ -288,15 +301,11 @@ namespace ProductAuction.API.Controllers
                 CreatedAt = DateTime.UtcNow
             };
 
-            // mark the sale as disputed so it can't complete while under review
             sale.Status = "Disputed";
 
             _context.Disputes.Add(dispute);
 
             await _context.SaveChangesAsync();
-
-            // _logger.LogInformation("CreateDispute: dispute #{DisputeId} created for sale #{SaleId} by user {UserId}.",
-            //     dispute.Id, sale.Id, userId);
 
             return Ok(new
             {
@@ -324,7 +333,6 @@ namespace ProductAuction.API.Controllers
         public async Task<IActionResult> ResolveDispute(int id, ResolveDisputeDto dto)
         {
             var adminId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-
             if (adminId == null)
             {
                 return Unauthorized(new
@@ -333,8 +341,6 @@ namespace ProductAuction.API.Controllers
                     message = "Admin information was not found."
                 });
             }
-
-            // fault type has to be one of the three expected values
             if (dto.FaultType != "Buyer" && dto.FaultType != "Seller" && dto.FaultType != "System")
             {
                 return BadRequest(new
@@ -343,7 +349,6 @@ namespace ProductAuction.API.Controllers
                     message = "FaultType must be Buyer, Seller, or System."
                 });
             }
-
             if (string.IsNullOrEmpty(dto.AdminDecision))
             {
                 return BadRequest(new
@@ -352,8 +357,6 @@ namespace ProductAuction.API.Controllers
                     message = "An admin decision is required."
                 });
             }
-
-            // system fault can't get a penalty 
             if (dto.FaultType == "System" && dto.ApplyPenalty)
             {
                 return BadRequest(new
@@ -367,7 +370,6 @@ namespace ProductAuction.API.Controllers
             await using var transaction = await _context.Database.BeginTransactionAsync();
 
             var dispute = await _context.Disputes.FirstOrDefaultAsync(d => d.Id == id);
-
             if (dispute == null)
             {
                 return NotFound(new
@@ -377,7 +379,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // dispute has to be under review first
+            // dispute has to be under revie
             if (dispute.Status != "UnderReview")
             {
                 return BadRequest(new
@@ -387,9 +389,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // load the related sale
             var sale = await _context.Sales.FirstOrDefaultAsync(s => s.Id == dispute.SaleId);
-
             if (sale == null)
             {
                 return NotFound(new
@@ -399,9 +399,8 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // load the product that was sold
-            var product = await _context.Products.FirstOrDefaultAsync(p => p.Id == sale.ProductId);
 
+            var product = await _context.Products.FirstOrDefaultAsync(p => p.Id == sale.ProductId);
             if (product == null)
             {
                 return NotFound(new
@@ -410,8 +409,6 @@ namespace ProductAuction.API.Controllers
                     message = "Related product not found."
                 });
             }
-
-            // don't create two penalty records for the same dispute
             if (await _context.Penalties.AnyAsync(p => p.DisputeId == dispute.Id))
             {
                 return BadRequest(new
@@ -428,17 +425,15 @@ namespace ProductAuction.API.Controllers
                     r.Type == "SaleEscrow" &&
                     r.Status == "Reserved");
 
-            // if payment was submitted, escrow must exist
+
             if (sale.PaymentSubmittedAt.HasValue && escrow == null)
             {
                 return BadRequest(new
                 {
                     status = 400,
-                    message = "Payment was submitted, but no active escrow was found. Admin investigation is required."
+                    message = "Payment was submitted, but no active escrow was found"
                 });
             }
-
-            //  escrow amount should match the sale amount
             if (escrow != null && escrow.Amount != sale.FinalAmount)
             {
                 return BadRequest(new
@@ -454,7 +449,7 @@ namespace ProductAuction.API.Controllers
                 return BadRequest(new
                 {
                     status = 400,
-                    message = "Sale payment remains in escrow. Admin review is required before applying a buyer-fault penalty."
+                    message = "Sale payment remains in escrow."
                 });
             }
 
@@ -463,7 +458,6 @@ namespace ProductAuction.API.Controllers
             dispute.DecidedBy = adminId;
 
             // deposit is 25% of the starting price, split 80/20 between
-            // the opposite party and the platform
             decimal productValue = product.StartingPrice;
             decimal totalPenalty = Math.Round(product.StartingPrice * 0.25m, 2);
             decimal oppositePartyAmount = Math.Round(totalPenalty * 0.80m, 2);
@@ -479,7 +473,6 @@ namespace ProductAuction.API.Controllers
                 if (escrow != null)
                 {
                     var buyerWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == sale.BuyerId);
-
                     if (buyerWallet == null)
                     {
                         return BadRequest(new
@@ -512,9 +505,7 @@ namespace ProductAuction.API.Controllers
             {
                 if (escrow != null)
                 {
-                    var buyerWallet = await _context.Wallets
-                        .FirstOrDefaultAsync(w => w.UserId == sale.BuyerId);
-
+                    var buyerWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == sale.BuyerId);
                     if (buyerWallet == null)
                     {
                         return BadRequest(new
@@ -548,7 +539,6 @@ namespace ProductAuction.API.Controllers
                 if (escrow != null)
                 {
                     var buyerWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == sale.BuyerId);
-
                     if (buyerWallet == null)
                     {
                         return BadRequest(new
@@ -580,7 +570,6 @@ namespace ProductAuction.API.Controllers
             else if (dto.FaultType == "Buyer" && dto.ApplyPenalty)
             {
                 var buyerWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == sale.BuyerId);
-
                 if (buyerWallet == null)
                 {
                     return BadRequest(new
@@ -598,10 +587,7 @@ namespace ProductAuction.API.Controllers
                         r.Type == "BuyerFunds" &&
                         r.Status == "Reserved");
 
-                if (buyerDeposit == null ||
-                    buyerDeposit.Amount != totalPenalty ||
-                    buyerWallet.ReservedBalance < buyerDeposit.Amount ||
-                    buyerWallet.Balance < totalPenalty)
+                if (buyerDeposit == null || buyerDeposit.Amount != totalPenalty || buyerWallet.ReservedBalance < buyerDeposit.Amount || buyerWallet.Balance < totalPenalty)
                 {
                     return BadRequest(new
                     {
@@ -612,7 +598,6 @@ namespace ProductAuction.API.Controllers
 
                 // seller gets the 80%
                 var sellerWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == sale.SellerId);
-
                 if (sellerWallet == null)
                 {
                     return BadRequest(new
@@ -624,7 +609,6 @@ namespace ProductAuction.API.Controllers
 
                 // platform gets the 20%
                 var platformUser = await _context.Users.FirstOrDefaultAsync(u => u.UserName == "platform-system-account");
-
                 if (platformUser == null)
                 {
                     return BadRequest(new
@@ -635,7 +619,6 @@ namespace ProductAuction.API.Controllers
                 }
 
                 var platformWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == platformUser.Id);
-
                 if (platformWallet == null)
                 {
                     return BadRequest(new
@@ -709,7 +692,6 @@ namespace ProductAuction.API.Controllers
                 if (escrow != null)
                 {
                     var buyerWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == sale.BuyerId);
-
                     if (buyerWallet == null)
                     {
                         return BadRequest(new
@@ -735,7 +717,6 @@ namespace ProductAuction.API.Controllers
 
                 // find the seller's wallet and deposit
                 var sellerWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == sale.SellerId);
-
                 if (sellerWallet == null)
                 {
                     return BadRequest(new
@@ -752,10 +733,7 @@ namespace ProductAuction.API.Controllers
                         r.Type == "SellerDeposit" &&
                         r.Status == "Reserved");
 
-                if (sellerDeposit == null ||
-                    sellerDeposit.Amount != totalPenalty ||
-                    sellerWallet.ReservedBalance < sellerDeposit.Amount ||
-                    sellerWallet.Balance < totalPenalty)
+                if (sellerDeposit == null || sellerDeposit.Amount != totalPenalty || sellerWallet.ReservedBalance < sellerDeposit.Amount || sellerWallet.Balance < totalPenalty)
                 {
                     return BadRequest(new
                     {

@@ -100,9 +100,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // find the user's wallet
             var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == userId);
-
             if (wallet == null)
             {
                 return NotFound(new
@@ -112,10 +110,9 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // upload the receipt image
+
             var receiptImageUrl = await _imageUploadService.UploadImageAsync(dto.ReceiptImage);
 
-            // save the deposit request as pending verification
             var depositRequest = new DepositRequest
             {
                 WalletId = wallet.Id,
@@ -129,9 +126,6 @@ namespace ProductAuction.API.Controllers
 
             _context.DepositRequests.Add(depositRequest);
             await _context.SaveChangesAsync();
-
-            // _logger.LogInformation("CreateDepositRequest: deposit request #{DepositRequestId} created for wallet #{WalletId}.",
-            //     depositRequest.Id, wallet.Id);
 
             return Ok(new
             {
@@ -235,9 +229,6 @@ namespace ProductAuction.API.Controllers
                 })
                 .ToListAsync();
 
-            // _logger.LogInformation("GetMyDepositRequests returned {Count} of {Total} request(s) for user {UserId}.",
-            //     requests.Count, totalCount, userId);
-
             return Ok(new
             {
                 status = 200,
@@ -335,9 +326,6 @@ namespace ProductAuction.API.Controllers
                     CreatedAt = t.CreatedAt
                 })
                 .ToListAsync();
-
-            // _logger.LogInformation("GetMyTransactions returned {Count} of {Total} transaction(s) for user {UserId}.",
-            //     transactions.Count, totalCount, userId);
 
             return Ok(new
             {
@@ -449,9 +437,6 @@ namespace ProductAuction.API.Controllers
                     r.Status
                 })
                 .ToListAsync();
-
-            // _logger.LogInformation("GetMyReservations returned {Count} of {Total} reservation(s) for user {UserId}.",
-            //     reservations.Count, totalCount, userId);
 
             return Ok(new
             {

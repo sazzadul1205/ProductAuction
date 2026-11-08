@@ -35,16 +35,16 @@ namespace ProductAuction.API.Controllers
         [HttpGet("dashboard")]
         public async Task<IActionResult> GetDashboard()
         {
-            // Total users, excluding the platform system account.
+            // Total users
             var totalUsers = await _context.Users.CountAsync(u => u.UserName != "platform-system-account");
 
-            // Pending moderation items.
+            // Pending items.
             var pendingProducts = await _context.Products.CountAsync(p => p.ApprovalStatus == "PendingApproval");
             var pendingDeposits = await _context.DepositRequests.CountAsync(d => d.Status == "PendingVerification");
             var pendingVerifications = await _context.UserProfiles.CountAsync(p => p.VerificationStatus == "PendingReview");
             var openDisputes = await _context.Disputes.CountAsync(d => d.Status == "Open" || d.Status == "UnderReview");
 
-            // Active auctions.
+            // Active.
             var activeAuctions = await _context.Auctions.CountAsync(a => a.Status == "Active");
 
             // Platform wallet balance
@@ -73,7 +73,6 @@ namespace ProductAuction.API.Controllers
 
         // POST: api/Admin/create-admin
         // Creates a new user account with the Admin role.
-        // Also creates the UserProfile record.
         [HttpPost("create-admin")]
         public async Task<IActionResult> CreateAdmin([FromBody] CreateAdminDto dto)
         {
@@ -119,10 +118,8 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Assign the Admin role.
             await _userManager.AddToRoleAsync(user, "Admin");
 
-            // Create the user profile.
             _context.UserProfiles.Add(new UserProfile
             {
                 UserId = user.Id,
@@ -157,13 +154,13 @@ namespace ProductAuction.API.Controllers
             // Set Search 
             var search = query.Search;
 
-            // Optional role filter: Admin / Seller / Buyer
+            // role filter: Admin / Seller / Buyer
             var filter = query.Filter;
 
             // _logger.LogInformation("GetAllUsers called: page={Page}, pageSize={PageSize}, filter={Filter}, search={Search}.",
             //     page, pageSize, filter, search);
 
-            // grab registered users, skip the platform system account
+            // grab registered users
             var userQuery = _userManager.Users
                 .Where(u => u.UserName != "platform-system-account")
                 .AsQueryable();
@@ -182,12 +179,11 @@ namespace ProductAuction.API.Controllers
                 userQuery = userQuery.Where(u => roleUserIds.Contains(u.Id));
             }
 
-            // apply search filter — matches email, phone, full name, or city
+            // apply search filter
             if (!string.IsNullOrWhiteSpace(search))
             {
                 var term = search.Trim();
 
-                // user ids whose profile full name or city matches
                 var matchingProfileUserIds = await _context.UserProfiles
                     .Where(p => p.FullName.Contains(term) || (p.City != null && p.City.Contains(term)))
                     .Select(p => p.UserId)
@@ -220,11 +216,10 @@ namespace ProductAuction.API.Controllers
             {
                 var roles = await _userManager.GetRolesAsync(user);
 
-                // look up this user's profile / wallet
+                //  user's profile / wallet
                 var profile = profiles.FirstOrDefault(p => p.UserId == user.Id);
                 var wallet = wallets.FirstOrDefault(w => w.UserId == user.Id);
 
-                // build the profile part of the response
                 object? profileData = null;
                 if (profile != null)
                 {
@@ -242,7 +237,6 @@ namespace ProductAuction.API.Controllers
 
                 object? walletData = null;
 
-                // If Wallet found built it or else no need
                 if (wallet != null)
                 {
                     walletData = new
@@ -267,8 +261,6 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // _logger.LogInformation("GetAllUsers returned {Count} of {Total} user(s).", userList.Count, totalCount);
-
             return Ok(new
             {
                 status = 200,
@@ -291,12 +283,10 @@ namespace ProductAuction.API.Controllers
         {
             var user = await _userManager.FindByIdAsync(id);
 
-            // temporary lock needs a positive duration
             if (request.IsLocked && !request.IsPermanent)
             {
                 if (!request.DurationMinutes.HasValue || request.DurationMinutes.Value <= 0)
                 {
-                    // _logger.LogWarning("SetUserLock: invalid DurationMinutes for user {UserId}.", id);
 
                     return BadRequest(new
                     {
@@ -309,7 +299,6 @@ namespace ProductAuction.API.Controllers
             // permanent lock shouldn't have a duration attached
             if (request.IsLocked && request.IsPermanent && request.DurationMinutes.HasValue)
             {
-                // _logger.LogWarning("SetUserLock: permanent lock supplied with DurationMinutes for user {UserId}.", id);
 
                 return BadRequest(new
                 {
@@ -323,8 +312,6 @@ namespace ProductAuction.API.Controllers
 
             if (!enableLockout.Succeeded)
             {
-                // _logger.LogWarning("SetUserLock: failed to enable lockout for user {UserId}: {Errors}",
-                //     id, string.Join("; ", enableLockout.Errors.Select(e => e.Description)));
 
                 return BadRequest(new
                 {
@@ -354,8 +341,6 @@ namespace ProductAuction.API.Controllers
 
             if (!result.Succeeded)
             {
-                // _logger.LogWarning("SetUserLock: failed to update lockout for user {UserId}: {Errors}",
-                //     id, string.Join("; ", result.Errors.Select(e => e.Description)));
 
                 return BadRequest(new
                 {
@@ -371,8 +356,6 @@ namespace ProductAuction.API.Controllers
                 await _userManager.ResetAccessFailedCountAsync(user);
             }
 
-            // _logger.LogInformation("SetUserLock: user {UserId} lock updated (locked={IsLocked}, permanent={IsPermanent}, lockoutEnd={LockoutEnd}).",
-            //     id, request.IsLocked, request.IsLocked && request.IsPermanent, lockoutEnd);
 
             return Ok(new
             {
@@ -411,7 +394,7 @@ namespace ProductAuction.API.Controllers
             // Set Search 
             var search = query.Search;
 
-            // Optional status filter: Upcoming / Active / Completed / Cancelled.
+            // status filter: Upcoming / Active / Completed / Cancelled.
             var filter = query.Filter;
 
             // _logger.LogInformation("GetAllAuctionsForAdmin called: page={Page}, pageSize={PageSize}, filter={Filter}, search={Search}.",
@@ -455,9 +438,6 @@ namespace ProductAuction.API.Controllers
 
                 auctionsQuery = auctionsQuery.Where(a =>
                     matchingProductIds.Contains(a.ProductId));
-
-                // _logger.LogDebug("GetAllAuctionsForAdmin: search '{Term}' matched {Count} product(s).",
-                //     term, matchingProductIds.Count);
             }
 
             auctionsQuery = auctionsQuery.OrderByDescending(a => a.Id);
@@ -502,8 +482,6 @@ namespace ProductAuction.API.Controllers
                     cancellationReason = a.CancellationReason
                 })
                 .ToListAsync();
-
-            // _logger.LogInformation("GetAllAuctionsForAdmin returned {Count} of {Total} auction(s).", auctions.Count, totalCount);
 
             return Ok(new
             {
@@ -598,7 +576,6 @@ namespace ProductAuction.API.Controllers
         [HttpPut("deposit-requests/{id}/review")]
         public async Task<IActionResult> ReviewDepositRequest(int id, [FromBody] ReviewDepositRequestDto dto)
         {
-            // find the deposit request
             var depositRequest = await _context.DepositRequests.FirstOrDefaultAsync(d => d.Id == id);
 
             if (depositRequest == null)
@@ -610,26 +587,13 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // already reviewed, don't credit the wallet twice
+            // already reviewed
             if (depositRequest.Status != "PendingVerification")
             {
-                // _logger.LogWarning("ReviewDepositRequest: request #{RequestId} already reviewed (status={Status}).",
-                //     id, depositRequest.Status);
-
                 return BadRequest(new
                 {
                     status = 400,
                     message = "This deposit request has already been reviewed."
-                });
-            }
-
-            // only Approved or Rejected are allowed
-            if (dto.Status != "Approved" && dto.Status != "Rejected")
-            {
-                return BadRequest(new
-                {
-                    status = 400,
-                    message = "Status must be Approved or Rejected."
                 });
             }
 
@@ -678,9 +642,6 @@ namespace ProductAuction.API.Controllers
                 };
 
                 _context.WalletTransactions.Add(transaction);
-
-                // _logger.LogInformation("ReviewDepositRequest: request #{RequestId} approved; wallet #{WalletId} credited {Amount}.",
-                //     id, wallet.Id, depositRequest.Amount);
             }
 
             await _context.SaveChangesAsync();
@@ -719,7 +680,7 @@ namespace ProductAuction.API.Controllers
             // Set Search 
             var search = query.Search;
 
-            // Optional transaction-type filter: Credit / Debit / Penalty / Release / Commission
+            // transaction type filter: Credit / Debit / Penalty / Release / Commission
             var filter = query.Filter;
 
             // _logger.LogInformation("GetAllTransactions called: page={Page}, pageSize={PageSize}, filter={Filter}, search={Search}.",
@@ -733,7 +694,7 @@ namespace ProductAuction.API.Controllers
                 queryable = queryable.Where(wt => wt.Type == filter);
             }
 
-            // apply search filter — matches reference, user name, or user email
+            // apply search
             if (!string.IsNullOrWhiteSpace(search))
             {
                 var term = search.Trim();
@@ -759,8 +720,6 @@ namespace ProductAuction.API.Controllers
                 queryable = queryable.Where(wt =>
                     (wt.Reference != null && wt.Reference.Contains(term)) ||
                     matchingWalletIds.Contains(wt.WalletId));
-
-                // _logger.LogDebug("GetAllTransactions: search '{Term}' matched {Count} wallet(s).", term, matchingWalletIds.Count);
             }
 
             queryable = queryable.OrderByDescending(wt => wt.CreatedAt);
@@ -825,8 +784,6 @@ namespace ProductAuction.API.Controllers
                 })
                 .ToListAsync();
 
-            // _logger.LogInformation("GetAllTransactions returned {Count} of {Total} transaction(s) (volume={Volume}, escrow={Escrow}, buyerDeposits={BuyerDeposits}, sellerDeposits={SellerDeposits}, activeReservations={ActiveReservations}).",
-            //     transactions.Count, totalCount, totalVolume, totalEscrow, totalBuyerDeposits, totalSellerDeposits, totalActiveReservations);
 
             return Ok(new
             {
@@ -1006,9 +963,6 @@ namespace ProductAuction.API.Controllers
                 })
                 .ToListAsync();
 
-            // _logger.LogInformation("GetPlatformWallet returned {Count} of {Total} transaction(s) (balance={Balance}).",
-            //     transactions.Count, totalCount, wallet.Balance);
-
             return Ok(new
             {
                 status = 200,
@@ -1053,7 +1007,7 @@ namespace ProductAuction.API.Controllers
             // Load all roles
             var allRoles = await _context.Roles.ToListAsync();
 
-            // Count roles across the whole user base.
+            // Count roles
             var adminCount = 0;
             var sellerCount = 0;
             var buyerCount = 0;
@@ -1068,9 +1022,6 @@ namespace ProductAuction.API.Controllers
                 else if (role.Name == "Seller") sellerCount++;
                 else if (role.Name == "Buyer") buyerCount++;
             }
-
-            // _logger.LogInformation("GetUserRoleCounts: admin={Admin}, seller={Seller}, buyer={Buyer}.",
-            //     adminCount, sellerCount, buyerCount);
 
             return Ok(new
             {

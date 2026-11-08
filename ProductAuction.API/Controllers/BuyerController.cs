@@ -23,8 +23,6 @@ namespace ProductAuction.API.Controllers
 
 
         // GET: api/Buyer/dashboard
-        // Returns aggregated stats for the buyer dashboard:
-        // bids, won auctions, total spent, and wallet balances.
         [HttpGet("dashboard")]
         public async Task<IActionResult> GetDashboard()
         {
@@ -35,7 +33,6 @@ namespace ProductAuction.API.Controllers
                 return Unauthorized();
             }
 
-            //  bid stats
             // grab all of this user's bids along with their auctions
             var bids = await _context.Bids
                 .Where(b => b.BidderId == userId)
@@ -50,7 +47,6 @@ namespace ProductAuction.API.Controllers
                 b.Auction.CurrentHighestBidderId == userId);
 
             //  sales & won auctions
-            // sales where this user is the buyer
             var sales = await _context.Sales
                 .Where(s => s.BuyerId == userId)
                 .ToListAsync();
@@ -201,9 +197,6 @@ namespace ProductAuction.API.Controllers
                 })
                 .ToListAsync();
 
-            // _logger.LogInformation("GetMyBids returned {Count} of {Total} bid(s) for {BuyerId} (totalBids={TotalBids}, active={Active}, highest={Highest}).",
-            //     bids.Count, totalCount, buyerId, totalBidsCount, activeBidsCount, highestBidsCount);
-
             return Ok(new
             {
                 status = 200,
@@ -225,13 +218,14 @@ namespace ProductAuction.API.Controllers
         // GET: api/Buyer/won-auctions
         // Returns auctions this buyer won, plus sale / dispatch / dispute info for each.
         [HttpGet("won-auctions")]
+
         public async Task<IActionResult> GetWonAuctions([FromQuery] PaginationQueryDto query)
         {
+            // Get logged-in buyer ID.
             var buyerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             if (buyerId == null)
             {
-
                 return Unauthorized(new
                 {
                     status = 401,
@@ -239,82 +233,111 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-        var page = query.Page < 1 ? 1 : query.Page;
-        var pageSize = query.PageSize < 1 ? 20 : (query.PageSize > 100 ? 100 : query.PageSize);
-        var search = query.Search;
-        var filter = query.Filter;
+            // Pagination settings.
+            var page = query.Page < 1 ? 1 : query.Page;
+            var pageSize = query.PageSize < 1 ? 20 : Math.Min(query.PageSize, 100);
 
-        var auctionsQuery = _context.Auctions
-            .Where(a => a.WinnerId == buyerId)
-            .AsNoTracking()
-            .AsQueryable();
+            var search = query.Search;
+            var filter = query.Filter;
 
-        if (!string.IsNullOrWhiteSpace(search))
-        {
-            var term = search.Trim().ToLower();
-            auctionsQuery = auctionsQuery.Where(a => a.Product.Title.ToLower().Contains(term));
-        }
+            // Get all auctions won by this buyer.
+            var allWonAuctionIds = await _context.Auctions
+                .Where(a => a.WinnerId == buyerId)
+                .Select(a => a.Id)
+                .ToListAsync();
 
-        var allWonAuctionIds = await _context.Auctions
-            .Where(a => a.WinnerId == buyerId)
-            .Select(a => a.Id)
-            .ToListAsync();
+            // Get sales belonging to this buyer.
+            var salesForBuyer = await _context.Sales
+                .Where(s => s.BuyerId == buyerId && allWonAuctionIds.Contains(s.AuctionId))
+                .ToListAsync();
 
-        var salesForBuyer = await _context.Sales
-            .Where(s => s.BuyerId == buyerId && allWonAuctionIds.Contains(s.AuctionId))
-            .ToListAsync();
+            // Calculate summary information.
+            var totalWon = allWonAuctionIds.Count;
 
-        var totalWon = allWonAuctionIds.Count;
-        var pendingPaymentCount = salesForBuyer.Count(s => s.Status == "AwaitingPayment" || s.Status == "PaymentOverdue");
-        var totalSpent = salesForBuyer
-            .Where(s => s.Status == "Paid" || s.Status == "Completed")
-            .Sum(s => s.FinalAmount);
+            var pendingPaymentCount = salesForBuyer.Count(s =>
+                s.Status == "AwaitingPayment" || s.Status == "PaymentOverdue");
 
-        // Apply filter based on derived status
-        if (!string.IsNullOrWhiteSpace(filter) && filter != "All")
-        {
-            var auctionIdsWithDisputes = await _context.Disputes
-                .Where(d => salesForBuyer.Select(s => s.Id).Contains(d.SaleId))
-                .Select(d => _context.Sales.Where(s => s.Id == d.SaleId).Select(s => s.AuctionId).FirstOrDefault())
+            var totalSpent = salesForBuyer
+                .Where(s => s.Status == "Paid" || s.Status == "Completed")
+                .Sum(s => s.FinalAmount);
+
+            // Start with all won auctions.
+            var auctionsQuery = _context.Auctions
+                .Where(a => a.WinnerId == buyerId)
+                .AsNoTracking();
+
+            // Search by product title.
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var term = search.Trim().ToLower();
+
+                auctionsQuery = auctionsQuery.Where(a =>
+                    a.Product.Title.ToLower().Contains(term));
+            }
+
+            // Get delivery records for these sales.
+            var saleIds = salesForBuyer.Select(s => s.Id).ToList();
+
+            var deliverySaleIds = await _context.DeliveryRecords
+                .Where(d => saleIds.Contains(d.SaleId))
+                .Select(d => d.SaleId)
+                .ToListAsync();
+
+            // Get disputed sales.
+            var disputedSaleIds = await _context.Disputes
+                .Where(d => saleIds.Contains(d.SaleId))
+                .Select(d => d.SaleId)
                 .Distinct()
                 .ToListAsync();
 
-            var deliveryBySaleId = await _context.DeliveryRecords
-                .Where(dr => salesForBuyer.Select(s => s.Id).Contains(dr.SaleId))
-                .ToDictionaryAsync(dr => dr.SaleId);
+            // Apply status filters.
+            if (!string.IsNullOrWhiteSpace(filter) && filter != "All")
+            {
+                if (filter == "AwaitingPayment" || filter == "Action Required")
+                {
+                    var ids = salesForBuyer
+                        .Where(s =>
+                            s.Status == "AwaitingPayment" ||
+                            s.Status == "PaymentOverdue" ||
+                            (s.Status == "Paid" && !deliverySaleIds.Contains(s.Id)))
+                        .Select(s => s.AuctionId)
+                        .ToList();
 
-            if (filter == "AwaitingPayment")
-            {
-                var awaitingIds = salesForBuyer.Where(s => s.Status == "AwaitingPayment" || s.Status == "PaymentOverdue").Select(s => s.AuctionId).ToList();
-                var paidNoDelivery = salesForBuyer.Where(s => (s.Status == "Paid") && !deliveryBySaleId.ContainsKey(s.Id)).Select(s => s.AuctionId).ToList();
-                var allAction = awaitingIds.Union(paidNoDelivery).Distinct().ToList();
-                auctionsQuery = auctionsQuery.Where(a => allAction.Contains(a.Id));
-            }
-            else if (filter == "Completed")
-            {
-                var ids = salesForBuyer.Where(s => s.Status == "Completed").Select(s => s.AuctionId).ToList();
-                auctionsQuery = auctionsQuery.Where(a => ids.Contains(a.Id));
-            }
-            else if (filter == "Disputed")
-            {
-                auctionsQuery = auctionsQuery.Where(a => auctionIdsWithDisputes.Contains(a.Id));
-            }
-            else if (filter == "In Transit")
-            {
-                var inTransitSaleIds = deliveryBySaleId.Keys;
-                var inTransitAuctionIds = salesForBuyer.Where(s => inTransitSaleIds.Contains(s.Id)).Select(s => s.AuctionId).ToList();
-                auctionsQuery = auctionsQuery.Where(a => inTransitAuctionIds.Contains(a.Id) && !salesForBuyer.Any(s => s.AuctionId == a.Id && (s.Status == "Completed")));
-            }
-            else if (filter == "Action Required")
-            {
-                var awaitingIds = salesForBuyer.Where(s => s.Status == "AwaitingPayment" || s.Status == "PaymentOverdue").Select(s => s.AuctionId).ToList();
-                var paidNoDelivery = salesForBuyer.Where(s => (s.Status == "Paid") && !deliveryBySaleId.ContainsKey(s.Id)).Select(s => s.AuctionId).ToList();
-                var allAction = awaitingIds.Union(paidNoDelivery).Distinct().ToList();
-                auctionsQuery = auctionsQuery.Where(a => allAction.Contains(a.Id));
-            }
-        }
+                    auctionsQuery = auctionsQuery.Where(a => ids.Contains(a.Id));
+                }
+                else if (filter == "Completed")
+                {
+                    var ids = salesForBuyer
+                        .Where(s => s.Status == "Completed")
+                        .Select(s => s.AuctionId)
+                        .ToList();
 
-        var totalCount = await auctionsQuery.CountAsync();
+                    auctionsQuery = auctionsQuery.Where(a => ids.Contains(a.Id));
+                }
+                else if (filter == "Disputed")
+                {
+                    var ids = salesForBuyer
+                        .Where(s => disputedSaleIds.Contains(s.Id))
+                        .Select(s => s.AuctionId)
+                        .ToList();
+
+                    auctionsQuery = auctionsQuery.Where(a => ids.Contains(a.Id));
+                }
+                else if (filter == "In Transit")
+                {
+                    var ids = salesForBuyer
+                        .Where(s =>
+                            deliverySaleIds.Contains(s.Id) &&
+                            s.Status != "Completed")
+                        .Select(s => s.AuctionId)
+                        .ToList();
+
+                    auctionsQuery = auctionsQuery.Where(a => ids.Contains(a.Id));
+                }
+            }
+
+            // Get total records
+            var totalCount = await auctionsQuery.CountAsync();
 
             var auctions = await auctionsQuery
                 .OrderByDescending(a => a.EndTime)
@@ -326,7 +349,7 @@ namespace ProductAuction.API.Controllers
                     productId = a.Product.Id,
                     productTitle = a.Product.Title,
 
-                    // main product image
+                    // Main product image.
                     mainImageUrl = _context.ProductImages
                         .Where(i => i.ProductId == a.Product.Id && i.IsMain)
                         .Select(i => i.ImageUrl)
@@ -338,7 +361,7 @@ namespace ProductAuction.API.Controllers
                     startTime = a.StartTime,
                     endTime = a.EndTime,
 
-                    // sale record for this auction + buyer
+                    // Sale information.
                     saleId = _context.Sales
                         .Where(s => s.AuctionId == a.Id && s.BuyerId == buyerId)
                         .Select(s => (int?)s.Id)
@@ -356,9 +379,10 @@ namespace ProductAuction.API.Controllers
 
                     finalAmount = _context.Sales
                         .Where(s => s.AuctionId == a.Id && s.BuyerId == buyerId)
-                        .Select(s =>s.FinalAmount)
+                        .Select(s => s.FinalAmount)
                         .FirstOrDefault(),
 
+                    // Delivery information.
                     deliveryRecord = _context.DeliveryRecords
                         .Where(d => _context.Sales
                             .Where(s => s.AuctionId == a.Id && s.BuyerId == buyerId)
@@ -389,6 +413,7 @@ namespace ProductAuction.API.Controllers
                         .Select(d => d.TrackingEvidence)
                         .FirstOrDefault(),
 
+                    // Dispute information.
                     dispute = _context.Disputes
                         .Where(d => _context.Sales.Any(s =>
                             s.AuctionId == a.Id &&
@@ -408,6 +433,7 @@ namespace ProductAuction.API.Controllers
                 })
                 .ToListAsync();
 
+            // Return response.
             return Ok(new
             {
                 status = 200,

@@ -112,7 +112,6 @@ namespace ProductAuction.API.Controllers
                 totalCount = await auctionsQuery.CountAsync();
             }
 
-            // Execute Query
             var auctions = await auctionsQuery
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
@@ -308,7 +307,7 @@ namespace ProductAuction.API.Controllers
                 return Unauthorized(new
                 {
                     status = 401,
-                    message = "User identity was not found in the token."
+                    message = "User identity was not found."
                 });
             }
 
@@ -377,15 +376,10 @@ namespace ProductAuction.API.Controllers
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> ConfigureAuction(int id, UpdateAuctionScheduleDto dto)
         {
-            // _logger.LogInformation("ConfigureAuction called for auction #{AuctionId} (start={Start}, end={End}).",
-            //     id, dto.StartTime, dto.EndTime);
-
             var auction = await _context.Auctions.FindAsync(id);
 
             if (auction == null)
             {
-                // _logger.LogWarning("ConfigureAuction: auction #{AuctionId} not found.", id);
-
                 return NotFound(new
                 {
                     status = 404,
@@ -393,7 +387,6 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // only upcoming auctions can be configured
             if (auction.Status != "Upcoming")
             {
                 return BadRequest(new
@@ -426,8 +419,6 @@ namespace ProductAuction.API.Controllers
 
             await _context.SaveChangesAsync();
 
-            // _logger.LogInformation("ConfigureAuction: auction #{AuctionId} scheduled successfully.", id);
-
             return Ok(new
             {
                 status = 200,
@@ -447,19 +438,16 @@ namespace ProductAuction.API.Controllers
 
             if (string.IsNullOrEmpty(userId))
             {
-                // _logger.LogWarning("CancelAuction: user identity missing from token.");
 
                 return Unauthorized(new
                 {
                     status = 401,
-                    message = "User identity was not found in the token."
+                    message = "User identity was not found."
                 });
             }
 
             if (string.IsNullOrEmpty(dto.Reason))
             {
-                // _logger.LogWarning("CancelAuction: cancellation reason is required for auction #{AuctionId}.", id);
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -467,17 +455,12 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // _logger.LogInformation("CancelAuction called for auction #{AuctionId} by user {UserId} (isAdmin={IsAdmin}).", id, userId, isAdmin);
-
-            // all the wallet changes below need to happen together or not at all
             await using var transaction = await _context.Database.BeginTransactionAsync();
 
             var auction = await _context.Auctions.FirstOrDefaultAsync(a => a.Id == id);
 
             if (auction == null)
             {
-                // _logger.LogWarning("CancelAuction: auction #{AuctionId} not found.", id);
-
                 return NotFound(new
                 {
                     status = 404,
@@ -495,8 +478,6 @@ namespace ProductAuction.API.Controllers
 
             if (auction.Status != "Upcoming" && auction.Status != "Active")
             {
-                // _logger.LogWarning("CancelAuction: auction #{AuctionId} status {Status} cannot be cancelled.", id, auction.Status);
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -507,8 +488,6 @@ namespace ProductAuction.API.Controllers
             // sellers can only cancel before the auction starts
             if (isSeller && auction.Status != "Upcoming")
             {
-                // _logger.LogWarning("CancelAuction: seller cannot cancel active auction #{AuctionId}.", id);
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -527,11 +506,9 @@ namespace ProductAuction.API.Controllers
                     r.Type == "SellerDeposit" &&
                     r.Status == "Reserved");
 
-            // a seller without a reserved deposit has nothing to forfeit 
+
             if (isSeller && reservation == null)
             {
-                // _logger.LogWarning("CancelAuction: no reserved seller deposit found for auction #{AuctionId}.", id);
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -545,8 +522,6 @@ namespace ProductAuction.API.Controllers
 
                 if (sellerWallet == null)
                 {
-                    // _logger.LogError("CancelAuction: seller wallet #{WalletId} not found for auction #{AuctionId}.", reservation.WalletId, id);
-
                     return BadRequest(new
                     {
                         status = 400,
@@ -556,8 +531,6 @@ namespace ProductAuction.API.Controllers
 
                 if (sellerWallet.ReservedBalance < reservation.Amount)
                 {
-                    // _logger.LogWarning("CancelAuction: insufficient reserved balance on seller wallet #{WalletId}.", sellerWallet.Id);
-
                     return BadRequest(new
                     {
                         status = 400,
@@ -570,8 +543,6 @@ namespace ProductAuction.API.Controllers
                     // seller cancelling 
                     if (sellerWallet.Balance < reservation.Amount)
                     {
-                        // _logger.LogWarning("CancelAuction: seller wallet #{WalletId} balance insufficient to forfeit deposit.", sellerWallet.Id);
-
                         return BadRequest(new
                         {
                             status = 400,
@@ -585,8 +556,6 @@ namespace ProductAuction.API.Controllers
 
                     if (platformWallet == null)
                     {
-                        // _logger.LogError("CancelAuction: platform wallet for user {PlatformUserId} not found.", platformUser.Id);
-
                         return BadRequest(new
                         {
                             status = 400,
@@ -621,17 +590,12 @@ namespace ProductAuction.API.Controllers
                         Reference = $"Seller deposit forfeiture for auction #{auction.Id}",
                         CreatedAt = now
                     });
-
-                    // _logger.LogInformation("CancelAuction: seller deposit of {Amount} forfeited to platform for auction #{AuctionId}.",
-                    //     reservation.Amount, auction.Id);
                 }
                 else
                 {
                     // admin cancelling
                     sellerWallet.ReservedBalance -= reservation.Amount;
                     reservation.Status = "Released";
-
-                    // _logger.LogInformation("CancelAuction: seller deposit released by admin for auction #{AuctionId}.", auction.Id);
                 }
             }
 
@@ -650,9 +614,6 @@ namespace ProductAuction.API.Controllers
 
                     if (buyerWallet == null)
                     {
-                        // _logger.LogError("CancelAuction: buyer wallet #{WalletId} not found for auction #{AuctionId}.",
-                        //     buyerReservation.WalletId, auction.Id);
-
                         return BadRequest(new
                         {
                             status = 400,
@@ -662,8 +623,6 @@ namespace ProductAuction.API.Controllers
 
                     if (buyerWallet.ReservedBalance < buyerReservation.Amount)
                     {
-                        // _logger.LogWarning("CancelAuction: insufficient reserved balance on buyer wallet #{WalletId}.", buyerWallet.Id);
-
                         return BadRequest(new
                         {
                             status = 400,
@@ -674,9 +633,6 @@ namespace ProductAuction.API.Controllers
                     buyerWallet.ReservedBalance -= buyerReservation.Amount;
                     buyerReservation.Status = "Released";
                 }
-
-                // _logger.LogInformation("CancelAuction: released {Count} buyer reservation(s) for auction #{AuctionId}.",
-                //     buyerReservations.Count, auction.Id);
             }
 
             auction.Status = "Cancelled";
@@ -684,8 +640,6 @@ namespace ProductAuction.API.Controllers
 
             await _context.SaveChangesAsync();
             await transaction.CommitAsync();
-
-            // _logger.LogInformation("CancelAuction: auction #{AuctionId} cancelled successfully (bySeller={IsSeller}).", auction.Id, isSeller);
 
             return Ok(new
             {

@@ -65,7 +65,6 @@ namespace ProductAuction.API.Controllers
         {
             var name = dto.Name;
 
-            // name can't be empty
             if (string.IsNullOrEmpty(name))
             {
                 return BadRequest(new
@@ -75,9 +74,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // reject duplicates
             bool exists = await _context.Categories.AnyAsync(c => c.Name == name);
-
             if (exists)
             {
                 return BadRequest(new
@@ -87,7 +84,6 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // build the category
             var category = new Category
             {
                 Name = name

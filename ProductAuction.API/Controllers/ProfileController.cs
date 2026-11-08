@@ -27,7 +27,6 @@ namespace ProductAuction.API.Controllers
         public async Task<IActionResult> SubmitVerification()
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-
             if (userId == null)
             {
                 return Unauthorized(new
@@ -37,9 +36,8 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // find this user's profile
-            var profile = await _context.UserProfiles.FirstOrDefaultAsync(p => p.UserId == userId);
 
+            var profile = await _context.UserProfiles.FirstOrDefaultAsync(p => p.UserId == userId);
             if (profile == null)
             {
                 return NotFound(new
@@ -50,9 +48,7 @@ namespace ProductAuction.API.Controllers
             }
 
             // National ID number and both sides of the ID are required
-            if (string.IsNullOrEmpty(profile.NationalIdNumber) ||
-                string.IsNullOrEmpty(profile.NationalIdFrontImageUrl) ||
-                string.IsNullOrEmpty(profile.NationalIdBackImageUrl))
+            if (string.IsNullOrEmpty(profile.NationalIdNumber) || string.IsNullOrEmpty(profile.NationalIdFrontImageUrl) || string.IsNullOrEmpty(profile.NationalIdBackImageUrl))
             {
                 return BadRequest(new
                 {
@@ -61,7 +57,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // move it into the review queue
+            // move it into the review
             profile.VerificationStatus = "PendingReview";
             profile.VerifiedBy = null;
             profile.VerifiedAt = null;
@@ -105,7 +101,6 @@ namespace ProductAuction.API.Controllers
                         .Select(u => u.PhoneNumber)
                         .FirstOrDefault(),
 
-                    // user's role (Buyer or Seller) from the role tables
                     Role = _context.UserRoles
                         .Where(ur => ur.UserId == p.UserId)
                         .Join(_context.Roles,
@@ -138,7 +133,6 @@ namespace ProductAuction.API.Controllers
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> VerifyProfile(int id, VerifyProfileDto dto)
         {
-            // only two decisions are allowed
             if (dto.Status != "Verified" && dto.Status != "Rejected")
             {
                 return BadRequest(new
@@ -148,7 +142,6 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // rejection needs a reason
             if (dto.Status == "Rejected" && string.IsNullOrEmpty(dto.RejectionReason))
             {
                 return BadRequest(new
@@ -158,9 +151,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // find the profile
             var profile = await _context.UserProfiles.FirstOrDefaultAsync(p => p.Id == id);
-
             if (profile == null)
             {
                 return NotFound(new
@@ -170,7 +161,6 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // grab the admin's id from the JWT so we can record who decided
             var adminId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             profile.VerificationStatus = dto.Status;
@@ -179,6 +169,7 @@ namespace ProductAuction.API.Controllers
 
             // only keep the rejection reason when the decision is Rejected
             profile.RejectionReason = dto.Status == "Rejected" ? dto.RejectionReason : null;
+
             profile.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();

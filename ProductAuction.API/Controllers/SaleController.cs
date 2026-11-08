@@ -48,7 +48,7 @@ namespace ProductAuction.API.Controllers
             // Set Search 
             var search = query.Search;
 
-            // Optional sale-status filter (AwaitingPayment / Paid / Dispatched / etc.)
+            // sale-status filter (AwaitingPayment / Paid / Dispatched / etc.)
             var filter = query.Filter;
 
             // status filter
@@ -65,13 +65,11 @@ namespace ProductAuction.API.Controllers
                 // "In Progress" is a frontend convenience for Paid | Dispatched
                 if (filter == "InProgress")
                 {
-                    salesQuery = salesQuery.Where(s =>
-                        s.Status == "Paid" || s.Status == "Dispatched");
+                    salesQuery = salesQuery.Where(s => s.Status == "Paid" || s.Status == "Dispatched");
                 }
                 else if (filter == "Awaiting Payment")
                 {
-                    salesQuery = salesQuery.Where(s =>
-                        s.Status == "AwaitingPayment" || s.Status == "PaymentOverdue");
+                    salesQuery = salesQuery.Where(s => s.Status == "AwaitingPayment" || s.Status == "PaymentOverdue");
                 }
                 else if (filter == "Completed")
                 {
@@ -79,8 +77,7 @@ namespace ProductAuction.API.Controllers
                 }
                 else if (filter == "Disputed")
                 {
-                    salesQuery = salesQuery.Where(s =>
-                        s.Status == "Disputed" || s.Status == "Refunded");
+                    salesQuery = salesQuery.Where(s => s.Status == "Disputed" || s.Status == "Refunded");
                 }
                 else
                 {
@@ -126,7 +123,7 @@ namespace ProductAuction.API.Controllers
 
             var totalCount = await salesQuery.CountAsync();
 
-            // Global stats
+            // stats
             var totalSalesCount = await _context.Sales.CountAsync();
             var awaitingPaymentCount = await _context.Sales.CountAsync(s =>
                 s.Status == "AwaitingPayment" || s.Status == "PaymentOverdue");
@@ -180,9 +177,6 @@ namespace ProductAuction.API.Controllers
                         .FirstOrDefault()
                 })
                 .ToListAsync();
-
-            // _logger.LogInformation("GetSales returned {Count} of {Total} sale(s) (totalSales={TotalSales}, awaitingPayment={Awaiting}, activeDeliveries={Active}, completed={Completed}).",
-            //     sales.Count, totalCount, totalSalesCount, awaitingPaymentCount, activeDeliveriesCount, completedCount);
 
             return Ok(new
             {
@@ -246,8 +240,7 @@ namespace ProductAuction.API.Controllers
             {
                 if (filter == "Awaiting Payment")
                 {
-                    salesQuery = salesQuery.Where(s =>
-                        s.Status == "AwaitingPayment" || s.Status == "PaymentOverdue");
+                    salesQuery = salesQuery.Where(s => s.Status == "AwaitingPayment" || s.Status == "PaymentOverdue");
                 }
                 else if (filter == "Awaiting Dispatch")
                 {
@@ -263,8 +256,7 @@ namespace ProductAuction.API.Controllers
                 }
                 else if (filter == "Disputed")
                 {
-                    salesQuery = salesQuery.Where(s =>
-                        s.Status == "Disputed" || s.Status == "Refunded");
+                    salesQuery = salesQuery.Where(s => s.Status == "Disputed" || s.Status == "Refunded");
                 }
                 else
                 {
@@ -292,11 +284,9 @@ namespace ProductAuction.API.Controllers
 
             var totalCount = await salesQuery.CountAsync();
 
-            // Global counts
-            var totalSalesCount = await _context.Sales.CountAsync(s =>
-                s.BuyerId == userId || s.SellerId == userId);
-            var awaitingDispatchCount = await _context.Sales.CountAsync(s =>
-                (s.BuyerId == userId || s.SellerId == userId) && s.Status == "Paid");
+            // counts
+            var totalSalesCount = await _context.Sales.CountAsync(s =>s.BuyerId == userId || s.SellerId == userId);
+            var awaitingDispatchCount = await _context.Sales.CountAsync(s =>(s.BuyerId == userId || s.SellerId == userId) && s.Status == "Paid");
             var totalRevenue = await _context.Sales
                 .Where(s => (s.BuyerId == userId || s.SellerId == userId)
                     && (s.Status == "Completed" || s.Status == "Dispatched" || s.Status == "Paid"))
@@ -361,9 +351,6 @@ namespace ProductAuction.API.Controllers
                 })
                 .ToListAsync();
 
-            // _logger.LogInformation("GetMySales returned {Count} of {Total} sale(s) for {UserId} (awaitingDispatch={Awaiting}, revenue={Revenue}).",
-            //     sales.Count, totalCount, userId, awaitingDispatchCount, totalRevenue);
-
             return Ok(new
             {
                 status = 200,
@@ -384,7 +371,6 @@ namespace ProductAuction.API.Controllers
 
         // POST: api/sale/{id}/pay
         // The winning buyer pays for the sale from their wallet.
-        // Money leaves the buyer's balance and is held in escrow until receipt is confirmed.
         [HttpPost("{id}/pay")]
         public async Task<IActionResult> PayForSale(int id)
         {
@@ -424,7 +410,7 @@ namespace ProductAuction.API.Controllers
 
             var now = DateTime.UtcNow;
 
-            // if the deadline has already passed, flip it to overdue and stop.
+            // if the deadline has already passed, change it to overdue and stop.
             if (now > sale.PaymentDeadline)
             {
                 sale.Status = "PaymentOverdue";
@@ -439,9 +425,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            var wallet = await _context.Wallets
-                .FirstOrDefaultAsync(w => w.UserId == userId);
-
+            var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == userId);
             if (wallet == null)
             {
                 return BadRequest(new
@@ -472,7 +456,6 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // figure out balance after paying
             var newBalance = wallet.Balance - sale.FinalAmount;
             var newReservedBalance = wallet.ReservedBalance - reservedAmount;
 
@@ -545,9 +528,6 @@ namespace ProductAuction.API.Controllers
             await _context.SaveChangesAsync();
             await transaction.CommitAsync();
 
-            // _logger.LogInformation("PayForSale: sale #{SaleId} paid ({Amount}); escrow created; seller notified at {NotifiedAt}.",
-            //     id, sale.FinalAmount, now);
-
             return Ok(new
             {
                 status = 200,
@@ -568,7 +548,6 @@ namespace ProductAuction.API.Controllers
         public async Task<IActionResult> DispatchSale(int id, [FromForm] DispatchSaleDto dto)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-
             if (userId == null)
             {
                 return Unauthorized(new
@@ -579,7 +558,6 @@ namespace ProductAuction.API.Controllers
             }
 
             var sale = await _context.Sales.FirstOrDefaultAsync(s => s.Id == id);
-
             if (sale == null)
             {
                 return NotFound(new
@@ -604,9 +582,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            if (string.IsNullOrEmpty(dto.DispatchInfo) ||
-                dto.TrackingEvidenceImage == null ||
-                dto.TrackingEvidenceImage.Length == 0)
+            if (string.IsNullOrEmpty(dto.DispatchInfo) || dto.TrackingEvidenceImage == null || dto.TrackingEvidenceImage.Length == 0)
             {
                 return BadRequest(new
                 {
@@ -635,7 +611,6 @@ namespace ProductAuction.API.Controllers
 
             var now = DateTime.UtcNow;
             var dispatchDeadline = sale.SellerNotifiedAt.Value.AddDays(5);
-
             if (now > dispatchDeadline)
             {
                 return BadRequest(new
@@ -646,7 +621,6 @@ namespace ProductAuction.API.Controllers
             }
 
             var delivery = await _context.DeliveryRecords.FirstOrDefaultAsync(d => d.SaleId == sale.Id);
-
             if (delivery == null)
             {
                 delivery = new DeliveryRecord
@@ -682,9 +656,6 @@ namespace ProductAuction.API.Controllers
 
             await _context.SaveChangesAsync();
 
-            // _logger.LogInformation("DispatchSale: sale #{SaleId} dispatched (info='{Info}', evidenceUrl='{Evidence}').",
-            //     id, delivery.DispatchInfo, delivery.TrackingEvidence);
-
             return Ok(new
             {
                 status = 200,
@@ -704,7 +675,6 @@ namespace ProductAuction.API.Controllers
 
         // POST: api/sale/{id}/report-non-delivery
         // Seller reports that the buyer never picked the item up.
-        // Only allowed after the 10-day pickup window (from DispatchedAt) closes.
         [HttpPost("{id}/report-non-delivery")]
         public async Task<IActionResult> ReportNonDelivery(int id)
         {
@@ -759,8 +729,6 @@ namespace ProductAuction.API.Controllers
 
             var now = DateTime.UtcNow;
             var pickupDeadline = delivery.DispatchedAt.Value.AddDays(10);
-
-            // seller has to wait the full 10 days before accusing the buyer
             if (now <= pickupDeadline)
             {
                 return BadRequest(new
@@ -770,7 +738,6 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // no duplicate reports
             if (delivery.Status == "NonDeliveryReported")
             {
                 return BadRequest(new
@@ -785,8 +752,6 @@ namespace ProductAuction.API.Controllers
             sale.Status = "Disputed";
 
             await _context.SaveChangesAsync();
-
-            // _logger.LogInformation("ReportNonDelivery: sale #{SaleId} reported for non-delivery; awaiting admin review.", id);
 
             return Ok(new
             {
@@ -805,8 +770,7 @@ namespace ProductAuction.API.Controllers
 
 
         // POST: api/sale/{id}/confirm-receipt
-        // Buyer confirms receipt — the sale settles, seller gets paid, platform gets commission.
-        // Proof image is required so the seller has evidence the item was received.
+        // Buyer confirms receipt
         [HttpPost("{id}/confirm-receipt")]
         public async Task<IActionResult> ConfirmReceipt(int id, [FromForm] ConfirmReceiptDto dto)
         {
@@ -821,7 +785,6 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // proof of receipt is mandatory
             if (dto.ReceiptProofImage == null || dto.ReceiptProofImage.Length == 0)
             {
                 return BadRequest(new
@@ -831,13 +794,10 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // _logger.LogInformation("ConfirmReceipt called by user {UserId} for sale #{SaleId}.", userId, id);
-
             // Start Transaction
             await using var transaction = await _context.Database.BeginTransactionAsync();
 
             var sale = await _context.Sales.FirstOrDefaultAsync(s => s.Id == id);
-
             if (sale == null)
             {
                 return NotFound(new
@@ -852,7 +812,6 @@ namespace ProductAuction.API.Controllers
                 return Forbid();
             }
 
-            // can only confirm receipt on a Paid or Dispatched sale.
             if (sale.Status != "Paid" && sale.Status != "Dispatched")
             {
                 return BadRequest(new
@@ -864,7 +823,6 @@ namespace ProductAuction.API.Controllers
 
             // the product must actually have been shipped
             var delivery = await _context.DeliveryRecords.FirstOrDefaultAsync(d => d.SaleId == sale.Id);
-
             if (delivery == null || delivery.Status != "Dispatched")
             {
                 return BadRequest(new
@@ -915,7 +873,6 @@ namespace ProductAuction.API.Controllers
             }
 
             var platformUser = await _context.Users.FirstOrDefaultAsync(u => u.UserName == "platform-system-account");
-
             if (platformUser == null)
             {
                 return BadRequest(new
@@ -926,23 +883,12 @@ namespace ProductAuction.API.Controllers
             }
 
             var platformWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == platformUser.Id);
-
             if (platformWallet == null)
             {
                 return BadRequest(new
                 {
                     status = 400,
                     message = "The platform wallet was not found."
-                });
-            }
-
-            // safety check — the platform wallet and seller wallet must be different
-            if (platformWallet.Id == sellerWallet.Id)
-            {
-                return BadRequest(new
-                {
-                    status = 400,
-                    message = "The platform wallet configuration is invalid."
                 });
             }
 
@@ -1010,9 +956,6 @@ namespace ProductAuction.API.Controllers
                     Reference = $"Seller deposit release for product #{sale.ProductId}",
                     CreatedAt = now
                 });
-
-                // _logger.LogDebug("ConfirmReceipt: seller deposit of {Amount} released for sale #{SaleId}.",
-                //     sellerDeposit.Amount, id);
             }
 
             // release every buyer's eligibility reservation for this auction.
@@ -1025,9 +968,7 @@ namespace ProductAuction.API.Controllers
 
             foreach (var reservation in buyerReservations)
             {
-                var buyerWallet = await _context.Wallets
-                    .FirstOrDefaultAsync(w => w.Id == reservation.WalletId);
-
+                var buyerWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.Id == reservation.WalletId);
                 if (buyerWallet == null || buyerWallet.ReservedBalance < reservation.Amount)
                 {
                     return BadRequest(new
@@ -1060,9 +1001,6 @@ namespace ProductAuction.API.Controllers
 
             await _context.SaveChangesAsync();
             await transaction.CommitAsync();
-
-            // _logger.LogInformation("ConfirmReceipt: sale #{SaleId} completed; seller paid {SellerProceeds}, platform {Commission}.",
-            //     id, sellerProceeds, commission);
 
             return Ok(new
             {

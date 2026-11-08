@@ -29,7 +29,6 @@ namespace ProductAuction.API.Controllers
         [Authorize(Roles = "Buyer")]
         public async Task<IActionResult> PlaceBid(PlaceBidDto dto)
         {
-            // get the logged-in users id
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             if (userId == null)
@@ -41,12 +40,8 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // _logger.LogInformation("PlaceBid called by user {UserId} for auction #{AuctionId}, amount={Amount}.",
-            //     userId, dto.AuctionId, dto.Amount);
 
-            // find the auction
             var auction = await _context.Auctions.FirstOrDefaultAsync(a => a.Id == dto.AuctionId);
-
             if (auction == null)
             {
                 return NotFound(new
@@ -56,9 +51,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // find the product
             var product = await _context.Products.FirstOrDefaultAsync(p => p.Id == auction.ProductId);
-
             if (product == null)
             {
 
@@ -69,16 +62,16 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // only active auctions accept bids
+
             if (auction.Status != "Active")
             {
-
                 return BadRequest(new
                 {
                     status = 400,
                     message = "Bids can only be placed on active auctions."
                 });
             }
+
 
             if (auction.EndTime == null || auction.EndTime <= DateTime.UtcNow)
             {
@@ -103,22 +96,16 @@ namespace ProductAuction.API.Controllers
             // bids must not be at or above the buyout price
             if (product.BuyoutPrice > 0 && dto.Amount >= product.BuyoutPrice)
             {
-                // _logger.LogWarning("PlaceBid: amount {Amount} >= buyout {Buyout} for auction #{AuctionId}.",
-                //     dto.Amount, product.BuyoutPrice, auction.Id);
-
                 return BadRequest(new
                 {
                     status = 400,
-                    message = "Your bid must be below the buyout price. Use the buyout endpoint."
+                    message = "Your bid must be below the buyout price. Use the buyout Button."
                 });
             }
 
             // first bid has to meet the starting price
             if (dto.Amount < product.StartingPrice)
             {
-                // _logger.LogWarning("PlaceBid: amount {Amount} below starting price {Starting} for auction #{AuctionId}.",
-                //     dto.Amount, product.StartingPrice, auction.Id);
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -131,18 +118,12 @@ namespace ProductAuction.API.Controllers
             {
                 var highestBid = auction.CurrentHighestBid.Value;
 
-                var increment = GetBidIncrement(
-                    highestBid,
-                    product.StartingPrice,
-                    product.BuyoutPrice);
+                var increment = GetBidIncrement(highestBid, product.StartingPrice, product.BuyoutPrice);
 
                 var minimumBid = highestBid + increment;
 
                 if (dto.Amount < minimumBid)
                 {
-                    // _logger.LogWarning("PlaceBid: amount {Amount} below minimum {Minimum} for auction #{AuctionId}.",
-                    //     dto.Amount, minimumBid, auction.Id);
-
                     return BadRequest(new
                     {
                         status = 400,
@@ -151,9 +132,8 @@ namespace ProductAuction.API.Controllers
                 }
             }
 
-            // find the buyer's wallet
-            var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == userId);
 
+            var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == userId);
             if (wallet == null)
             {
                 return BadRequest(new
@@ -179,9 +159,6 @@ namespace ProductAuction.API.Controllers
 
                 if (availableBalance < requiredAmount)
                 {
-                    // _logger.LogWarning("PlaceBid: user {UserId} has insufficient available balance ({Available}) for reservation {Required}.",
-                    //     userId, availableBalance, requiredAmount);
-
                     return BadRequest(new
                     {
                         status = 400,
@@ -202,12 +179,8 @@ namespace ProductAuction.API.Controllers
                 };
 
                 _context.WalletReservations.Add(reservation);
-
-                // _logger.LogInformation("PlaceBid: reserved {Amount} for user {UserId} on auction #{AuctionId}.",
-                //     requiredAmount, userId, auction.Id);
             }
 
-            // create the bid
             var bid = new Bid
             {
                 AuctionId = auction.Id,
@@ -224,9 +197,6 @@ namespace ProductAuction.API.Controllers
             auction.BidCount++;
 
             await _context.SaveChangesAsync();
-
-            // _logger.LogInformation("PlaceBid: bid #{BidId} of {Amount} placed by user {UserId} on auction #{AuctionId}.",
-            //     bid.Id, bid.Amount, userId, auction.Id);
 
             return Ok(new
             {
@@ -277,9 +247,6 @@ namespace ProductAuction.API.Controllers
                     PlacedAt = b.PlacedAt
                 })
                 .ToListAsync();
-
-            // _logger.LogInformation("GetAuctionBidHistory returned {Count} bid(s) for auction #{AuctionId}.",
-            //     bids.Count, auctionId);
 
             return Ok(new
             {
@@ -376,10 +343,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // find the auction
-            var auction = await _context.Auctions
-                .FirstOrDefaultAsync(a => a.Id == auctionId);
-
+            var auction = await _context.Auctions.FirstOrDefaultAsync(a => a.Id == auctionId);
             if (auction == null)
             {
                 return NotFound(new
@@ -389,7 +353,6 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // auction has to be active
             if (auction.Status != "Active")
             {
                 return BadRequest(new
@@ -408,9 +371,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // find the product
             var product = await _context.Products.FirstOrDefaultAsync(p => p.Id == auction.ProductId);
-
             if (product == null)
             {
                 return NotFound(new
@@ -423,9 +384,6 @@ namespace ProductAuction.API.Controllers
             // product has to be approved and available
             if (product.ApprovalStatus != "Approved" || product.Status != "Available")
             {
-                // _logger.LogWarning("Buyout: product #{ProductId} not approved/available (approval={Approval}, status={Status}).",
-                //     product.Id, product.ApprovalStatus, product.Status);
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -433,13 +391,9 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // don't let the same auction be sold twice
             var existingSale = await _context.Sales.AnyAsync(s => s.AuctionId == auctionId);
-
             if (existingSale)
             {
-                // _logger.LogWarning("Buyout: sale already exists for auction #{AuctionId}.", auctionId);
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -450,13 +404,10 @@ namespace ProductAuction.API.Controllers
             // Start Transaction
             await using var transaction = await _context.Database.BeginTransactionAsync();
 
-            // find the buyer's wallet
-            var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == userId);
 
+            var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == userId);
             if (wallet == null)
             {
-                // _logger.LogWarning("Buyout: wallet for user {UserId} not found.", userId);
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -480,9 +431,6 @@ namespace ProductAuction.API.Controllers
 
                 if (availableBalance < requiredAmount)
                 {
-                    // _logger.LogWarning("Buyout: user {UserId} has insufficient available balance ({Available}) for reservation {Required}.",
-                    //     userId, availableBalance, requiredAmount);
-
                     return BadRequest(new
                     {
                         status = 400,
@@ -503,9 +451,6 @@ namespace ProductAuction.API.Controllers
                 };
 
                 _context.WalletReservations.Add(reservation);
-
-                // _logger.LogInformation("Buyout: reserved {Amount} for user {UserId} on auction #{AuctionId}.",
-                //     requiredAmount, userId, auction.Id);
             }
 
             // record the buyout as a bid
@@ -574,8 +519,6 @@ namespace ProductAuction.API.Controllers
 
                 if (otherWallet == null)
                 {
-                    // _logger.LogWarning("Buyout: wallet #{WalletId} for losing bidder not found; skipping release.",
-                    //     buyerReservation.WalletId);
                     continue;
                 }
 
@@ -587,9 +530,6 @@ namespace ProductAuction.API.Controllers
             await _context.SaveChangesAsync();
 
             await transaction.CommitAsync();
-
-            // _logger.LogInformation("Buyout: auction #{AuctionId} sold to user {UserId} for {Amount}.",
-            //     auction.Id, userId, product.BuyoutPrice);
 
             return Ok(new
             {
@@ -608,7 +548,6 @@ namespace ProductAuction.API.Controllers
 
         // Works out the minimum bid increment based on where the current bid sits
         // within the price range (starting → buyout). Range is split into thirds:
-        // first third = 20, middle third = 50, last third = 100.
         private decimal GetBidIncrement(decimal currentBid, decimal startingPrice, decimal buyoutPrice)
         {
             // total range between starting and buyout price

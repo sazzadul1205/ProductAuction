@@ -22,8 +22,6 @@ namespace ProductAuction.API.Controllers
 
 
         // GET: api/Seller/dashboard
-        // Returns aggregated stats for the seller dashboard:
-        // products, active auctions, sales, earnings, and wallet balance.
         [HttpGet("dashboard")]
         public async Task<IActionResult> GetDashboard()
         {

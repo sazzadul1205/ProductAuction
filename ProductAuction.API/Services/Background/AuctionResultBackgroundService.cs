@@ -194,20 +194,17 @@ namespace ProductAuction.API.Services.Background
 
             foreach (var reservation in reservations)
             {
-                var wallet = await context.Wallets
-                    .FirstOrDefaultAsync(w => w.Id == reservation.WalletId, stoppingToken);
+                var wallet = await context.Wallets.FirstOrDefaultAsync(w => w.Id == reservation.WalletId, stoppingToken);
 
                 if (wallet == null)
                 {
-                    _logger.LogWarning("Reservation #{ReservationId} skipped: wallet #{WalletId} not found.",
-                        reservation.Id, reservation.WalletId);
+                    _logger.LogWarning("Reservation #{ReservationId} skipped: wallet #{WalletId} not found.",reservation.Id, reservation.WalletId);
                     continue;
                 }
 
                 if (wallet.ReservedBalance < reservation.Amount)
                 {
-                    _logger.LogWarning("Reservation #{ReservationId} skipped: wallet #{WalletId} reserved balance inconsistent.",
-                        reservation.Id, reservation.WalletId);
+                    _logger.LogWarning("Reservation #{ReservationId} skipped: wallet #{WalletId} reserved balance inconsistent.",reservation.Id, reservation.WalletId);
                     continue;
                 }
 
