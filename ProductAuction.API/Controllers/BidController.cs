@@ -401,6 +401,15 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
+            if (auction.CurrentHighestBid.HasValue && product.BuyoutPrice > 0 && auction.CurrentHighestBid.Value >= product.BuyoutPrice)
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "Current highest bid already meets or exceeds the buyout price."
+                });
+            }
+
             // Start Transaction
             await using var transaction = await _context.Database.BeginTransactionAsync();
 

@@ -89,6 +89,7 @@ namespace ProductAuction.API.Controllers
 
             var profiles = await _context.UserProfiles
                 .Where(p => p.VerificationStatus == "PendingReview")
+                .OrderByDescending(p => p.CreatedAt)
                 .Select(p => new ProfileVerificationResponseDto
                 {
                     Id = p.Id,

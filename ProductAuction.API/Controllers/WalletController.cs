@@ -425,7 +425,7 @@ namespace ProductAuction.API.Controllers
             var totalCount = await reservationsQuery.CountAsync();
 
             var reservations = await reservationsQuery
-                .OrderBy(r => r.Id)
+                .OrderByDescending(r => r.Id)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
                 .Select(r => new

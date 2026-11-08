@@ -595,7 +595,7 @@ namespace ProductAuction.API.Controllers
                         r.Type == "BuyerFunds" &&
                         r.Status == "Reserved");
 
-                if (buyerDeposit == null || buyerDeposit.Amount != totalPenalty || buyerWallet.ReservedBalance < buyerDeposit.Amount || buyerWallet.Balance < totalPenalty)
+                if (buyerDeposit == null || buyerDeposit.Amount < totalPenalty || buyerWallet.ReservedBalance < buyerDeposit.Amount || buyerWallet.Balance < totalPenalty)
                 {
                     return BadRequest(new
                     {
@@ -741,7 +741,7 @@ namespace ProductAuction.API.Controllers
                         r.Type == "SellerDeposit" &&
                         r.Status == "Reserved");
 
-                if (sellerDeposit == null || sellerDeposit.Amount != totalPenalty || sellerWallet.ReservedBalance < sellerDeposit.Amount || sellerWallet.Balance < totalPenalty)
+                if (sellerDeposit == null || sellerDeposit.Amount < totalPenalty || sellerWallet.ReservedBalance < sellerDeposit.Amount || sellerWallet.Balance < totalPenalty)
                 {
                     return BadRequest(new
                     {

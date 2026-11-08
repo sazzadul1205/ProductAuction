@@ -159,6 +159,7 @@ namespace ProductAuction.API.Controllers
 
             var auctions = await _context.Auctions
                 .Where(a => a.Status == "Active")
+                .OrderByDescending(a => a.EndTime)
                 .Select(a => new AuctionListDto
                 {
                     Id = a.Id,
@@ -201,6 +202,7 @@ namespace ProductAuction.API.Controllers
                     a.Status == "Upcoming" &&
                     a.StartTime.HasValue &&
                     a.EndTime > now)
+                .OrderBy(a => a.StartTime)
                 .Select(a => new AuctionListDto
                 {
                     Id = a.Id,

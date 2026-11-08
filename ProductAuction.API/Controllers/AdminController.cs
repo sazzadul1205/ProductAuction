@@ -197,7 +197,7 @@ namespace ProductAuction.API.Controllers
                 // _logger.LogDebug("GetAllUsers: search '{Term}' matched {Count} profile(s).", term, matchingProfileUserIds.Count);
             }
 
-            userQuery = userQuery.OrderBy(u => u.Email);
+            userQuery = userQuery.OrderByDescending(u => u.Id);
 
             var totalCount = await userQuery.CountAsync();
 
@@ -556,7 +556,7 @@ namespace ProductAuction.API.Controllers
         {
             var requests = await _context.DepositRequests
                 .Where(d => d.Status == "PendingVerification")
-                .OrderBy(d => d.CreatedAt)
+                .OrderByDescending(d => d.CreatedAt)
                 .Select(d => new DepositRequestResponseDto
                 {
                     Id = d.Id,
