@@ -20,7 +20,6 @@ namespace ProductAuction.API.Services.Background
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            // Keep checking until the application is stopping.
             while (!stoppingToken.IsCancellationRequested)
             {
                 try

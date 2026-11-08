@@ -46,8 +46,6 @@ namespace ProductAuction.API.Services
 
             // Create the uploads folder if it does not exist yet.
             Directory.CreateDirectory(uploadFolder);
-
-            // Give the file a unique name so nothing gets overwritten.
             var fileName = $"{Guid.NewGuid()}{extension}";
             var filePath = Path.Combine(uploadFolder, fileName);
 
@@ -57,30 +55,25 @@ namespace ProductAuction.API.Services
                 await image.CopyToAsync(stream);
             }
 
-            // Return the relative URL to save in the database.
             return $"/uploads/{fileName}";
         }
 
         // Deletes an image from disk based on its relative URL.
         public Task<bool> DeleteImageAsync(string imageUrl)
         {
-            // Nothing to delete if the URL is empty.
             if (string.IsNullOrEmpty(imageUrl))
             {
                 return Task.FromResult(false);
             }
 
-            // Extract just the file name from the URL.
             var fileName = Path.GetFileName(imageUrl);
 
-            // Only allow URLs that actually point to a file in our uploads folder.
             if (string.IsNullOrEmpty(fileName) ||
                 fileName != imageUrl.Replace("\\", "/").Split('/').Last())
             {
                 return Task.FromResult(false);
             }
 
-            // Resolve the web root (wwwroot).
             var webRoot = _environment.WebRootPath ?? Path.Combine(_environment.ContentRootPath, "wwwroot");
 
             // Build the full path to the file on disk.
@@ -94,8 +87,6 @@ namespace ProductAuction.API.Services
 
             // Delete the file.
             System.IO.File.Delete(filePath);
-
-            // Report success.
             return Task.FromResult(true);
         }
     }

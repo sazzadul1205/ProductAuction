@@ -20,9 +20,6 @@ namespace ProductAuction.API.Services.Background
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            _logger.LogInformation("Payment overdue service started.");
-
-            // Keep checking until the application is stopping.
             while (!stoppingToken.IsCancellationRequested)
             {
                 try

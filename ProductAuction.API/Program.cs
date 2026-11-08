@@ -38,7 +38,7 @@ builder.Services
     .AddEntityFrameworkStores<AppDbContext>()
     .AddDefaultTokenProviders();
 
-// Rate limiting: 5 login attempts per minute per IP to prevent brute force.
+// Rate limiting: 5 login attempts per minute 
 builder.Services.AddRateLimiter(options =>
 {
     options.AddFixedWindowLimiter("login", limiterOptions =>
@@ -82,8 +82,7 @@ builder.Services.AddScoped<IImageUploadService, ImageUploadService>();
 // Background service that activates auctions when their scheduled start time arrives.
 builder.Services.AddHostedService<AuctionStatusBackgroundService>();
 
-// Background service that processes ended auctions, determines winners,
-// and creates sale records when a winning bid exists.
+// Background service that processes ended auctions, determines winners
 builder.Services.AddHostedService<AuctionResultBackgroundService>();
 
 // Background service that marks unpaid sales as overdue.
