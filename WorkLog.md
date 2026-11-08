@@ -185,3 +185,7 @@
 The latest recorded build completed with **zero warnings and zero errors**. All 48 backend smoke tests passed.
 
 These results reflect the checks recorded for the 29 October changes; they do not imply that every possible integration, security, or edge-case test has been completed.
+
+## Re-Auction Feature
+
+- Added ResetForReAuction endpoint, fixed ReviewProduct auction creation, frontend reset button and api helper.
