@@ -1,9 +1,9 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿
+using Microsoft.EntityFrameworkCore;
 using ProductAuction.API.Data;
 
 namespace ProductAuction.API.Services.Background
 {
-    // Background service that identifies deliveries not dispatched on time.
     public class DispatchOverdueBackgroundService : BackgroundService
     {
         // Factory used to create a new DI scope each time we access the database.
@@ -18,54 +18,39 @@ namespace ProductAuction.API.Services.Background
             _logger = logger;
         }
 
-        // Main loop that runs until the application shuts down.
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            _logger.LogInformation("DispatchOverdueBackgroundService started at {Time}.", DateTime.UtcNow);
-
             // Keep checking until the application is stopping.
             while (!stoppingToken.IsCancellationRequested)
             {
                 try
                 {
-                    // Create a scope because AppDbContext is scoped.
-                    using (var scope = _scopeFactory.CreateScope())
+                    using var scope = _scopeFactory.CreateScope();
+                    var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                    var now = DateTime.UtcNow;
+
+                    // Find deliveries whose dispatch deadline has passed
+                    var overdueDeliveries = await context.DeliveryRecords
+                        .Where(d => d.Status == "AwaitingDispatch" && d.DispatchDeadline <= now)
+                        .ToListAsync(stoppingToken);
+
+                    // Mark each missed dispatch deadline.
+                    foreach (var delivery in overdueDeliveries)
                     {
-                        // Get the database context.
-                        var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
-                        // Current UTC time.
-                        var now = DateTime.UtcNow;
-
-                        // Find deliveries whose dispatch deadline has passed
-                        // and that have not been dispatched.
-                        var overdueDeliveries = await context.DeliveryRecords
-                            .Where(d =>
-                                d.Status == "AwaitingDispatch" &&
-                                d.DispatchDeadline <= now)
-                            .ToListAsync(stoppingToken);
-
-                        // Mark each missed dispatch deadline.
-                        foreach (var delivery in overdueDeliveries)
-                        {
-                            delivery.Status = "DispatchOverdue";
-                            _logger.LogWarning("Delivery #{DeliveryId} marked DispatchOverdue at {Time}.", delivery.Id, now);
-                        }
-
-                        await context.SaveChangesAsync(stoppingToken);
-
+                        delivery.Status = "DispatchOverdue";
+                        _logger.LogWarning("Delivery #{DeliveryId} marked as DispatchOverdue.", delivery.Id);
                     }
+
+                    await context.SaveChangesAsync(stoppingToken);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error in dispatch overdue cycle.");
+                    _logger.LogError(ex, "Error In DispatchOverdueBackgroundService");
                 }
 
                 // Wait 30 seconds before checking again.
                 await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
             }
-
-            _logger.LogInformation("DispatchOverdueBackgroundService stopped at {Time}.", DateTime.UtcNow);
         }
     }
 }
