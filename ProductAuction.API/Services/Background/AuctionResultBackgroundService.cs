@@ -80,20 +80,17 @@ namespace ProductAuction.API.Services.Background
 
             if (existingSale != null)
             {
-                _logger.LogDebug("Auction #{AuctionId} already has a sale; reusing buyer {BuyerId}.",
-                    auction.Id, existingSale.BuyerId);
+                _logger.LogDebug("Auction #{AuctionId} already has a sale; reusing buyer {BuyerId}.", auction.Id, existingSale.BuyerId);
                 winnerId = existingSale.BuyerId;
                 auction.Status = "Completed";
             }
             else
             {
-                var product = await context.Products
-                    .FirstOrDefaultAsync(p => p.Id == auction.ProductId, stoppingToken);
+                var product = await context.Products.FirstOrDefaultAsync(p => p.Id == auction.ProductId, stoppingToken);
 
                 if (product == null)
                 {
-                    _logger.LogWarning("Auction #{AuctionId} skipped: product #{ProductId} not found.",
-                        auction.Id, auction.ProductId);
+                    _logger.LogWarning("Auction #{AuctionId} skipped: product #{ProductId} not found.", auction.Id, auction.ProductId);
                     await transaction.RollbackAsync(stoppingToken);
                     return;
                 }
@@ -108,19 +105,24 @@ namespace ProductAuction.API.Services.Background
                 {
                     _logger.LogInformation("Auction #{AuctionId} ended with no bids; releasing seller deposit.", auction.Id);
 
-                    var sellerWallet = await context.Wallets
-                        .FirstOrDefaultAsync(w => w.UserId == product.SellerId, stoppingToken);
+                    var sellerWallet = await context.Wallets.FirstOrDefaultAsync(w => w.UserId == product.SellerId, stoppingToken);
 
-                    var sellerDeposit = sellerWallet == null
-                        ? null
-                        : await context.WalletReservations.FirstOrDefaultAsync(r =>
-                            r.ProductId == auction.ProductId &&
-                            r.WalletId == sellerWallet.Id &&
-                            r.Type == "SellerDeposit" &&
-                            r.Status == "Reserved", stoppingToken);
+                    var sellerDeposit = await context.WalletReservations.FirstOrDefaultAsync(r =>
+                    r.ProductId == auction.ProductId &&
+                    r.WalletId == sellerWallet.Id &&
+                    r.Type == "SellerDeposit" &&
+                    r.Status == "Reserved", stoppingToken);
 
-                    bool invalidSellerState = sellerWallet == null ||
-                        (sellerDeposit != null && sellerWallet.ReservedBalance < sellerDeposit.Amount);
+                    bool invalidSellerState = false;
+
+                    if (sellerWallet == null)
+                    {
+                        invalidSellerState = true;
+                    }
+                    else if (sellerDeposit != null && sellerWallet.ReservedBalance < sellerDeposit.Amount)
+                    {
+                        invalidSellerState = true;
+                    }
 
                     if (invalidSellerState)
                     {
@@ -151,8 +153,7 @@ namespace ProductAuction.API.Services.Background
                 }
                 else
                 {
-                    _logger.LogInformation("Auction #{AuctionId} sold to {BidderId} for {Amount}.",
-                        auction.Id, highestBid.BidderId, highestBid.Amount);
+                    _logger.LogInformation("Auction #{AuctionId} sold to {BidderId} for {Amount}.", auction.Id, highestBid.BidderId, highestBid.Amount);
 
                     winnerId = highestBid.BidderId;
 
