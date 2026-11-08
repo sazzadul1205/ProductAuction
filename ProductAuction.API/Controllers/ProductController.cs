@@ -323,6 +323,7 @@ namespace ProductAuction.API.Controllers
         // PUT: api/product/{id}
         // Updates a draft or rejected product's details and images.
         [HttpPut("{id}")]
+        [Authorize(Roles = "Seller")]
         public async Task<IActionResult> UpdateProduct(int id, [FromForm] UpdateProductDto dto)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -682,6 +683,7 @@ namespace ProductAuction.API.Controllers
         // DELETE: api/product/{id}
         // Deletes a draft or rejected product
         [HttpDelete("{id}")]
+        [Authorize(Roles = "Seller")]
         public async Task<IActionResult> DeleteProduct(int id)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);

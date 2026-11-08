@@ -230,6 +230,14 @@ namespace ProductAuction.API.Controllers
                     message = "User information was not found."
                 });
             }
+            if (dto == null)
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "Dispute data is required."
+                });
+            }
 
             var sale = await _context.Sales.FirstOrDefaultAsync(s => s.Id == dto.SaleId);
             if (sale == null)

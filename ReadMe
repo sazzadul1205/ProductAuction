@@ -4,6 +4,35 @@ A RESTful backend API for **Bidora**, an online auction platform where sellers l
 
 Built with **ASP.NET Core 10**, **Entity Framework Core**, **SQL Server**, and **JWT authentication**.
 
+## Overview
+
+Bidora is a multi-role online auction platform backend. It coordinates the full lifecycle of an auctioned product: seller listing and admin approval, scheduled auction activation, live bidding with wallet-backed funds, automatic result processing when an auction ends, buyer payment, seller dispatch with tracking, buyer receipt confirmation, and dispute resolution with penalty settlement.
+
+### Roles
+
+- **Buyer**: browses auctions, places bids, wins auctions, pays for won items, confirms receipt, opens disputes.
+- **Seller**: creates products, submits them for approval, configures auctions, dispatches sold items, provides tracking.
+- **Admin**: manages users, categories, products, auctions, deposit requests, disputes, and the platform wallet; reviews NID verification.
+
+### Core Workflows
+
+1. **Product listing**: seller creates product with images -> submits for approval -> admin approves/rejects -> product becomes available.
+2. **Auction creation**: seller configures auction (start/end time, starting price, buyout) -> `AuctionStatusBackgroundService` activates it at start time.
+3. **Bidding**: buyers place bids; wallet funds are reserved as buyer funds; bid history tracked.
+4. **Auction end**: `AuctionResultBackgroundService` processes ended auctions, determines winner (highest bid), creates a Sale, releases non-winner reservations, handles no-bid case by releasing seller deposit.
+5. **Payment**: buyer pays within deadline; `PaymentOverdueBackgroundService` marks unpaid sales as overdue.
+6. **Dispatch**: seller dispatches with tracking; `DispatchOverdueBackgroundService` marks missed deadlines; buyer confirms receipt or reports non-delivery.
+7. **Disputes**: either party opens a dispute with evidence; admin resolves with penalty/wallet settlement.
+
+### Architecture
+
+- ASP.NET Core 10 REST API with controllers grouped by feature.
+- EF Core 10 + SQL Server for persistence; migrations under `Migrations/`.
+- ASP.NET Core Identity for users/roles; JWT Bearer for authentication.
+- Background hosted services for scheduled/overdue processing (30s polling).
+- Static files served from `wwwroot/` for uploaded images.
+- CORS policy `AllowAll`; rate limiting on login endpoint.
+
 ## Features
 
 ### Authentication and User Management

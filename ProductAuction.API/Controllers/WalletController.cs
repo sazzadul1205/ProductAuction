@@ -99,6 +99,15 @@ namespace ProductAuction.API.Controllers
                     message = "User ID not found."
                 });
             }
+            if (dto == null || dto.ReceiptImage == null)
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "Deposit request data and receipt image are required."
+                });
+            }
+
 
             var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == userId);
             if (wallet == null)
@@ -109,7 +118,6 @@ namespace ProductAuction.API.Controllers
                     message = "Wallet not found."
                 });
             }
-
 
             var receiptImageUrl = await _imageUploadService.UploadImageAsync(dto.ReceiptImage);
 

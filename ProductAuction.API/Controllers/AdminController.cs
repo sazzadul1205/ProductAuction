@@ -282,6 +282,14 @@ namespace ProductAuction.API.Controllers
         public async Task<IActionResult> SetUserLock(string id, [FromBody] AdminUserLockDto request)
         {
             var user = await _userManager.FindByIdAsync(id);
+            if (user == null)
+            {
+                return NotFound(new
+                {
+                    status = 404,
+                    message = "User not found."
+                });
+            }
 
             if (request.IsLocked && !request.IsPermanent)
             {
@@ -912,6 +920,14 @@ namespace ProductAuction.API.Controllers
             //     page, pageSize, filter, search);
 
             var platformUser = await _userManager.FindByNameAsync("platform-system-account");
+            if (platformUser == null)
+            {
+                return NotFound(new
+                {
+                    status = 404,
+                    message = "Platform account not found."
+                });
+            }
 
             var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == platformUser.Id);
 

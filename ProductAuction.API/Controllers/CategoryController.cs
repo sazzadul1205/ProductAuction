@@ -14,7 +14,7 @@ namespace ProductAuction.API.Controllers
     public class CategoryController : ControllerBase
     {
         private readonly AppDbContext _context;
-        public CategoryController(AppDbContext context, ILogger<CategoryController> logger)
+        public CategoryController(AppDbContext context)
         {
             _context = context;
         }

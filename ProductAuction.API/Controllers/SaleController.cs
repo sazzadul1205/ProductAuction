@@ -385,9 +385,6 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Start Transaction
-            await using var transaction = await _context.Database.BeginTransactionAsync();
-
             var sale = await _context.Sales.FirstOrDefaultAsync(s => s.Id == id && s.BuyerId == userId);
 
             if (sale == null)
@@ -398,6 +395,9 @@ namespace ProductAuction.API.Controllers
                     message = "Sale not found."
                 });
             }
+
+            // Start Transaction
+            await using var transaction = await _context.Database.BeginTransactionAsync();
 
             if (sale.Status != "AwaitingPayment")
             {

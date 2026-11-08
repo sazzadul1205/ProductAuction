@@ -551,6 +551,14 @@ namespace ProductAuction.API.Controllers
                     }
 
                     var platformUser = await _context.Users.FirstOrDefaultAsync(u => u.UserName == "platform-system-account");
+                    if (platformUser == null)
+                    {
+                        return BadRequest(new
+                        {
+                            status = 400,
+                            message = "The platform account was not found."
+                        });
+                    }
 
                     var platformWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == platformUser.Id);
 
