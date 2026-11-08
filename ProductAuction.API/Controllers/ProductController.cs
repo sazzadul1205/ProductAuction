@@ -74,6 +74,10 @@ namespace ProductAuction.API.Controllers
                 {
                     productsQuery = productsQuery.Where(p => !_context.Auctions.Any(a => a.ProductId == p.Id));
                 }
+                else if (auctionStatus == "NoWinner")
+                {
+                    productsQuery = productsQuery.Where(p => _context.Auctions.Any(a => a.ProductId == p.Id && a.Result == "NoWinner"));
+                }
                 else
                 {
                     productsQuery = productsQuery.Where(p => _context.Auctions.Any(a => a.ProductId == p.Id && a.Status == auctionStatus));
