@@ -929,6 +929,26 @@ namespace ProductAuction.API.Controllers
                 .Where(t => t.WalletId == wallet.Id)
                 .AsQueryable();
 
+            // Total balances held by sellers and buyers (exclude platform)
+            var platformWalletId = wallet.Id;
+            var sellerRoleId = await _context.Roles.Where(r => r.Name == "Seller").Select(r => r.Id).FirstOrDefaultAsync();
+            var buyerRoleId = await _context.Roles.Where(r => r.Name == "Buyer").Select(r => r.Id).FirstOrDefaultAsync();
+
+            var sellerUserIds = _context.UserRoles.Where(ur => ur.RoleId == sellerRoleId).Select(ur => ur.UserId);
+            var buyerUserIds = _context.UserRoles.Where(ur => ur.RoleId == buyerRoleId).Select(ur => ur.UserId);
+
+            var sellerTotals = await _context.Wallets
+                .Where(w => w.Id != platformWalletId && sellerUserIds.Contains(w.UserId))
+                .GroupBy(_ => 1)
+                .Select(g => new { Balance = g.Sum(w => w.Balance), Reserved = g.Sum(w => w.ReservedBalance) })
+                .FirstOrDefaultAsync();
+
+            var buyerTotals = await _context.Wallets
+                .Where(w => w.Id != platformWalletId && buyerUserIds.Contains(w.UserId))
+                .GroupBy(_ => 1)
+                .Select(g => new { Balance = g.Sum(w => w.Balance), Reserved = g.Sum(w => w.ReservedBalance) })
+                .FirstOrDefaultAsync();
+
             // apply type filter
             if (!string.IsNullOrWhiteSpace(filter) && filter != "All"
                 && Enum.TryParse<WalletTransactionType>(filter, ignoreCase: true, out var parsedType))
@@ -975,6 +995,18 @@ namespace ProductAuction.API.Controllers
                         Id = wallet.Id,
                         Balance = wallet.Balance,
                         ReservedBalance = wallet.ReservedBalance
+                    },
+                    sellerBalances = new
+                    {
+                        balance = sellerTotals?.Balance ?? 0m,
+                        reservedBalance = sellerTotals?.Reserved ?? 0m,
+                        total = (sellerTotals?.Balance ?? 0m) + (sellerTotals?.Reserved ?? 0m)
+                    },
+                    buyerBalances = new
+                    {
+                        balance = buyerTotals?.Balance ?? 0m,
+                        reservedBalance = buyerTotals?.Reserved ?? 0m,
+                        total = (buyerTotals?.Balance ?? 0m) + (buyerTotals?.Reserved ?? 0m)
                     },
                     transactions = new
                     {
