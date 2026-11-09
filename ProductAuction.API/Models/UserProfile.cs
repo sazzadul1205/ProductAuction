@@ -1,4 +1,6 @@
-﻿namespace ProductAuction.API.Models
+﻿using ProductAuction.API.Models.Enums;
+
+namespace ProductAuction.API.Models
 {
     public class UserProfile
     {
@@ -14,8 +16,8 @@
         public string? NationalIdNumber { get; set; }
         public string? NationalIdFrontImageUrl { get; set; }
         public string? NationalIdBackImageUrl { get; set; }
-        // VerificationStatus audit (non-migration code refs): NotSubmitted=USED, PendingReview=USED, Verified=USED, Rejected=USED
-        public string VerificationStatus { get; set; } = "NotSubmitted";
+
+        public VerificationStatus VerificationStatus { get; set; } = VerificationStatus.NotSubmitted;
 
         public string? VerifiedBy { get; set; }
         public DateTime? VerifiedAt { get; set; }

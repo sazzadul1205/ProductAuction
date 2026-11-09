@@ -1,5 +1,5 @@
-﻿
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
+using ProductAuction.API.Models.Enums;
 
 namespace ProductAuction.API.Models
 {
@@ -22,8 +22,7 @@ namespace ProductAuction.API.Models
         [Precision(18, 2)]
         public decimal SellerProceeds { get; set; }
 
-        // Status audit (non-migration code refs): AwaitingPayment=USED, Paid=USED, PaymentOverdue=USED, Completed=USED, Disputed=USED, Refunded=USED
-        public string Status { get; set; } = "AwaitingPayment";
+        public SaleStatus Status { get; set; } = SaleStatus.AwaitingPayment;
 
         public DateTime PaymentDeadline { get; set; }
         public DateTime? PaymentSubmittedAt { get; set; }

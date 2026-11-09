@@ -1,5 +1,5 @@
-﻿
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
+using ProductAuction.API.Models.Enums;
 
 namespace ProductAuction.API.Models
 {
@@ -8,15 +8,13 @@ namespace ProductAuction.API.Models
         public int Id { get; set; }
         public int WalletId { get; set; }
 
-        // Expected values: BankTransfer, bKash
         public string Method { get; set; } = string.Empty;
         [Precision(18, 2)]
         public decimal Amount { get; set; }
         public string TransactionReference { get; set; } = string.Empty;
         public string ReceiptImageUrl { get; set; } = string.Empty;
 
-        // Status audit (non-migration code refs): PendingVerification=USED, Approved=USED, Rejected=USED
-        public string Status { get; set; } = "PendingVerification";
+        public DepositRequestStatus Status { get; set; } = DepositRequestStatus.PendingVerification;
 
         public string? ReviewedBy { get; set; }
         public DateTime? ReviewedAt { get; set; }

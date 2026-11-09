@@ -1,5 +1,5 @@
-﻿
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
+using ProductAuction.API.Models.Enums;
 
 namespace ProductAuction.API.Models
 {
@@ -13,13 +13,11 @@ namespace ProductAuction.API.Models
         public int? AuctionId { get; set; }
         public int? SaleId { get; set; }
 
-        // Expected values: SellerDeposit, BuyerFunds, SaleEscrow
-        public string Type { get; set; } = string.Empty;
+        public ReservationType Type { get; set; }
 
         [Precision(18, 2)]
         public decimal Amount { get; set; }
 
-        // Status audit (non-migration code refs): Reserved=USED, Released=USED, Forfeited=USED
-        public string Status { get; set; } = "Reserved";
+        public ReservationStatus Status { get; set; } = ReservationStatus.Reserved;
     }
 }

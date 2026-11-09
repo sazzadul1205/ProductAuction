@@ -1,5 +1,5 @@
-﻿
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
+using ProductAuction.API.Models.Enums;
 
 namespace ProductAuction.API.Models
 {
@@ -8,8 +8,7 @@ namespace ProductAuction.API.Models
         public int Id { get; set; }
         public int WalletId { get; set; }
 
-        // Expected values: Credit, Debit, Reserve, Release, Penalty, Commission
-        public string Type { get; set; } = string.Empty;
+        public WalletTransactionType Type { get; set; }
 
         [Precision(18, 2)]
         public decimal Amount { get; set; }

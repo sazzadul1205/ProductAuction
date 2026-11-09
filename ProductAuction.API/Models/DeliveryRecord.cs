@@ -1,4 +1,5 @@
-﻿
+﻿using ProductAuction.API.Models.Enums;
+
 namespace ProductAuction.API.Models
 {
     public class DeliveryRecord
@@ -6,8 +7,7 @@ namespace ProductAuction.API.Models
         public int Id { get; set; }
         public int SaleId { get; set; }
 
-        // Status audit (non-migration code refs): AwaitingDispatch=USED, Dispatched=USED, ReceiptConfirmed=USED, NonDeliveryReported=USED
-        public string Status { get; set; } = "AwaitingDispatch";
+        public DeliveryStatus Status { get; set; } = DeliveryStatus.AwaitingDispatch;
 
         public DateTime? DispatchDeadline { get; set; }
         public string? DispatchInfo { get; set; }

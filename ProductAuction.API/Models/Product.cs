@@ -1,5 +1,5 @@
-﻿
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
+using ProductAuction.API.Models.Enums;
 
 namespace ProductAuction.API.Models
 {
@@ -18,7 +18,6 @@ namespace ProductAuction.API.Models
         public string? Brand { get; set; }
         public string? ModelNumber { get; set; }
 
-        // Expected values: New, LikeNew, Good, Fair, ForPartsRepair
         public string Condition { get; set; } = string.Empty;
         public DateTime? PurchaseDate { get; set; }
         public string UsageHistory { get; set; } = string.Empty;
@@ -30,12 +29,10 @@ namespace ProductAuction.API.Models
         [Precision(18, 2)]
         public decimal BuyoutPrice { get; set; }
 
-        // ApprovalStatus audit (non-migration code refs): PendingApproval=USED, Approved=USED, Rejected=USED
-        public string ApprovalStatus { get; set; } = "PendingApproval";
+        public ProductApprovalStatus ApprovalStatus { get; set; } = ProductApprovalStatus.Draft;
         public string? RejectionReason { get; set; }
 
-        // Status audit (non-migration code refs): Available=USED, Draft=USED, Unavailable=USED
-        public string Status { get; set; } = "Draft";
+        public ProductStatus Status { get; set; } = ProductStatus.Draft;
 
         public DateTime CreatedAt { get; set; }
     }

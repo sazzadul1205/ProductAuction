@@ -1,5 +1,5 @@
-﻿
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
+using ProductAuction.API.Models.Enums;
 
 namespace ProductAuction.API.Models
 {
@@ -22,7 +22,6 @@ namespace ProductAuction.API.Models
         [Precision(18, 2)]
         public decimal PlatformAmount { get; set; }
 
-        // Status audit (non-migration code refs): Proposed=USED, Approved=USED, Applied=USED,
-        public string Status { get; set; } = "Proposed";
+        public PenaltyStatus Status { get; set; } = PenaltyStatus.Proposed;
     }
 }

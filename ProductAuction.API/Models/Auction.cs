@@ -1,5 +1,5 @@
-﻿
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
+using ProductAuction.API.Models.Enums;
 
 namespace ProductAuction.API.Models
 {
@@ -15,8 +15,7 @@ namespace ProductAuction.API.Models
         public DateTime? StartTime { get; set; }
         public DateTime? EndTime { get; set; }
 
-        // Status audit (non-migration code refs): Upcoming=USED, Active=USED, Completed=USED, Cancelled=USED
-        public string Status { get; set; } = "Upcoming";
+        public AuctionStatus Status { get; set; } = AuctionStatus.Upcoming;
         public string? CancellationReason { get; set; }
 
         [Precision(18, 2)]
@@ -27,10 +26,8 @@ namespace ProductAuction.API.Models
 
         public string? WinnerId { get; set; }
 
-        // Result audit (non-migration code refs): Sold=USED, NoWinner=USED
-        public string? Result { get; set; }
+        public AuctionResult? Result { get; set; }
 
-        // Used by EF Core to detect conflicting updates.
         public byte[] RowVersion { get; set; } = Array.Empty<byte>();
     }
 }
