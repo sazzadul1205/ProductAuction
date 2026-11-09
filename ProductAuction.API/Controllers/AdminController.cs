@@ -279,6 +279,60 @@ namespace ProductAuction.API.Controllers
         }
 
 
+        // PUT: api/Admin/user/{id}/reset-password
+        // Admin/Staff can reset a user's password directly (no current password/confirmation flow).
+        [HttpPut("user/{id}/reset-password")]
+        [Authorize] // allow any authenticated user; staff/admin check enforced below
+        public async Task<IActionResult> ResetUserPassword(string id, [FromBody] AdminResetPasswordDto dto)
+        {
+            var user = await _userManager.FindByIdAsync(id);
+            if (user == null)
+            {
+                return NotFound(new
+                {
+                    status = 404,
+                    message = "User not found."
+                });
+            }
+            if (user.UserName == "platform-system-account")
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "This account cannot be modified."
+                });
+            }
+
+            var targetRoles = await _userManager.GetRolesAsync(user);
+            if (targetRoles.Contains("Buyer") || targetRoles.Contains("Seller"))
+            {
+                return
+                BadRequest(new
+                {
+                    status = 400,
+                    message = "Passwords for Buyer/Seller accounts cannot be reset here."
+                });
+            }
+
+            var token = await _userManager.GeneratePasswordResetTokenAsync(user);
+            var result = await _userManager.ResetPasswordAsync(user, token, dto.NewPassword);
+            if (!result.Succeeded)
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "Failed to reset password.",
+                    errors = result.Errors.Select(e => e.Description)
+                });
+            }
+
+            return Ok(new
+            {
+                status = 200,
+                message = "Password reset successfully."
+            });
+        }
+
         // GET: api/Admin/user
         // Returns all human users along with their roles and basic profile info.
         [HttpGet("user")]
@@ -1180,20 +1234,21 @@ namespace ProductAuction.API.Controllers
             // Load all roles
             var allRoles = await _context.Roles.ToListAsync();
 
-            // Count roles
+            // Count roles: Admin + any other non-Buyer/Seller role = staff
             var adminCount = 0;
+            var staffCount = 0;
             var sellerCount = 0;
             var buyerCount = 0;
 
             foreach (var userRole in userRoleRows)
             {
-                // Find the role name for this role ID.
                 var role = allRoles.FirstOrDefault(r => r.Id == userRole.RoleId);
                 if (role == null) continue;
 
-                if (role.Name == "Admin") adminCount++;
+                if (role.Name == "Admin") { adminCount++; staffCount++; }
                 else if (role.Name == "Seller") sellerCount++;
                 else if (role.Name == "Buyer") buyerCount++;
+                else staffCount++;
             }
 
             return Ok(new
@@ -1203,6 +1258,7 @@ namespace ProductAuction.API.Controllers
                 data = new
                 {
                     admin = adminCount,
+                    staff = staffCount,
                     seller = sellerCount,
                     buyer = buyerCount
                 }

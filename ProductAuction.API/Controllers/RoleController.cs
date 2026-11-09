@@ -26,8 +26,7 @@ public class RoleController : ControllerBase
         _userManager = userManager;
     }
 
-    private static bool IsProtected(string? name)
-        => name != null && ProtectedRoles.Contains(name);
+    private static bool IsProtected(string? name)=> name != null && ProtectedRoles.Contains(name);
 
 
     // GET: api/admin/roles
