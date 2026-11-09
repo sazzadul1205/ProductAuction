@@ -33,7 +33,10 @@ public class RoleController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetRoles()
     {
+        var isSuperAdmin = User.IsInRole("Super Admin");
         var roles = await _roleManager.Roles.OrderBy(r => r.Name).ToListAsync();
+        if (!isSuperAdmin)
+            roles = roles.Where(r => !string.Equals(r.Name, "Super Admin", StringComparison.OrdinalIgnoreCase)).ToList();
 
         var result = new List<RoleDto>(roles.Count);
         foreach (var r in roles)
@@ -63,6 +66,10 @@ public class RoleController : ControllerBase
     {
         var role = await _roleManager.FindByIdAsync(id);
         if (role == null)
+        {
+            return NotFound(new { status = 404, message = "Role not found." });
+        }
+        if (!User.IsInRole("Super Admin") && string.Equals(role.Name, "Super Admin", StringComparison.OrdinalIgnoreCase))
         {
             return NotFound(new { status = 404, message = "Role not found." });
         }

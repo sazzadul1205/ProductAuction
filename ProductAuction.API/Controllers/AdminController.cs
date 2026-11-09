@@ -103,6 +103,17 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
+            // Only Super Admin can create Admin/Super Admin accounts.
+            var callerIsSuperAdmin = User.IsInRole("Super Admin");
+            if ((role.Equals("Admin", StringComparison.OrdinalIgnoreCase) || role.Equals("Super Admin", StringComparison.OrdinalIgnoreCase)) && !callerIsSuperAdmin)
+            {
+                return StatusCode(403, new
+                {
+                    status = 403,
+                    message = "Only Super Admin can create Admin or Super Admin accounts."
+                });
+            }
+
             var roleExists = await _context.Roles.AnyAsync(r => r.Name == role);
             if (!roleExists)
             {
@@ -185,6 +196,10 @@ namespace ProductAuction.API.Controllers
         [HttpPut("user/{id}")]
         public async Task<IActionResult> EditUser(string id, [FromBody] AdminEditUserDto dto)
         {
+            var callerRoles = User.Claims.Where(c => c.Type == System.Security.Claims.ClaimTypes.Role).Select(c => c.Value).ToList();
+            var callerIsSuperAdmin = callerRoles.Contains("Super Admin");
+            var callerIsAdmin = callerRoles.Contains("Admin") || callerIsSuperAdmin;
+
             var user = await _userManager.FindByIdAsync(id);
             if (user == null)
                 return NotFound(new { status = 404, message = "User not found." });
@@ -203,6 +218,16 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
+            // Only Super Admin can edit Admin/Super Admin accounts; Admin cannot edit Super Admin.
+            if ((currentRole == "Admin" || currentRole == "Super Admin") && !callerIsSuperAdmin)
+            {
+                return StatusCode(403, new
+                {
+                    status = 403,
+                    message = "Only Super Admin can edit Admin or Super Admin accounts."
+                });
+            }
+
             // Validate requested new role.
             var newRole = dto.Role.Trim();
 
@@ -213,6 +238,16 @@ namespace ProductAuction.API.Controllers
                 {
                     status = 400,
                     message = "Seller and Buyer roles cannot be assigned here."
+                });
+            }
+
+            // Only Super Admin can assign Admin/Super Admin roles.
+            if ((newRole == "Admin" || newRole == "Super Admin") && !callerIsSuperAdmin)
+            {
+                return StatusCode(403, new
+                {
+                    status = 403,
+                    message = "Only Super Admin can assign Admin or Super Admin roles."
                 });
             }
 
