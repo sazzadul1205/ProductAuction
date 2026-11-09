@@ -73,12 +73,15 @@ namespace ProductAuction.API.Controllers
 
 
         // POST: api/Admin/create-admin
-        // Creates a new user account with the Admin role.
+        // Creates a new user account with an elevated role (Admin or a custom role).
         [HttpPost("create-admin")]
         public async Task<IActionResult> CreateAdmin([FromBody] CreateAdminDto dto)
         {
             // Basic field checks.
-            if (string.IsNullOrEmpty(dto.Email) || string.IsNullOrEmpty(dto.Password) || string.IsNullOrEmpty(dto.FullName))
+            if (string.IsNullOrEmpty(dto.Email)
+                || string.IsNullOrEmpty(dto.Password)
+                || string.IsNullOrEmpty(dto.FullName)
+                || string.IsNullOrEmpty(dto.Role))
             {
                 return BadRequest(new
                 {
@@ -87,9 +90,31 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
+            // Role must exist and must not be Seller or Buyer.
+            var role = dto.Role.Trim();
+
+            if (role.Equals("Seller", StringComparison.OrdinalIgnoreCase) ||
+                role.Equals("Buyer", StringComparison.OrdinalIgnoreCase))
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "Seller and Buyer roles cannot be assigned here. Use the public registration flow for those."
+                });
+            }
+
+            var roleExists = await _context.Roles.AnyAsync(r => r.Name == role);
+            if (!roleExists)
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = $"Role '{role}' does not exist."
+                });
+            }
+
             // Ensure the email isn't already taken.
             var existingUser = await _userManager.FindByEmailAsync(dto.Email);
-
             if (existingUser != null)
             {
                 return BadRequest(new
@@ -108,18 +133,29 @@ namespace ProductAuction.API.Controllers
             };
 
             var result = await _userManager.CreateAsync(user, dto.Password);
-
             if (!result.Succeeded)
             {
                 return BadRequest(new
                 {
                     status = 400,
-                    message = "Failed to create admin account.",
+                    message = "Failed to create account.",
                     errors = result.Errors
                 });
             }
 
-            await _userManager.AddToRoleAsync(user, "Admin");
+            // Assign the requested role.
+            var roleResult = await _userManager.AddToRoleAsync(user, role);
+            if (!roleResult.Succeeded)
+            {
+                // Roll back the user so we don't leave an orphan account.
+                await _userManager.DeleteAsync(user);
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "Failed to assign role.",
+                    errors = roleResult.Errors
+                });
+            }
 
             _context.UserProfiles.Add(new UserProfile
             {
@@ -133,7 +169,112 @@ namespace ProductAuction.API.Controllers
             return Ok(new
             {
                 status = 200,
-                message = "Admin created successfully."
+                message = $"Account created successfully with role '{role}'.",
+                data = new
+                {
+                    userId = user.Id,
+                    email = user.Email,
+                    role
+                }
+            });
+        }
+
+        // PUT: api/Admin/user/{id}
+        // Edit a staff account: name, email, and role.
+        // Seller and Buyer accounts cannot be edited here.
+        [HttpPut("user/{id}")]
+        public async Task<IActionResult> EditUser(string id, [FromBody] AdminEditUserDto dto)
+        {
+            var user = await _userManager.FindByIdAsync(id);
+            if (user == null)
+                return NotFound(new { status = 404, message = "User not found." });
+
+            var currentRoles = await _userManager.GetRolesAsync(user);
+            var currentRole = currentRoles.FirstOrDefault() ?? "";
+
+            // Block editing Seller / Buyer accounts
+            if (currentRole.Equals("Seller", StringComparison.OrdinalIgnoreCase) ||
+                currentRole.Equals("Buyer", StringComparison.OrdinalIgnoreCase))
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "Seller and Buyer accounts cannot be edited from the admin panel."
+                });
+            }
+
+            // Validate requested new role.
+            var newRole = dto.Role.Trim();
+
+            if (newRole.Equals("Seller", StringComparison.OrdinalIgnoreCase) ||
+                newRole.Equals("Buyer", StringComparison.OrdinalIgnoreCase))
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "Seller and Buyer roles cannot be assigned here."
+                });
+            }
+
+            if (!await _context.Roles.AnyAsync(r => r.Name == newRole))
+                return BadRequest(new { status = 400, message = $"Role '{newRole}' does not exist." });
+
+            // Email change.
+            var email = dto.Email.Trim();
+
+            if (!string.Equals(user.Email, email, StringComparison.OrdinalIgnoreCase))
+            {
+                var taken = await _userManager.FindByEmailAsync(email);
+                if (taken != null && taken.Id != user.Id)
+                    return Conflict(new { status = 409, message = "Email is already used by another account." });
+
+                await _userManager.SetEmailAsync(user, email);
+                await _userManager.SetUserNameAsync(user, email);
+            }
+
+            // Profile name.
+            var profile = await _context.UserProfiles.FirstOrDefaultAsync(p => p.UserId == user.Id);
+
+            if (profile == null)
+            {
+                profile = new UserProfile { UserId = user.Id, CreatedAt = DateTime.UtcNow };
+                _context.UserProfiles.Add(profile);
+            }
+
+            profile.FullName = dto.FullName.Trim();
+            profile.UpdatedAt = DateTime.UtcNow;
+
+            // Role change.
+            if (!string.Equals(currentRole, newRole, StringComparison.OrdinalIgnoreCase))
+            {
+                // Block demoting the only remaining Admin.
+                if (currentRole == "Admin" && newRole != "Admin")
+                {
+                    var admins = await _userManager.GetUsersInRoleAsync("Admin");
+                    if (admins.Count <= 1)
+                        return BadRequest(new
+                        {
+                            status = 400,
+                            message = "Cannot change the role of the last active administrator."
+                        });
+                }
+
+                await _userManager.RemoveFromRolesAsync(user, currentRoles);
+                await _userManager.AddToRoleAsync(user, newRole);
+            }
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                status = 200,
+                message = "User updated successfully.",
+                data = new
+                {
+                    userId = user.Id,
+                    email = user.Email,
+                    roles = await _userManager.GetRolesAsync(user)
+                }
             });
         }
 
