@@ -43,6 +43,12 @@ namespace ProductAuction.API.Controllers
                 .OrderBy(c => c.Name)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
+                .Select(c => new
+                {
+                    c.Id,
+                    c.Name,
+                    ProductCount = _context.Products.Count(p => p.CategoryId == c.Id)
+                })
                 .ToListAsync();
 
             return Ok(new
@@ -94,9 +100,9 @@ namespace ProductAuction.API.Controllers
 
             return Ok(new
             {
-                status = 200,
+                status = 201,
                 message = "Category created successfully.",
-                data = category
+                data = new { category.Id, category.Name, ProductCount = 0 }
             });
         }
 
