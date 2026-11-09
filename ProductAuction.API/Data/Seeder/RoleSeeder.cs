@@ -8,6 +8,7 @@ namespace ProductAuction.API.Data.Seeder
         private static readonly string[] Roles =
         [
             "Admin",
+            "Super Admin",
             "Seller",
             "Buyer"
         ];

@@ -34,7 +34,7 @@ namespace ProductAuction.API.Controllers
         // GET: api/sale
         // Admin view of every sale.
         [HttpGet]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin,Super Admin")]
         public async Task<IActionResult> GetSales([FromQuery] SalesQueryDto query)
         {
             var page = query.Page < 1 ? 1 : query.Page;

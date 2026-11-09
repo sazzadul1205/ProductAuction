@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ProductAuction.API.Data;
@@ -81,9 +81,9 @@ namespace ProductAuction.API.Controllers
 
 
         // GET: api/profile/pending-verification
-        // Admin view — profiles waiting for review.
+        // Admin view � profiles waiting for review.
         [HttpGet("pending-verification")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin,Super Admin")]
         public async Task<IActionResult> GetPendingVerificationProfiles()
         {
             var profiles = await _context.UserProfiles
@@ -130,7 +130,7 @@ namespace ProductAuction.API.Controllers
         // PUT: api/profile/{id}/verify
         // Admin marks a profile as Verified or Rejected.
         [HttpPut("{id}/verify")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin,Super Admin")]
         public async Task<IActionResult> VerifyProfile(int id, VerifyProfileDto dto)
         {
             if (dto.Status != "Verified" && dto.Status != "Rejected")

@@ -101,6 +101,60 @@ namespace ProductAuction.API.Data.Seeder
                     // logger.LogInformation("UserProfile created for admin {Email}.", email);
                 }
 
+                // Seed a Super Admin account
+                var superEmail = "superadmin@gmail.com";
+                var superPassword = "SuperAdmin@123";
+                var superFullName = "Super Administrator";
+
+                var superUser = await userManager.FindByEmailAsync(superEmail);
+
+                if (superUser == null)
+                {
+                    superUser = new IdentityUser
+                    {
+                        UserName = superEmail,
+                        Email = superEmail,
+                        EmailConfirmed = true
+                    };
+
+                    var result = await userManager.CreateAsync(superUser, superPassword);
+                    if (!result.Succeeded)
+                    {
+                        var errors = string.Join("; ", result.Errors.Select(error => error.Description));
+                        throw new InvalidOperationException($"Failed to create Super Admin account: {errors}");
+                    }
+
+                    var roleResult = await userManager.AddToRoleAsync(superUser, "Super Admin");
+                    if (!roleResult.Succeeded)
+                    {
+                        var errors = string.Join("; ", roleResult.Errors.Select(error => error.Description));
+                        throw new InvalidOperationException($"Failed to assign Super Admin role: {errors}");
+                    }
+                }
+                else
+                {
+                    if (!await userManager.IsInRoleAsync(superUser, "Super Admin"))
+                    {
+                        var roleResult = await userManager.AddToRoleAsync(superUser, "Super Admin");
+                        if (!roleResult.Succeeded)
+                        {
+                            var errors = string.Join("; ", roleResult.Errors.Select(error => error.Description));
+                            throw new InvalidOperationException($"Failed to assign Super Admin role to existing account: {errors}");
+                        }
+                    }
+                }
+
+                var superProfileExists = await context.UserProfiles.AnyAsync(p => p.UserId == superUser.Id);
+                if (!superProfileExists)
+                {
+                    context.UserProfiles.Add(new UserProfile
+                    {
+                        UserId = superUser.Id,
+                        FullName = superFullName,
+                        CreatedAt = DateTime.UtcNow
+                    });
+                }
+
                 // Save profile changes to the database.
                 await context.SaveChangesAsync();
                 await transaction.CommitAsync();

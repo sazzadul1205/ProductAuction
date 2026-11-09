@@ -13,7 +13,7 @@ namespace ProductAuction.API.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Admin,Super Admin")]
     public class AdminController : ControllerBase
     {
         private readonly UserManager<IdentityUser> _userManager;
@@ -247,11 +247,13 @@ namespace ProductAuction.API.Controllers
             // Role change.
             if (!string.Equals(currentRole, newRole, StringComparison.OrdinalIgnoreCase))
             {
-                // Block demoting the only remaining Admin.
-                if (currentRole == "Admin" && newRole != "Admin")
+                // Block demoting the only remaining Admin/Super Admin.
+                if ((currentRole == "Admin" || currentRole == "Super Admin") && newRole != "Admin" && newRole != "Super Admin")
                 {
                     var admins = await _userManager.GetUsersInRoleAsync("Admin");
-                    if (admins.Count <= 1)
+                    var supers = await _userManager.GetUsersInRoleAsync("Super Admin");
+                    var adminCount = admins.Select(u => u.Id).Union(supers.Select(u => u.Id)).Distinct().Count();
+                    if (adminCount <= 1)
                         return BadRequest(new
                         {
                             status = 400,

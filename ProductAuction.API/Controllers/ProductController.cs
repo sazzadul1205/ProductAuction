@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ProductAuction.API.Data;
@@ -227,7 +227,7 @@ namespace ProductAuction.API.Controllers
 
 
         // POST: api/product
-        // Creates a new product as a Draft — no wallet reservation yet.
+        // Creates a new product as a Draft � no wallet reservation yet.
         [HttpPost]
         [Authorize(Roles = "Seller")]
         public async Task<IActionResult> CreateProduct([FromForm] CreateProductDto dto)
@@ -752,7 +752,7 @@ namespace ProductAuction.API.Controllers
         // GET: api/product/pending-approval
         // Admin: lists products waiting for approval.
         [HttpGet("pending-approval")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin,Super Admin")]
         public async Task<IActionResult> GetPendingApprovalProducts([FromQuery] PaginationQueryDto query)
         {
             var page = query.Page < 1 ? 1 : query.Page;
@@ -816,7 +816,7 @@ namespace ProductAuction.API.Controllers
         // GET: api/product/pending-approval/{id}
         // Admin: full details of a product waiting for approval.
         [HttpGet("pending-approval/{id}")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin,Super Admin")]
         public async Task<IActionResult> GetPendingApprovalProductById(int id)
         {
             var product = await _context.Products
@@ -875,7 +875,7 @@ namespace ProductAuction.API.Controllers
         // PUT: api/product/{id}/approval
         // Admin approves or rejects a pending product.
         [HttpPut("{id}/approval")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin,Super Admin")]
         public async Task<IActionResult> ReviewProduct(int id, [FromBody] ProductApprovalDto dto)
         {
             var product = await _context.Products.FirstOrDefaultAsync(p => p.Id == id);

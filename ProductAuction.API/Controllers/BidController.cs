@@ -261,7 +261,7 @@ namespace ProductAuction.API.Controllers
         // GET: api/bid/auction/{auctionId}/bids/admin
         // Admin view of an auction's bid history, including bidder email and buyout flag.
         [HttpGet("auction/{auctionId}/bids/admin")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin,Super Admin")]
         public async Task<IActionResult> GetAuctionBidHistoryForAdmin(int auctionId)
         {
             var auction = await _context.Auctions

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ProductAuction.API.Data;
+using ProductAuction.API.DTOs.Common;
 using ProductAuction.API.DTOs.Dispute;
 using ProductAuction.API.Models;
 using ProductAuction.API.Models.Enums;
@@ -34,9 +35,8 @@ namespace ProductAuction.API.Controllers
         // GET: api/dispute
         // Admin views all disputes.
         [HttpGet]
-        [Authorize(Roles = "Admin")]
-        public async Task<IActionResult> GetAllDisputes(
-    [FromQuery] ProductAuction.API.DTOs.Common.PaginationQueryDto query)
+        [Authorize(Roles = "Admin,Super Admin")]
+        public async Task<IActionResult> GetAllDisputes([FromQuery] PaginationQueryDto query)
         {
             // Pagination settings.
             var page = query.Page < 1 ? 1 : query.Page;
@@ -334,7 +334,7 @@ namespace ProductAuction.API.Controllers
         // PUT: api/dispute/{id}/resolve
         // Admin decides who's at fault and resolves the dispute.
         [HttpPut("{id}/resolve")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin,Super Admin")]
         public async Task<IActionResult> ResolveDispute(int id, ResolveDisputeDto dto)
         {
             var adminId = User.FindFirstValue(ClaimTypes.NameIdentifier);

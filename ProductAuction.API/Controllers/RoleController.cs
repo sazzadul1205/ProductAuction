@@ -8,13 +8,13 @@ namespace ProductAuction.API.Controllers;
 
 [Route("api/admin/roles")]
 [ApiController]
-[Authorize(Roles = "Admin")]
+[Authorize(Roles = "Admin,Super Admin")]
 public class RoleController : ControllerBase
 {
     // Roles that cannot be renamed or deleted.
     private static readonly HashSet<string> ProtectedRoles = new(StringComparer.OrdinalIgnoreCase)
     {
-        "Admin", "Buyer", "Seller"
+        "Admin", "Super Admin", "Buyer", "Seller"
     };
 
     private readonly RoleManager<IdentityRole> _roleManager;
@@ -138,7 +138,7 @@ public class RoleController : ControllerBase
             return BadRequest(new
             {
                 status = 400,
-                message = "Admin, Buyer, and Seller roles cannot be renamed."
+                message = "Admin, Super Admin, Buyer, and Seller roles cannot be renamed."
             });
         }
 
@@ -182,7 +182,7 @@ public class RoleController : ControllerBase
             return BadRequest(new
             {
                 status = 400,
-                message = "Admin, Buyer, and Seller roles cannot be deleted."
+                message = "Admin, Super Admin, Buyer, and Seller roles cannot be deleted."
             });
         }
 

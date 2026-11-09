@@ -474,7 +474,7 @@ namespace ProductAuction.API.Controllers
         // PUT: api/auction/{id}/configure
         // Admin sets the start and end time for an upcoming auction.
         [HttpPut("{id}/configure")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin,Super Admin")]
         public async Task<IActionResult> ConfigureAuction(int id, UpdateAuctionScheduleDto dto)
         {
             var auction = await _context.Auctions.FindAsync(id);
@@ -535,7 +535,7 @@ namespace ProductAuction.API.Controllers
         public async Task<IActionResult> CancelAuction(int id, CancelAuctionDto dto)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var isAdmin = User.IsInRole("Admin");
+            var isAdmin = User.IsInRole("Admin") || User.IsInRole("Super Admin");
 
             if (string.IsNullOrEmpty(userId))
             {
