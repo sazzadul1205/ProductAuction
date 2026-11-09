@@ -190,9 +190,111 @@ namespace ProductAuction.API.Controllers
         }
 
 
-        // GET: api/auction/upcoming
-        // Returns auctions that haven't started yet but have a start time.
-        [HttpGet("upcoming")]
+        // GET: api/auction/home
+        // Returns banner, up to 8 active, and up to 8 upcoming auctions for the home page.
+        [HttpGet("home")]
+        public async Task<IActionResult> GetHomeAuctions([FromQuery] string? search, [FromQuery] int? categoryId)
+        {
+            var now = DateTime.UtcNow;
+
+            var allQuery = _context.Auctions.Where(a => a.StartTime.HasValue).AsQueryable();
+
+            // Banner is fixed (not affected by search/category filters)
+            var banner = await allQuery
+                .Where(a => (a.Status == AuctionStatus.Active && (!a.EndTime.HasValue || a.EndTime > now)) ||
+                            (a.Status == AuctionStatus.Upcoming && a.StartTime > now && (!a.EndTime.HasValue || a.EndTime > now)))
+                .OrderBy(a => a.Status == AuctionStatus.Active ? 0 : 1)
+                .ThenBy(a => a.Status == AuctionStatus.Active ? a.EndTime : a.StartTime)
+                .Select(a => new AuctionListDto
+                {
+                    Id = a.Id,
+                    ProductId = a.ProductId,
+                    ProductTitle = a.Product.Title,
+                    StartingPrice = a.Product.StartingPrice,
+                    BuyoutPrice = a.Product.BuyoutPrice,
+                    StartTime = a.StartTime,
+                    EndTime = a.EndTime,
+                    Status = a.Status.ToString(),
+                    CurrentHighestBid = a.CurrentHighestBid,
+                    BidCount = a.BidCount,
+                    MainImageUrl = _context.ProductImages
+                        .Where(i => i.ProductId == a.ProductId && i.IsMain)
+                        .Select(i => i.ImageUrl)
+                        .FirstOrDefault() ?? "",
+                    CategoryId = a.Product.CategoryId,
+                    CategoryName = a.Product.Category.Name
+                })
+                .FirstOrDefaultAsync();
+
+            var bannerId = banner?.Id;
+
+            var baseQuery = allQuery;
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var term = search.Trim();
+                baseQuery = baseQuery.Where(a => a.Product.Title.Contains(term));
+            }
+            if (categoryId.HasValue)
+                baseQuery = baseQuery.Where(a => a.Product.CategoryId == categoryId.Value);
+
+            var active = await baseQuery
+                .Where(a => a.Status == AuctionStatus.Active && (!a.EndTime.HasValue || a.EndTime > now) && a.Id != bannerId)
+                .OrderBy(a => a.EndTime)
+                .Take(8)
+                .Select(a => new AuctionListDto
+                {
+                    Id = a.Id,
+                    ProductId = a.ProductId,
+                    ProductTitle = a.Product.Title,
+                    StartingPrice = a.Product.StartingPrice,
+                    BuyoutPrice = a.Product.BuyoutPrice,
+                    StartTime = a.StartTime,
+                    EndTime = a.EndTime,
+                    Status = a.Status.ToString(),
+                    CurrentHighestBid = a.CurrentHighestBid,
+                    BidCount = a.BidCount,
+                    MainImageUrl = _context.ProductImages
+                        .Where(i => i.ProductId == a.ProductId && i.IsMain)
+                        .Select(i => i.ImageUrl)
+                        .FirstOrDefault() ?? "",
+                    CategoryId = a.Product.CategoryId,
+                    CategoryName = a.Product.Category.Name
+                })
+                .ToListAsync();
+
+            var upcoming = await baseQuery
+                .Where(a => a.Status == AuctionStatus.Upcoming && a.StartTime > now && (!a.EndTime.HasValue || a.EndTime > now) && a.Id != bannerId)
+                .OrderBy(a => a.StartTime)
+                .Take(8)
+                .Select(a => new AuctionListDto
+                {
+                    Id = a.Id,
+                    ProductId = a.ProductId,
+                    ProductTitle = a.Product.Title,
+                    StartingPrice = a.Product.StartingPrice,
+                    BuyoutPrice = a.Product.BuyoutPrice,
+                    StartTime = a.StartTime,
+                    EndTime = a.EndTime,
+                    Status = a.Status.ToString(),
+                    CurrentHighestBid = a.CurrentHighestBid,
+                    BidCount = a.BidCount,
+                    MainImageUrl = _context.ProductImages
+                        .Where(i => i.ProductId == a.ProductId && i.IsMain)
+                        .Select(i => i.ImageUrl)
+                        .FirstOrDefault() ?? "",
+                    CategoryId = a.Product.CategoryId,
+                    CategoryName = a.Product.Category.Name
+                })
+                .ToListAsync();
+
+            return Ok(new
+            {
+                status = 200,
+                message = "Home auctions retrieved successfully.",
+                data = new { banner, active, upcoming }
+            });
+        }
+        
         public async Task<IActionResult> GetUpcomingAuctions()
         {
             var now = DateTime.UtcNow;
