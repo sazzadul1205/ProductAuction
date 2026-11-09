@@ -63,6 +63,14 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
+            if (product.SellerId == userId)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    status = 403,
+                    message = "Sellers cannot bid on or buy their own auction."
+                });
+            }
 
             if (auction.Status != AuctionStatus.Active)
             {
@@ -379,6 +387,15 @@ namespace ProductAuction.API.Controllers
                 {
                     status = 404,
                     message = "Product not found."
+                });
+            }
+
+            if (product.SellerId == userId)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    status = 403,
+                    message = "Sellers cannot bid on or buy their own auction."
                 });
             }
 
