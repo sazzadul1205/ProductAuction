@@ -33,7 +33,7 @@ namespace ProductAuction.API.Services.Background
                         .Where(s => s.Status == "AwaitingPayment" && s.PaymentDeadline <= now)
                         .ToListAsync(stoppingToken);
 
-                    // Mark each unpaid sale as overdue.
+                    // Change each unpaid sale as overdue.
                     foreach (var sale in overdueSales)
                     {
                         sale.Status = "PaymentOverdue";

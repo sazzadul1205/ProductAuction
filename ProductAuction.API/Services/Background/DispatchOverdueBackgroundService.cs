@@ -33,7 +33,7 @@ namespace ProductAuction.API.Services.Background
                         .Where(d => d.Status == "AwaitingDispatch" && d.DispatchDeadline <= now)
                         .ToListAsync(stoppingToken);
 
-                    // Mark each missed dispatch deadline.
+                    // Change each missed dispatch deadline.
                     foreach (var delivery in overdueDeliveries)
                     {
                         delivery.Status = "DispatchOverdue";

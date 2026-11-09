@@ -8,7 +8,6 @@ using ProductAuction.API.Data.Seeder;
 using ProductAuction.API.Services;
 using ProductAuction.API.Services.Background;
 using System.Text;
-using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -38,7 +37,7 @@ builder.Services
     .AddEntityFrameworkStores<AppDbContext>()
     .AddDefaultTokenProviders();
 
-// Rate limiting: 5 login attempts per minute 
+// Rate limiting: 5 login attempts 
 builder.Services.AddRateLimiter(options =>
 {
     options.AddFixedWindowLimiter("login", limiterOptions =>
@@ -79,27 +78,17 @@ builder.Services.AddOpenApi();
 // Register Services
 builder.Services.AddScoped<IImageUploadService, ImageUploadService>();
 
-// Background service that activates auctions when their scheduled start time arrives.
+// Background service
 builder.Services.AddHostedService<AuctionStatusBackgroundService>();
-
-// Background service that processes ended auctions, determines winners
 builder.Services.AddHostedService<AuctionResultBackgroundService>();
-
-// Background service that marks unpaid sales as overdue.
 builder.Services.AddHostedService<PaymentOverdueBackgroundService>();
-
-// Background service that marks deliveries as overdue when sellers miss their deadlines.
 builder.Services.AddHostedService<DispatchOverdueBackgroundService>();
 
 var app = builder.Build();
 
-// Create the default roles when the API starts.
+// Seeders
 await RoleSeeder.SeedRolesAsync(app.Services);
-
-// Create the admin account when the API starts.
 await AdminAccountSeeder.SeedAdminAccountAsync(app.Services);
-
-// Create the platform account and wallet when the API starts.
 await PlatformAccountSeeder.SeedPlatformAccountAsync(app.Services);
 
 // Configure the HTTP request pipeline.

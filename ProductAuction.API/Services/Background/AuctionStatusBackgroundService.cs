@@ -30,13 +30,10 @@ namespace ProductAuction.API.Services.Background
 
                     // Find scheduled auctions whose start time has arrived.
                     var auctions = await context.Auctions
-                        .Where(a =>
-                            a.Status == "Upcoming" &&
-                            a.StartTime.HasValue &&
-                            a.StartTime.Value <= now)
+                        .Where(a => a.Status == "Upcoming" && a.StartTime <= now)
                         .ToListAsync(stoppingToken);
 
-                    // Flip each matching auction to "Active".
+                    // Change each matching auction to "Active".
                     foreach (var auction in auctions)
                     {
                         auction.Status = "Active";

@@ -17,6 +17,7 @@ namespace ProductAuction.API.Services.Background
             _scopeFactory = scopeFactory;
             _logger = logger;
         }
+
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             while (!stoppingToken.IsCancellationRequested)
@@ -32,23 +33,23 @@ namespace ProductAuction.API.Services.Background
                     {
                         var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
                         auctionIds = await context.Auctions
-                            .Where(a =>
-                                a.Status == "Active" &&
-                                a.EndTime.HasValue &&
-                                a.EndTime.Value <= now)
+                            .Where(a => a.Status == "Active" && a.EndTime <= now)
                             .Select(a => a.Id)
                             .ToListAsync(stoppingToken);
                     }
 
-                    // Process each ended auction independently 
+                    // Process each auction in its own scope so one failure doesn't affect the others.
                     foreach (var auctionId in auctionIds)
                     {
                         try
                         {
                             using var scope = _scopeFactory.CreateScope();
                             var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-                            var auction = await context.Auctions.FindAsync([auctionId], stoppingToken);
+
+                            var auction = await context.Auctions.FirstOrDefaultAsync(a => a.Id == auctionId, stoppingToken);
+
                             if (auction == null) continue;
+
                             await ProcessAuctionAsync(context, auction, now, stoppingToken);
                         }
                         catch (Exception ex)
@@ -71,122 +72,104 @@ namespace ProductAuction.API.Services.Background
         {
             _logger.LogInformation("Processing ended auction #{AuctionId}.", auction.Id);
 
-            await using var transaction = await context.Database.BeginTransactionAsync(stoppingToken);
+            var product = await context.Products.FirstOrDefaultAsync(p => p.Id == auction.ProductId, stoppingToken);
 
-            var existingSale = await context.Sales
-                .FirstOrDefaultAsync(s => s.AuctionId == auction.Id, stoppingToken);
+            if (product == null)
+            {
+                _logger.LogWarning("Auction #{AuctionId} skipped: product #{ProductId} not found.", auction.Id, auction.ProductId);
+                return;
+            }
+
+            // The highest bid wins;
+            var highestBid = await context.Bids
+                .Where(b => b.AuctionId == auction.Id)
+                .OrderByDescending(b => b.Amount)
+                .ThenBy(b => b.PlacedAt)
+                .FirstOrDefaultAsync(stoppingToken);
 
             string? winnerId = null;
 
-            if (existingSale != null)
+            if (highestBid == null)
             {
-                _logger.LogDebug("Auction #{AuctionId} already has a sale; reusing buyer {BuyerId}.", auction.Id, existingSale.BuyerId);
-                winnerId = existingSale.BuyerId;
-                auction.Status = "Completed";
-            }
-            else
-            {
-                var product = await context.Products.FirstOrDefaultAsync(p => p.Id == auction.ProductId, stoppingToken);
+                // No bids
+                _logger.LogInformation("Auction #{AuctionId} ended with no bids; releasing seller deposit.", auction.Id);
 
-                if (product == null)
+                var sellerWallet = await context.Wallets.FirstOrDefaultAsync(w => w.UserId == product.SellerId, stoppingToken);
+
+                if (sellerWallet == null)
                 {
-                    _logger.LogWarning("Auction #{AuctionId} skipped: product #{ProductId} not found.", auction.Id, auction.ProductId);
-                    await transaction.RollbackAsync(stoppingToken);
+                    _logger.LogWarning("Auction #{AuctionId} skipped: seller wallet not found.", auction.Id);
                     return;
                 }
 
-                var highestBid = await context.Bids
-                    .Where(b => b.AuctionId == auction.Id)
-                    .OrderByDescending(b => b.Amount)
-                    .ThenBy(b => b.PlacedAt)
-                    .FirstOrDefaultAsync(stoppingToken);
-
-                if (highestBid == null)
-                {
-                    _logger.LogInformation("Auction #{AuctionId} ended with no bids; releasing seller deposit.", auction.Id);
-
-                    var sellerWallet = await context.Wallets.FirstOrDefaultAsync(w => w.UserId == product.SellerId, stoppingToken);
-
-                    var sellerDeposit = await context.WalletReservations.FirstOrDefaultAsync(r =>
+                var sellerDeposit = await context.WalletReservations.FirstOrDefaultAsync(r =>
                     r.ProductId == auction.ProductId &&
                     r.WalletId == sellerWallet.Id &&
                     r.Type == "SellerDeposit" &&
                     r.Status == "Reserved", stoppingToken);
 
-                    bool invalidSellerState = false;
-
-                    if (sellerWallet == null)
+                if (sellerDeposit != null)
+                {
+                    if (sellerWallet.ReservedBalance < sellerDeposit.Amount)
                     {
-                        invalidSellerState = true;
-                    }
-                    else if (sellerDeposit != null && sellerWallet.ReservedBalance < sellerDeposit.Amount)
-                    {
-                        invalidSellerState = true;
-                    }
-
-                    if (invalidSellerState)
-                    {
-                        _logger.LogWarning("Auction #{AuctionId} skipped: seller wallet/reserved balance invalid.", auction.Id);
-                        await transaction.RollbackAsync(stoppingToken);
+                        _logger.LogWarning("Auction #{AuctionId} skipped: seller reserved balance invalid.", auction.Id);
                         return;
                     }
 
-                    if (sellerDeposit != null)
+                    sellerWallet.ReservedBalance -= sellerDeposit.Amount;
+                    sellerDeposit.Status = "Released";
+
+                    context.WalletTransactions.Add(new WalletTransaction
                     {
-                        sellerWallet!.ReservedBalance -= sellerDeposit.Amount;
-                        sellerDeposit.Status = "Released";
-
-                        context.WalletTransactions.Add(new WalletTransaction
-                        {
-                            WalletId = sellerWallet.Id,
-                            Type = "Release",
-                            Amount = sellerDeposit.Amount,
-                            BalanceAfter = sellerWallet.Balance,
-                            Reference = $"Seller deposit release for no-winner auction #{auction.Id}",
-                            CreatedAt = now
-                        });
-                    }
-
-                    auction.Status = "Completed";
-                    auction.Result = "NoWinner";
-                    auction.WinnerId = null;
-
-                    product.Status = "Available";
-                }
-                else
-                {
-                    _logger.LogInformation("Auction #{AuctionId} sold to {BidderId} for {Amount}.", auction.Id, highestBid.BidderId, highestBid.Amount);
-
-                    winnerId = highestBid.BidderId;
-
-                    auction.Status = "Completed";
-                    auction.Result = "Sold";
-                    auction.WinnerId = highestBid.BidderId;
-                    auction.CurrentHighestBid = highestBid.Amount;
-                    auction.CurrentHighestBidderId = highestBid.BidderId;
-
-                    product.Status = "Unavailable";
-
-                    decimal commissionAmount = Math.Round(highestBid.Amount * 0.10m, 2);
-                    decimal sellerProceeds = highestBid.Amount - commissionAmount;
-
-                    context.Sales.Add(new Sale
-                    {
-                        AuctionId = auction.Id,
-                        ProductId = auction.ProductId,
-                        BuyerId = highestBid.BidderId,
-                        SellerId = product.SellerId,
-                        FinalAmount = highestBid.Amount,
-                        CommissionAmount = commissionAmount,
-                        SellerProceeds = sellerProceeds,
-                        Status = "AwaitingPayment",
-                        PaymentDeadline = now.AddDays(3),
+                        WalletId = sellerWallet.Id,
+                        Type = "Release",
+                        Amount = sellerDeposit.Amount,
+                        BalanceAfter = sellerWallet.Balance,
+                        Reference = $"Seller deposit release for no-winner auction #{auction.Id}",
                         CreatedAt = now
                     });
                 }
+
+                auction.Status = "Completed";
+                auction.Result = "NoWinner";
+                auction.WinnerId = null;
+
+                product.Status = "Available";
+            }
+            else
+            {
+                // There is a winner
+                _logger.LogInformation("Auction #{AuctionId} sold to {BidderId} for {Amount}.", auction.Id, highestBid.BidderId, highestBid.Amount);
+
+                winnerId = highestBid.BidderId;
+
+                auction.Status = "Completed";
+                auction.Result = "Sold";
+                auction.WinnerId = highestBid.BidderId;
+                auction.CurrentHighestBid = highestBid.Amount;
+                auction.CurrentHighestBidderId = highestBid.BidderId;
+
+                product.Status = "Unavailable";
+
+                decimal commissionAmount = Math.Round(highestBid.Amount * 0.10m, 2);
+                decimal sellerProceeds = highestBid.Amount - commissionAmount;
+
+                context.Sales.Add(new Sale
+                {
+                    AuctionId = auction.Id,
+                    ProductId = auction.ProductId,
+                    BuyerId = highestBid.BidderId,
+                    SellerId = product.SellerId,
+                    FinalAmount = highestBid.Amount,
+                    CommissionAmount = commissionAmount,
+                    SellerProceeds = sellerProceeds,
+                    Status = "AwaitingPayment",
+                    PaymentDeadline = now.AddDays(3),
+                    CreatedAt = now
+                });
             }
 
-            // Find buyer reservations that are still locked for this auction.
+            // Release every buyers locked funds, except the winners.
             var reservations = await context.WalletReservations
                 .Where(r =>
                     r.AuctionId == auction.Id &&
@@ -200,13 +183,13 @@ namespace ProductAuction.API.Services.Background
 
                 if (wallet == null)
                 {
-                    _logger.LogWarning("Reservation #{ReservationId} skipped: wallet #{WalletId} not found.",reservation.Id, reservation.WalletId);
+                    _logger.LogWarning("Reservation #{ReservationId} skipped: wallet #{WalletId} not found.", reservation.Id, reservation.WalletId);
                     continue;
                 }
 
                 if (wallet.ReservedBalance < reservation.Amount)
                 {
-                    _logger.LogWarning("Reservation #{ReservationId} skipped: wallet #{WalletId} reserved balance inconsistent.",reservation.Id, reservation.WalletId);
+                    _logger.LogWarning("Reservation #{ReservationId} wallet #{WalletId} reserved balance inconsistent.", reservation.Id, reservation.WalletId);
                     continue;
                 }
 
@@ -218,7 +201,6 @@ namespace ProductAuction.API.Services.Background
             }
 
             await context.SaveChangesAsync(stoppingToken);
-            await transaction.CommitAsync(stoppingToken);
 
             _logger.LogDebug("Auction #{AuctionId} finalized. Result={Result}, Winner={WinnerId}", auction.Id, auction.Result, auction.WinnerId ?? "<none>");
         }
