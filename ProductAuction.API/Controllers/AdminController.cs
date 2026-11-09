@@ -768,8 +768,47 @@ namespace ProductAuction.API.Controllers
             });
         }
 
-        // GET: api/wallet/deposit-requests/pending
-        // Returns all deposit requests waiting for admin review.
+        // GET: api/Admin/deposit-requests
+        // Returns deposit requests (default: PendingVerification). ?status=All|PendingVerification|Approved|Rejected
+        [HttpGet("deposit-requests")]
+        public async Task<IActionResult> GetDepositRequests([FromQuery] string status = "PendingVerification", [FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+        {
+            if (page < 1) page = 1;
+            if (pageSize < 1) pageSize = 20;
+            if (pageSize > 100) pageSize = 100;
+
+            var q = _context.DepositRequests.AsQueryable();
+            if (!string.Equals(status, "All", StringComparison.OrdinalIgnoreCase)
+                && Enum.TryParse<DepositRequestStatus>(status, true, out var st))
+                q = q.Where(d => d.Status == st);
+
+            var total = await q.CountAsync();
+            var items = await q.OrderByDescending(d => d.CreatedAt)
+                .Skip((page - 1) * pageSize).Take(pageSize)
+                .Select(d => new
+                {
+                    d.Id,
+                    d.WalletId,
+                    UserId = _context.Wallets.Where(w => w.Id == d.WalletId).Select(w => w.UserId).FirstOrDefault(),
+                    UserName = _context.Wallets.Where(w => w.Id == d.WalletId)
+                        .Join(_context.UserProfiles, w => w.UserId, p => p.UserId, (w, p) => p.FullName).FirstOrDefault(),
+                    UserEmail = _context.Wallets.Where(w => w.Id == d.WalletId)
+                        .Join(_context.Users, w => w.UserId, u => u.Id, (w, u) => u.Email).FirstOrDefault(),
+                    d.Method,
+                    d.Amount,
+                    d.TransactionReference,
+                    d.ReceiptImageUrl,
+                    Status = d.Status.ToString(),
+                    d.RejectionReason,
+                    d.CreatedAt,
+                    d.ReviewedAt
+                })
+                .ToListAsync();
+
+            return Ok(new { status = 200, message = "Deposit requests retrieved successfully.", data = items, pagination = new { page, pageSize, totalCount = total, totalPages = (int)Math.Ceiling(total / (double)pageSize) } });
+        }
+
+        // GET: api/wallet/deposit-requests/pending (kept for compatibility)
         [HttpGet("deposit-requests/pending")]
         public async Task<IActionResult> GetPendingDepositRequests()
         {
@@ -780,12 +819,19 @@ namespace ProductAuction.API.Controllers
                 {
                     Id = d.Id,
                     WalletId = d.WalletId,
+                    UserId = _context.Wallets.Where(w => w.Id == d.WalletId).Select(w => w.UserId).FirstOrDefault(),
+                    UserName = _context.Wallets.Where(w => w.Id == d.WalletId)
+                        .Join(_context.UserProfiles, w => w.UserId, p => p.UserId, (w, p) => p.FullName).FirstOrDefault(),
+                    UserEmail = _context.Wallets.Where(w => w.Id == d.WalletId)
+                        .Join(_context.Users, w => w.UserId, u => u.Id, (w, u) => u.Email).FirstOrDefault(),
                     Method = d.Method,
                     Amount = d.Amount,
                     TransactionReference = d.TransactionReference,
                     ReceiptImageUrl = d.ReceiptImageUrl,
                     Status = d.Status.ToString(),
-                    CreatedAt = d.CreatedAt
+                    RejectionReason = d.RejectionReason,
+                    CreatedAt = d.CreatedAt,
+                    ReviewedAt = d.ReviewedAt
                 })
                 .ToListAsync();
 
