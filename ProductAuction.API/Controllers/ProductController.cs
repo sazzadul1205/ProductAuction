@@ -5,6 +5,7 @@ using ProductAuction.API.Data;
 using ProductAuction.API.DTOs.Common;
 using ProductAuction.API.DTOs.Product;
 using ProductAuction.API.Models;
+using ProductAuction.API.Models.Enums;
 using ProductAuction.API.Services;
 using System.Security.Claims;
 
@@ -57,9 +58,10 @@ namespace ProductAuction.API.Controllers
                 .Where(p => p.SellerId == userId)
                 .AsQueryable();
 
-            if (!string.IsNullOrWhiteSpace(approvalStatus) && approvalStatus != "All")
+            if (!string.IsNullOrWhiteSpace(approvalStatus) && approvalStatus != "All"
+                && Enum.TryParse<ProductApprovalStatus>(approvalStatus, ignoreCase: true, out var parsedApproval))
             {
-                productsQuery = productsQuery.Where(p => p.ApprovalStatus == approvalStatus);
+                productsQuery = productsQuery.Where(p => p.ApprovalStatus == parsedApproval);
             }
 
             if (!string.IsNullOrWhiteSpace(search))
@@ -76,11 +78,11 @@ namespace ProductAuction.API.Controllers
                 }
                 else if (auctionStatus == "NoWinner")
                 {
-                    productsQuery = productsQuery.Where(p => _context.Auctions.Any(a => a.ProductId == p.Id && a.Result == "NoWinner"));
+                    productsQuery = productsQuery.Where(p => _context.Auctions.Any(a => a.ProductId == p.Id && a.Result == AuctionResult.NoWinner));
                 }
-                else
+                else if (Enum.TryParse<AuctionStatus>(auctionStatus, ignoreCase: true, out var parsedAuctionStatus))
                 {
-                    productsQuery = productsQuery.Where(p => _context.Auctions.Any(a => a.ProductId == p.Id && a.Status == auctionStatus));
+                    productsQuery = productsQuery.Where(p => _context.Auctions.Any(a => a.ProductId == p.Id && a.Status == parsedAuctionStatus));
                 }
             }
 
@@ -97,8 +99,8 @@ namespace ProductAuction.API.Controllers
                     ShortSummary = p.ShortSummary,
                     StartingPrice = p.StartingPrice,
                     BuyoutPrice = p.BuyoutPrice,
-                    ApprovalStatus = p.ApprovalStatus,
-                    Status = p.Status,
+                    ApprovalStatus = p.ApprovalStatus.ToString(),
+                    Status = p.Status.ToString(),
 
                     MainImageUrl = _context.ProductImages
                         .Where(i => i.ProductId == p.Id && i.IsMain)
@@ -109,7 +111,7 @@ namespace ProductAuction.API.Controllers
 
                     AuctionStatus = _context.Auctions
                         .Where(a => a.ProductId == p.Id)
-                        .Select(a => a.Status)
+                        .Select(a => a.Status.ToString())
                         .FirstOrDefault(),
 
                     AuctionStartTime = _context.Auctions
@@ -188,9 +190,9 @@ namespace ProductAuction.API.Controllers
                     KnownIssues = p.KnownIssues,
                     StartingPrice = p.StartingPrice,
                     BuyoutPrice = p.BuyoutPrice,
-                    ApprovalStatus = p.ApprovalStatus,
+                    ApprovalStatus = p.ApprovalStatus.ToString(),
                     RejectionReason = p.RejectionReason,
-                    Status = p.Status,
+                    Status = p.Status.ToString(),
                     CreatedAt = p.CreatedAt,
 
                     // all images for this product
@@ -253,7 +255,6 @@ namespace ProductAuction.API.Controllers
 
             if (dto.BuyoutPrice < dto.StartingPrice)
             {
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -289,7 +290,7 @@ namespace ProductAuction.API.Controllers
                 KnownIssues = dto.KnownIssues ?? string.Empty,
                 StartingPrice = dto.StartingPrice,
                 BuyoutPrice = dto.BuyoutPrice,
-                ApprovalStatus = "Draft",
+                ApprovalStatus = ProductApprovalStatus.Draft,
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -356,7 +357,7 @@ namespace ProductAuction.API.Controllers
                 return Forbid();
             }
 
-            if (product.ApprovalStatus != "Draft" && product.ApprovalStatus != "Rejected")
+            if (product.ApprovalStatus != ProductApprovalStatus.Draft && product.ApprovalStatus != ProductApprovalStatus.Rejected)
             {
                 return BadRequest(new
                 {
@@ -478,9 +479,9 @@ namespace ProductAuction.API.Controllers
             }
 
             // rejected products go back to Draft when edited
-            if (product.ApprovalStatus == "Rejected")
+            if (product.ApprovalStatus == ProductApprovalStatus.Rejected)
             {
-                product.ApprovalStatus = "Draft";
+                product.ApprovalStatus = ProductApprovalStatus.Draft;
                 product.RejectionReason = null;
             }
 
@@ -530,7 +531,7 @@ namespace ProductAuction.API.Controllers
             }
 
             // only drafts can be submitted
-            if (product.ApprovalStatus != "Draft")
+            if (product.ApprovalStatus != ProductApprovalStatus.Draft)
             {
                 return BadRequest(new
                 {
@@ -557,7 +558,6 @@ namespace ProductAuction.API.Controllers
 
             if (availableBalance < reservationAmount)
             {
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -575,14 +575,14 @@ namespace ProductAuction.API.Controllers
             {
                 WalletId = wallet.Id,
                 ProductId = product.Id,
-                Type = "SellerDeposit",
+                Type = ReservationType.SellerDeposit,
                 Amount = reservationAmount,
-                Status = "Reserved"
+                Status = ReservationStatus.Reserved
             };
 
             _context.WalletReservations.Add(reservation);
 
-            product.ApprovalStatus = "PendingApproval";
+            product.ApprovalStatus = ProductApprovalStatus.PendingApproval;
 
             await _context.SaveChangesAsync();
 
@@ -630,7 +630,7 @@ namespace ProductAuction.API.Controllers
             }
 
             // can only withdraw while still waiting for review
-            if (product.ApprovalStatus != "PendingApproval")
+            if (product.ApprovalStatus != ProductApprovalStatus.PendingApproval)
             {
                 return BadRequest(new
                 {
@@ -643,8 +643,8 @@ namespace ProductAuction.API.Controllers
             var reservation = await _context.WalletReservations
                 .FirstOrDefaultAsync(r =>
                     r.ProductId == product.Id &&
-                    r.Type == "SellerDeposit" &&
-                    r.Status == "Reserved");
+                    r.Type == ReservationType.SellerDeposit &&
+                    r.Status == ReservationStatus.Reserved);
 
             if (reservation != null)
             {
@@ -667,11 +667,11 @@ namespace ProductAuction.API.Controllers
                 }
 
                 wallet.ReservedBalance -= reservation.Amount;
-                reservation.Status = "Released";
+                reservation.Status = ReservationStatus.Released;
             }
 
             // back to draft
-            product.ApprovalStatus = "Draft";
+            product.ApprovalStatus = ProductApprovalStatus.Draft;
             product.RejectionReason = null;
 
             await _context.SaveChangesAsync();
@@ -717,7 +717,7 @@ namespace ProductAuction.API.Controllers
             }
 
 
-            if (product.ApprovalStatus != "Draft" && product.ApprovalStatus != "Rejected")
+            if (product.ApprovalStatus != ProductApprovalStatus.Draft && product.ApprovalStatus != ProductApprovalStatus.Rejected)
             {
                 return BadRequest(new
                 {
@@ -761,7 +761,7 @@ namespace ProductAuction.API.Controllers
             var search = query.Search;
 
             var productsQuery = _context.Products
-                .Where(p => p.ApprovalStatus == "PendingApproval")
+                .Where(p => p.ApprovalStatus == ProductApprovalStatus.PendingApproval)
                 .AsQueryable();
 
             if (!string.IsNullOrWhiteSpace(search))
@@ -785,8 +785,8 @@ namespace ProductAuction.API.Controllers
                     ShortSummary = p.ShortSummary,
                     StartingPrice = p.StartingPrice,
                     BuyoutPrice = p.BuyoutPrice,
-                    Status = p.Status,
-                    ApprovalStatus = p.ApprovalStatus,
+                    Status = p.Status.ToString(),
+                    ApprovalStatus = p.ApprovalStatus.ToString(),
                     CategoryName = p.Category.Name,
                     CategoryId = p.CategoryId,
                     Condition = p.Condition,
@@ -820,7 +820,7 @@ namespace ProductAuction.API.Controllers
         public async Task<IActionResult> GetPendingApprovalProductById(int id)
         {
             var product = await _context.Products
-                .Where(p => p.Id == id && p.ApprovalStatus == "PendingApproval")
+                .Where(p => p.Id == id && p.ApprovalStatus == ProductApprovalStatus.PendingApproval)
                 .Select(p => new ProductResponseDto
                 {
                     Id = p.Id,
@@ -839,7 +839,7 @@ namespace ProductAuction.API.Controllers
                     KnownIssues = p.KnownIssues,
                     StartingPrice = p.StartingPrice,
                     BuyoutPrice = p.BuyoutPrice,
-                    ApprovalStatus = p.ApprovalStatus,
+                    ApprovalStatus = p.ApprovalStatus.ToString(),
                     RejectionReason = p.RejectionReason,
                     CreatedAt = p.CreatedAt,
                     Images = _context.ProductImages
@@ -887,7 +887,7 @@ namespace ProductAuction.API.Controllers
                     message = "Product not found."
                 });
             }
-            if (product.ApprovalStatus != "PendingApproval")
+            if (product.ApprovalStatus != ProductApprovalStatus.PendingApproval)
             {
                 return BadRequest(new
                 {
@@ -918,8 +918,8 @@ namespace ProductAuction.API.Controllers
                 var reservation = await _context.WalletReservations
                     .FirstOrDefaultAsync(r =>
                         r.ProductId == product.Id &&
-                        r.Type == "SellerDeposit" &&
-                        r.Status == "Reserved");
+                        r.Type == ReservationType.SellerDeposit &&
+                        r.Status == ReservationStatus.Reserved);
 
                 decimal requiredDeposit = product.StartingPrice * 0.25m;
                 if (reservation == null || reservation.Amount != requiredDeposit)
@@ -949,7 +949,9 @@ namespace ProductAuction.API.Controllers
             }
 
             // apply the decision
-            product.ApprovalStatus = dto.Status;
+            product.ApprovalStatus = dto.Status == "Approved"
+                ? ProductApprovalStatus.Approved
+                : ProductApprovalStatus.Rejected;
 
             if (dto.Status == "Rejected")
             {
@@ -959,10 +961,10 @@ namespace ProductAuction.API.Controllers
                 var reservation = await _context.WalletReservations
                     .FirstOrDefaultAsync(r =>
                         r.ProductId == product.Id &&
-                        r.Type == "SellerDeposit" &&
-                        r.Status == "Reserved");
+                        r.Type == ReservationType.SellerDeposit &&
+                        r.Status == ReservationStatus.Reserved);
 
-                if (reservation != null && reservation.Status == "Reserved")
+                if (reservation != null && reservation.Status == ReservationStatus.Reserved)
                 {
                     var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.Id == reservation.WalletId);
 
@@ -985,18 +987,18 @@ namespace ProductAuction.API.Controllers
                     }
 
                     wallet.ReservedBalance -= reservation.Amount;
-                    reservation.Status = "Released";
+                    reservation.Status = ReservationStatus.Released;
                 }
             }
             else
             {
                 // approved 
                 product.RejectionReason = null;
-                product.Status = "Available";
+                product.Status = ProductStatus.Available;
 
                 var hasLiveAuction = await _context.Auctions.AnyAsync(a =>
                     a.ProductId == product.Id &&
-                    (a.Status == "Active" || a.Status == "Upcoming"));
+                    (a.Status == AuctionStatus.Active || a.Status == AuctionStatus.Upcoming));
 
                 if (!hasLiveAuction)
                 {
@@ -1004,7 +1006,7 @@ namespace ProductAuction.API.Controllers
                     {
                         ProductId = product.Id,
                         SellerId = product.SellerId,
-                        Status = "Upcoming"
+                        Status = AuctionStatus.Upcoming
                     };
 
                     _context.Auctions.Add(auction);

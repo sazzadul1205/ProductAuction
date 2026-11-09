@@ -5,6 +5,7 @@ using ProductAuction.API.Data;
 using ProductAuction.API.DTOs.Common;
 using ProductAuction.API.DTOs.Sale;
 using ProductAuction.API.Models;
+using ProductAuction.API.Models.Enums;
 using ProductAuction.API.Services;
 using System.Security.Claims;
 
@@ -36,66 +37,49 @@ namespace ProductAuction.API.Controllers
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> GetSales([FromQuery] SalesQueryDto query)
         {
-            // Normalize the page number Set Search 
-            var page = query.Page;
-            if (page < 1) page = 1;
+            var page = query.Page < 1 ? 1 : query.Page;
+            var pageSize = query.PageSize < 1 ? 20 : (query.PageSize > 100 ? 100 : query.PageSize);
 
-            // Normalize the page size 
-            var pageSize = query.PageSize;
-            if (pageSize < 1) pageSize = 20;
-            if (pageSize > 100) pageSize = 100;
-
-            // Set Search 
             var search = query.Search;
-
-            // sale-status filter (AwaitingPayment / Paid / Dispatched / etc.)
             var filter = query.Filter;
-
-            // status filter
             var deliveryStatus = query.DeliveryStatus;
-
-            // _logger.LogInformation("GetSales called: page={Page}, pageSize={PageSize}, filter={Filter}, deliveryStatus={DeliveryStatus}, search={Search}.",
-            //     page, pageSize, filter, deliveryStatus, search);
 
             var salesQuery = _context.Sales.AsQueryable();
 
-            // apply sale-status filter
             if (!string.IsNullOrWhiteSpace(filter) && filter != "All")
             {
-                // "In Progress" is a frontend convenience for Paid | Dispatched
                 if (filter == "InProgress")
                 {
-                    salesQuery = salesQuery.Where(s => s.Status == "Paid" || s.Status == "Dispatched");
+                    salesQuery = salesQuery.Where(s => s.Status == SaleStatus.Paid || s.Status == SaleStatus.Dispatched);
                 }
                 else if (filter == "Awaiting Payment")
                 {
-                    salesQuery = salesQuery.Where(s => s.Status == "AwaitingPayment" || s.Status == "PaymentOverdue");
+                    salesQuery = salesQuery.Where(s => s.Status == SaleStatus.AwaitingPayment || s.Status == SaleStatus.PaymentOverdue);
                 }
                 else if (filter == "Completed")
                 {
-                    salesQuery = salesQuery.Where(s => s.Status == "Completed");
+                    salesQuery = salesQuery.Where(s => s.Status == SaleStatus.Completed);
                 }
                 else if (filter == "Disputed")
                 {
-                    salesQuery = salesQuery.Where(s => s.Status == "Disputed" || s.Status == "Refunded");
+                    salesQuery = salesQuery.Where(s => s.Status == SaleStatus.Disputed || s.Status == SaleStatus.Refunded);
                 }
-                else
+                else if (Enum.TryParse<SaleStatus>(filter, ignoreCase: true, out var parsedStatus))
                 {
-                    salesQuery = salesQuery.Where(s => s.Status == filter);
+                    salesQuery = salesQuery.Where(s => s.Status == parsedStatus);
                 }
             }
 
-            // apply delivery-status filter
-            if (!string.IsNullOrWhiteSpace(deliveryStatus) && deliveryStatus != "All")
+            if (!string.IsNullOrWhiteSpace(deliveryStatus) && deliveryStatus != "All"
+                && Enum.TryParse<DeliveryStatus>(deliveryStatus, ignoreCase: true, out var parsedDelivery))
             {
                 salesQuery = salesQuery.Where(s =>
                     _context.DeliveryRecords
                         .Where(d => d.SaleId == s.Id)
                         .Select(d => d.Status)
-                        .FirstOrDefault() == deliveryStatus);
+                        .FirstOrDefault() == parsedDelivery);
             }
 
-            // apply search filter , buyer name, or seller name
             if (!string.IsNullOrWhiteSpace(search))
             {
                 var term = search.Trim();
@@ -114,23 +98,19 @@ namespace ProductAuction.API.Controllers
                     matchingProductIds.Contains(s.ProductId) ||
                     matchingUserIds.Contains(s.BuyerId) ||
                     matchingUserIds.Contains(s.SellerId));
-
-                // _logger.LogDebug("GetSales: search '{Term}' matched {ProductCount} product(s) and {UserCount} user(s).",
-                //     term, matchingProductIds.Count, matchingUserIds.Count);
             }
 
             salesQuery = salesQuery.OrderByDescending(s => s.CreatedAt);
 
             var totalCount = await salesQuery.CountAsync();
 
-            // stats
             var totalSalesCount = await _context.Sales.CountAsync();
             var awaitingPaymentCount = await _context.Sales.CountAsync(s =>
-                s.Status == "AwaitingPayment" || s.Status == "PaymentOverdue");
+                s.Status == SaleStatus.AwaitingPayment || s.Status == SaleStatus.PaymentOverdue);
             var activeDeliveriesCount = await _context.Sales.CountAsync(s =>
-                s.Status == "Paid" || s.Status == "Dispatched");
+                s.Status == SaleStatus.Paid || s.Status == SaleStatus.Dispatched);
             var completedCount = await _context.Sales.CountAsync(s =>
-                s.Status == "Completed");
+                s.Status == SaleStatus.Completed);
 
             var sales = await salesQuery
                 .Skip((page - 1) * pageSize)
@@ -161,11 +141,11 @@ namespace ProductAuction.API.Controllers
                     FinalAmount = s.FinalAmount,
                     CommissionAmount = s.CommissionAmount,
                     SellerProceeds = s.SellerProceeds,
-                    Status = s.Status,
+                    Status = s.Status.ToString(),
 
                     DeliveryStatus = _context.DeliveryRecords
                         .Where(d => d.SaleId == s.Id)
-                        .Select(d => d.Status)
+                        .Select(d => d.Status.ToString())
                         .FirstOrDefault() ?? "AwaitingDispatch",
 
                     PaymentDeadline = s.PaymentDeadline,
@@ -213,58 +193,43 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Normalize the page number Set Search 
-            var page = query.Page;
-            if (page < 1) page = 1;
-
-            // Normalize the page size 
-            var pageSize = query.PageSize;
-            if (pageSize < 1) pageSize = 20;
-            if (pageSize > 100) pageSize = 100;
-
-            // Set Search 
+            var page = query.Page < 1 ? 1 : query.Page;
+            var pageSize = query.PageSize < 1 ? 20 : (query.PageSize > 100 ? 100 : query.PageSize);
             var search = query.Search;
-
-            // Optional sale-status filter
             var filter = query.Filter;
-
-            // _logger.LogInformation("GetMySales called by {UserId}: page={Page}, pageSize={PageSize}, filter={Filter}, search={Search}.",
-            //     userId, page, pageSize, filter, search);
 
             var salesQuery = _context.Sales
                 .Where(s => s.BuyerId == userId || s.SellerId == userId)
                 .AsQueryable();
 
-            // apply sale-status filter
             if (!string.IsNullOrWhiteSpace(filter) && filter != "All")
             {
                 if (filter == "Awaiting Payment")
                 {
-                    salesQuery = salesQuery.Where(s => s.Status == "AwaitingPayment" || s.Status == "PaymentOverdue");
+                    salesQuery = salesQuery.Where(s => s.Status == SaleStatus.AwaitingPayment || s.Status == SaleStatus.PaymentOverdue);
                 }
                 else if (filter == "Awaiting Dispatch")
                 {
-                    salesQuery = salesQuery.Where(s => s.Status == "Paid");
+                    salesQuery = salesQuery.Where(s => s.Status == SaleStatus.Paid);
                 }
                 else if (filter == "Dispatched")
                 {
-                    salesQuery = salesQuery.Where(s => s.Status == "Dispatched");
+                    salesQuery = salesQuery.Where(s => s.Status == SaleStatus.Dispatched);
                 }
                 else if (filter == "Completed")
                 {
-                    salesQuery = salesQuery.Where(s => s.Status == "Completed");
+                    salesQuery = salesQuery.Where(s => s.Status == SaleStatus.Completed);
                 }
                 else if (filter == "Disputed")
                 {
-                    salesQuery = salesQuery.Where(s => s.Status == "Disputed" || s.Status == "Refunded");
+                    salesQuery = salesQuery.Where(s => s.Status == SaleStatus.Disputed || s.Status == SaleStatus.Refunded);
                 }
-                else
+                else if (Enum.TryParse<SaleStatus>(filter, ignoreCase: true, out var parsedStatus))
                 {
-                    salesQuery = salesQuery.Where(s => s.Status == filter);
+                    salesQuery = salesQuery.Where(s => s.Status == parsedStatus);
                 }
             }
 
-            // apply search filter 
             if (!string.IsNullOrWhiteSpace(search))
             {
                 var term = search.Trim();
@@ -274,22 +239,18 @@ namespace ProductAuction.API.Controllers
                     .Select(p => p.Id)
                     .ToListAsync();
 
-                salesQuery = salesQuery.Where(s =>
-                    matchingProductIds.Contains(s.ProductId));
-
-                // _logger.LogDebug("GetMySales: search '{Term}' matched {Count} product(s).", term, matchingProductIds.Count);
+                salesQuery = salesQuery.Where(s => matchingProductIds.Contains(s.ProductId));
             }
 
             salesQuery = salesQuery.OrderByDescending(s => s.CreatedAt);
 
             var totalCount = await salesQuery.CountAsync();
 
-            // counts
-            var totalSalesCount = await _context.Sales.CountAsync(s =>s.BuyerId == userId || s.SellerId == userId);
-            var awaitingDispatchCount = await _context.Sales.CountAsync(s =>(s.BuyerId == userId || s.SellerId == userId) && s.Status == "Paid");
+            var totalSalesCount = await _context.Sales.CountAsync(s => s.BuyerId == userId || s.SellerId == userId);
+            var awaitingDispatchCount = await _context.Sales.CountAsync(s => (s.BuyerId == userId || s.SellerId == userId) && s.Status == SaleStatus.Paid);
             var totalRevenue = await _context.Sales
                 .Where(s => (s.BuyerId == userId || s.SellerId == userId)
-                    && (s.Status == "Completed" || s.Status == "Dispatched" || s.Status == "Paid"))
+                    && (s.Status == SaleStatus.Completed || s.Status == SaleStatus.Dispatched || s.Status == SaleStatus.Paid))
                 .SumAsync(s => s.SellerProceeds);
 
             var sales = await salesQuery
@@ -310,7 +271,7 @@ namespace ProductAuction.API.Controllers
                     s.FinalAmount,
                     s.CommissionAmount,
                     s.SellerProceeds,
-                    s.Status,
+                    Status = s.Status.ToString(),
                     s.PaymentDeadline,
                     s.CreatedAt,
 
@@ -331,7 +292,7 @@ namespace ProductAuction.API.Controllers
                             d.Id,
                             d.Complaint,
                             d.EvidenceUrl,
-                            d.Status,
+                            Status = d.Status.ToString(),
                             d.AdminDecision,
                             d.RaisedBy,
                             d.CreatedAt,
@@ -399,7 +360,7 @@ namespace ProductAuction.API.Controllers
             // Start Transaction
             await using var transaction = await _context.Database.BeginTransactionAsync();
 
-            if (sale.Status != "AwaitingPayment")
+            if (sale.Status != SaleStatus.AwaitingPayment)
             {
                 return BadRequest(new
                 {
@@ -413,7 +374,7 @@ namespace ProductAuction.API.Controllers
             // if the deadline has already passed, change it to overdue and stop.
             if (now > sale.PaymentDeadline)
             {
-                sale.Status = "PaymentOverdue";
+                sale.Status = SaleStatus.PaymentOverdue;
 
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
@@ -440,8 +401,8 @@ namespace ProductAuction.API.Controllers
                 .Where(r =>
                     r.WalletId == wallet.Id &&
                     r.AuctionId == sale.AuctionId &&
-                    r.Type == "BuyerFunds" &&
-                    r.Status == "Reserved")
+                    r.Type == ReservationType.BuyerFunds &&
+                    r.Status == ReservationStatus.Reserved)
                 .ToListAsync();
 
             var reservedAmount = reservations.Sum(r => r.Amount);
@@ -486,14 +447,14 @@ namespace ProductAuction.API.Controllers
             // release the buyer's eligibility reservations for this auction 
             foreach (var reservation in reservations)
             {
-                reservation.Status = "Released";
+                reservation.Status = ReservationStatus.Released;
             }
 
             // record the wallet debit
             _context.WalletTransactions.Add(new WalletTransaction
             {
                 WalletId = wallet.Id,
-                Type = "Debit",
+                Type = WalletTransactionType.Debit,
                 Amount = sale.FinalAmount,
                 BalanceAfter = wallet.Balance,
                 Reference = $"Sale payment #{sale.Id}",
@@ -507,13 +468,13 @@ namespace ProductAuction.API.Controllers
                 ProductId = sale.ProductId,
                 AuctionId = sale.AuctionId,
                 SaleId = sale.Id,
-                Type = "SaleEscrow",
+                Type = ReservationType.SaleEscrow,
                 Amount = sale.FinalAmount,
-                Status = "Reserved"
+                Status = ReservationStatus.Reserved
             });
 
             // mark the sale as paid
-            sale.Status = "Paid";
+            sale.Status = SaleStatus.Paid;
             sale.PaymentSubmittedAt = now;
             sale.SellerNotifiedAt = now;
 
@@ -521,7 +482,7 @@ namespace ProductAuction.API.Controllers
             _context.DeliveryRecords.Add(new DeliveryRecord
             {
                 SaleId = sale.Id,
-                Status = "AwaitingDispatch",
+                Status = DeliveryStatus.AwaitingDispatch,
                 DispatchDeadline = sale.SellerNotifiedAt.Value.AddDays(5)
             });
 
@@ -536,7 +497,7 @@ namespace ProductAuction.API.Controllers
                 {
                     sale.Id,
                     sale.FinalAmount,
-                    sale.Status,
+                    Status = sale.Status.ToString(),
                     WalletBalance = wallet.Balance
                 }
             });
@@ -573,7 +534,7 @@ namespace ProductAuction.API.Controllers
                 return Forbid();
             }
 
-            if (sale.Status != "Paid")
+            if (sale.Status != SaleStatus.Paid)
             {
                 return BadRequest(new
                 {
@@ -626,13 +587,13 @@ namespace ProductAuction.API.Controllers
                 delivery = new DeliveryRecord
                 {
                     SaleId = sale.Id,
-                    Status = "AwaitingDispatch",
+                    Status = DeliveryStatus.AwaitingDispatch,
                     DispatchDeadline = dispatchDeadline
                 };
 
                 _context.DeliveryRecords.Add(delivery);
             }
-            else if (delivery.Status != "AwaitingDispatch")
+            else if (delivery.Status != DeliveryStatus.AwaitingDispatch)
             {
                 return BadRequest(new
                 {
@@ -645,14 +606,14 @@ namespace ProductAuction.API.Controllers
             var trackingImageUrl = await _imageUploadService.UploadImageAsync(dto.TrackingEvidenceImage);
 
             // update the delivery record
-            delivery.Status = "Dispatched";
+            delivery.Status = DeliveryStatus.Dispatched;
             delivery.DispatchDeadline = dispatchDeadline;
             delivery.DispatchInfo = dto.DispatchInfo;
             delivery.TrackingEvidence = trackingImageUrl;
             delivery.DispatchedAt = now;
 
             // reflect dispatch on the sale itself
-            sale.Status = "Dispatched";
+            sale.Status = SaleStatus.Dispatched;
 
             await _context.SaveChangesAsync();
 
@@ -663,7 +624,7 @@ namespace ProductAuction.API.Controllers
                 data = new
                 {
                     SaleId = sale.Id,
-                    DeliveryStatus = delivery.Status,
+                    DeliveryStatus = delivery.Status.ToString(),
                     delivery.DispatchDeadline,
                     delivery.DispatchInfo,
                     delivery.TrackingEvidence,
@@ -707,7 +668,7 @@ namespace ProductAuction.API.Controllers
             }
 
             // sale must actually be in the Dispatched state
-            if (sale.Status != "Dispatched")
+            if (sale.Status != SaleStatus.Dispatched)
             {
                 return BadRequest(new
                 {
@@ -718,7 +679,7 @@ namespace ProductAuction.API.Controllers
 
             var delivery = await _context.DeliveryRecords.FirstOrDefaultAsync(d => d.SaleId == sale.Id);
 
-            if (delivery == null || delivery.Status != "Dispatched" || !delivery.DispatchedAt.HasValue)
+            if (delivery == null || delivery.Status != DeliveryStatus.Dispatched || !delivery.DispatchedAt.HasValue)
             {
                 return BadRequest(new
                 {
@@ -738,7 +699,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            if (delivery.Status == "NonDeliveryReported")
+            if (delivery.Status == DeliveryStatus.NonDeliveryReported)
             {
                 return BadRequest(new
                 {
@@ -748,8 +709,8 @@ namespace ProductAuction.API.Controllers
             }
 
             // lock the sale so the buyer can't confirm receipt now 
-            delivery.Status = "NonDeliveryReported";
-            sale.Status = "Disputed";
+            delivery.Status = DeliveryStatus.NonDeliveryReported;
+            sale.Status = SaleStatus.Disputed;
 
             await _context.SaveChangesAsync();
 
@@ -760,8 +721,8 @@ namespace ProductAuction.API.Controllers
                 data = new
                 {
                     SaleId = sale.Id,
-                    SaleStatus = sale.Status,
-                    DeliveryStatus = delivery.Status,
+                    SaleStatus = sale.Status.ToString(),
+                    DeliveryStatus = delivery.Status.ToString(),
                     delivery.DispatchedAt,
                     PickupDeadline = pickupDeadline
                 }
@@ -812,7 +773,7 @@ namespace ProductAuction.API.Controllers
                 return Forbid();
             }
 
-            if (sale.Status != "Paid" && sale.Status != "Dispatched")
+            if (sale.Status != SaleStatus.Paid && sale.Status != SaleStatus.Dispatched)
             {
                 return BadRequest(new
                 {
@@ -823,7 +784,7 @@ namespace ProductAuction.API.Controllers
 
             // the product must actually have been shipped
             var delivery = await _context.DeliveryRecords.FirstOrDefaultAsync(d => d.SaleId == sale.Id);
-            if (delivery == null || delivery.Status != "Dispatched")
+            if (delivery == null || delivery.Status != DeliveryStatus.Dispatched)
             {
                 return BadRequest(new
                 {
@@ -836,8 +797,8 @@ namespace ProductAuction.API.Controllers
             var escrow = await _context.WalletReservations
                 .FirstOrDefaultAsync(r =>
                     r.SaleId == sale.Id &&
-                    r.Type == "SaleEscrow" &&
-                    r.Status == "Reserved");
+                    r.Type == ReservationType.SaleEscrow &&
+                    r.Status == ReservationStatus.Reserved);
 
             if (escrow == null || escrow.Amount != sale.FinalAmount)
             {
@@ -903,7 +864,7 @@ namespace ProductAuction.API.Controllers
             _context.WalletTransactions.Add(new WalletTransaction
             {
                 WalletId = sellerWallet.Id,
-                Type = "Credit",
+                Type = WalletTransactionType.Credit,
                 Amount = sellerProceeds,
                 BalanceAfter = sellerWallet.Balance,
                 Reference = $"Sale proceeds #{sale.Id}",
@@ -916,7 +877,7 @@ namespace ProductAuction.API.Controllers
             _context.WalletTransactions.Add(new WalletTransaction
             {
                 WalletId = platformWallet.Id,
-                Type = "Commission",
+                Type = WalletTransactionType.Commission,
                 Amount = commission,
                 BalanceAfter = platformWallet.Balance,
                 Reference = $"Platform commission for sale #{sale.Id}",
@@ -928,8 +889,8 @@ namespace ProductAuction.API.Controllers
                 .FirstOrDefaultAsync(r =>
                     r.ProductId == sale.ProductId &&
                     r.WalletId == sellerWallet.Id &&
-                    r.Type == "SellerDeposit" &&
-                    r.Status == "Reserved");
+                    r.Type == ReservationType.SellerDeposit &&
+                    r.Status == ReservationStatus.Reserved);
 
             if (sellerDeposit != null)
             {
@@ -945,12 +906,12 @@ namespace ProductAuction.API.Controllers
                 // un-reserve 
                 sellerWallet.ReservedBalance -= sellerDeposit.Amount;
 
-                sellerDeposit.Status = "Released";
+                sellerDeposit.Status = ReservationStatus.Released;
 
                 _context.WalletTransactions.Add(new WalletTransaction
                 {
                     WalletId = sellerWallet.Id,
-                    Type = "Release",
+                    Type = WalletTransactionType.Release,
                     Amount = sellerDeposit.Amount,
                     BalanceAfter = sellerWallet.Balance,
                     Reference = $"Seller deposit release for product #{sale.ProductId}",
@@ -962,8 +923,8 @@ namespace ProductAuction.API.Controllers
             var buyerReservations = await _context.WalletReservations
                 .Where(r =>
                     r.AuctionId == sale.AuctionId &&
-                    r.Type == "BuyerFunds" &&
-                    r.Status == "Reserved")
+                    r.Type == ReservationType.BuyerFunds &&
+                    r.Status == ReservationStatus.Reserved)
                 .ToListAsync();
 
             foreach (var reservation in buyerReservations)
@@ -979,12 +940,12 @@ namespace ProductAuction.API.Controllers
                 }
 
                 buyerWallet.ReservedBalance -= reservation.Amount;
-                reservation.Status = "Released";
+                reservation.Status = ReservationStatus.Released;
 
                 _context.WalletTransactions.Add(new WalletTransaction
                 {
                     WalletId = buyerWallet.Id,
-                    Type = "Release",
+                    Type = WalletTransactionType.Release,
                     Amount = reservation.Amount,
                     BalanceAfter = buyerWallet.Balance,
                     Reference = $"Buyer reservation release for sale #{sale.Id}",
@@ -992,12 +953,12 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            escrow.Status = "Released";
-            delivery.Status = "ReceiptConfirmed";
+            escrow.Status = ReservationStatus.Released;
+            delivery.Status = DeliveryStatus.ReceiptConfirmed;
             delivery.ReceiptConfirmedAt = now;
             delivery.ReceiptProofUrl = receiptImageUrl;
             delivery.ReceiptNotes = string.IsNullOrEmpty(dto.ReceiptNotes) ? null : dto.ReceiptNotes.Trim();
-            sale.Status = "Completed";
+            sale.Status = SaleStatus.Completed;
 
             await _context.SaveChangesAsync();
             await transaction.CommitAsync();

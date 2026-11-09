@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ProductAuction.API.Data;
 using ProductAuction.API.DTOs.Common;
+using ProductAuction.API.Models.Enums;
 using System.Security.Claims;
 
 namespace ProductAuction.API.Controllers
@@ -40,10 +41,10 @@ namespace ProductAuction.API.Controllers
                 .ToListAsync();
 
             // count active ones, and how many the user is currently winning
-            var activeBids = bids.Count(b => b.Auction.Status == "Active");
+            var activeBids = bids.Count(b => b.Auction.Status == AuctionStatus.Active);
 
             var leadingBids = bids.Count(b =>
-                b.Auction.Status == "Active" &&
+                b.Auction.Status == AuctionStatus.Active &&
                 b.Auction.CurrentHighestBidderId == userId);
 
             //  sales & won auctions
@@ -54,11 +55,11 @@ namespace ProductAuction.API.Controllers
             var wonCount = sales.Count;
 
             var awaitingPayment = sales.Count(s =>
-                s.Status == "AwaitingPayment" ||
-                s.Status == "PaymentOverdue");
+                s.Status == SaleStatus.AwaitingPayment ||
+                s.Status == SaleStatus.PaymentOverdue);
 
             var totalSpent = sales
-                .Where(s => s.Status == "Completed" || s.Status == "Paid")
+                .Where(s => s.Status == SaleStatus.Completed || s.Status == SaleStatus.Paid)
                 .Sum(s => s.FinalAmount);
 
             //  wallet stats
@@ -66,9 +67,6 @@ namespace ProductAuction.API.Controllers
 
             var availableBalance = wallet != null ? (wallet.Balance - wallet.ReservedBalance) : 0;
             var reservedBalance = wallet?.ReservedBalance ?? 0;
-
-            // _logger.LogInformation("GetDashboard for {UserId}: activeBids={ActiveBids}, leadingBids={LeadingBids}, wonCount={WonCount}, totalSpent={TotalSpent}.",
-            //     userId, activeBids, leadingBids, wonCount, totalSpent);
 
             return Ok(new
             {
@@ -103,25 +101,16 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Normalize the page number Set Search 
             var page = query.Page;
             if (page < 1) page = 1;
 
-            // Normalize the page size 
             var pageSize = query.PageSize;
             if (pageSize < 1) pageSize = 20;
             if (pageSize > 100) pageSize = 100;
 
-            // Set Search 
             var search = query.Search;
-
-            // Optional auction-status filter: Active / Ended
             var filter = query.Filter;
 
-            // _logger.LogInformation("GetMyBids called by {BuyerId}: page={Page}, pageSize={PageSize}, filter={Filter}, search={Search}.",
-            //     buyerId, page, pageSize, filter, search);
-
-            // only return bids placed by this buyer
             var bidsQuery = _context.Bids
                 .Where(b => b.BidderId == buyerId)
                 .AsQueryable();
@@ -131,19 +120,21 @@ namespace ProductAuction.API.Controllers
             {
                 if (filter == "Active")
                 {
-                    bidsQuery = bidsQuery.Where(b => b.Auction.Status == "Active");
+                    bidsQuery = bidsQuery.Where(b => b.Auction.Status == AuctionStatus.Active);
                 }
                 else if (filter == "Ended")
                 {
-                    bidsQuery = bidsQuery.Where(b => b.Auction.Status == "Completed" || b.Auction.Status == "Cancelled");
+                    bidsQuery = bidsQuery.Where(b =>
+                        b.Auction.Status == AuctionStatus.Completed ||
+                        b.Auction.Status == AuctionStatus.Cancelled);
                 }
-                else
+                else if (Enum.TryParse<AuctionStatus>(filter, ignoreCase: true, out var parsedStatus))
                 {
-                    bidsQuery = bidsQuery.Where(b => b.Auction.Status == filter);
+                    bidsQuery = bidsQuery.Where(b => b.Auction.Status == parsedStatus);
                 }
             }
 
-            // apply search filter 
+            // apply search filter
             if (!string.IsNullOrWhiteSpace(search))
             {
                 var term = search.Trim();
@@ -154,19 +145,15 @@ namespace ProductAuction.API.Controllers
                     .ToListAsync();
 
                 bidsQuery = bidsQuery.Where(b => matchingProductIds.Contains(b.Auction.ProductId));
-
-                // _logger.LogDebug("GetMyBids: search '{Term}' matched {Count} product(s).", term, matchingProductIds.Count);
             }
 
             bidsQuery = bidsQuery.OrderByDescending(b => b.PlacedAt);
 
             var totalCount = await bidsQuery.CountAsync();
 
-            // Global counts
-            var totalBidsCount = await _context.Bids.CountAsync(b =>
-                b.BidderId == buyerId);
+            var totalBidsCount = await _context.Bids.CountAsync(b => b.BidderId == buyerId);
             var activeBidsCount = await _context.Bids.CountAsync(b =>
-                b.BidderId == buyerId && b.Auction.Status == "Active");
+                b.BidderId == buyerId && b.Auction.Status == AuctionStatus.Active);
             var highestBidsCount = await _context.Bids.CountAsync(b =>
                 b.BidderId == buyerId
                 && b.Auction.CurrentHighestBidderId == buyerId
@@ -189,7 +176,7 @@ namespace ProductAuction.API.Controllers
 
                     bidAmount = b.Amount,
                     placedAt = b.PlacedAt,
-                    auctionStatus = b.Auction.Status,
+                    auctionStatus = b.Auction.Status.ToString(),
                     auctionEndTime = b.Auction.EndTime,
 
                     isHighest = b.Auction.CurrentHighestBidderId == buyerId
@@ -218,10 +205,8 @@ namespace ProductAuction.API.Controllers
         // GET: api/Buyer/won-auctions
         // Returns auctions this buyer won, plus sale / dispatch / dispute info for each.
         [HttpGet("won-auctions")]
-
         public async Task<IActionResult> GetWonAuctions([FromQuery] PaginationQueryDto query)
         {
-            // Get logged-in buyer ID.
             var buyerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             if (buyerId == null)
@@ -233,40 +218,34 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Pagination settings.
             var page = query.Page < 1 ? 1 : query.Page;
             var pageSize = query.PageSize < 1 ? 20 : Math.Min(query.PageSize, 100);
 
             var search = query.Search;
             var filter = query.Filter;
 
-            // Get all auctions won by this buyer.
             var allWonAuctionIds = await _context.Auctions
                 .Where(a => a.WinnerId == buyerId)
                 .Select(a => a.Id)
                 .ToListAsync();
 
-            // Get sales belonging to this buyer.
             var salesForBuyer = await _context.Sales
                 .Where(s => s.BuyerId == buyerId && allWonAuctionIds.Contains(s.AuctionId))
                 .ToListAsync();
 
-            // Calculate summary information.
             var totalWon = allWonAuctionIds.Count;
 
             var pendingPaymentCount = salesForBuyer.Count(s =>
-                s.Status == "AwaitingPayment" || s.Status == "PaymentOverdue");
+                s.Status == SaleStatus.AwaitingPayment || s.Status == SaleStatus.PaymentOverdue);
 
             var totalSpent = salesForBuyer
-                .Where(s => s.Status == "Paid" || s.Status == "Completed")
+                .Where(s => s.Status == SaleStatus.Paid || s.Status == SaleStatus.Completed)
                 .Sum(s => s.FinalAmount);
 
-            // Start with all won auctions.
             var auctionsQuery = _context.Auctions
                 .Where(a => a.WinnerId == buyerId)
                 .AsNoTracking();
 
-            // Search by product title.
             if (!string.IsNullOrWhiteSpace(search))
             {
                 var term = search.Trim().ToLower();
@@ -275,7 +254,6 @@ namespace ProductAuction.API.Controllers
                     a.Product.Title.ToLower().Contains(term));
             }
 
-            // Get delivery records for these sales.
             var saleIds = salesForBuyer.Select(s => s.Id).ToList();
 
             var deliverySaleIds = await _context.DeliveryRecords
@@ -283,7 +261,6 @@ namespace ProductAuction.API.Controllers
                 .Select(d => d.SaleId)
                 .ToListAsync();
 
-            // Get disputed sales.
             var disputedSaleIds = await _context.Disputes
                 .Where(d => saleIds.Contains(d.SaleId))
                 .Select(d => d.SaleId)
@@ -297,9 +274,9 @@ namespace ProductAuction.API.Controllers
                 {
                     var ids = salesForBuyer
                         .Where(s =>
-                            s.Status == "AwaitingPayment" ||
-                            s.Status == "PaymentOverdue" ||
-                            (s.Status == "Paid" && !deliverySaleIds.Contains(s.Id)))
+                            s.Status == SaleStatus.AwaitingPayment ||
+                            s.Status == SaleStatus.PaymentOverdue ||
+                            (s.Status == SaleStatus.Paid && !deliverySaleIds.Contains(s.Id)))
                         .Select(s => s.AuctionId)
                         .ToList();
 
@@ -308,7 +285,7 @@ namespace ProductAuction.API.Controllers
                 else if (filter == "Completed")
                 {
                     var ids = salesForBuyer
-                        .Where(s => s.Status == "Completed")
+                        .Where(s => s.Status == SaleStatus.Completed)
                         .Select(s => s.AuctionId)
                         .ToList();
 
@@ -328,7 +305,7 @@ namespace ProductAuction.API.Controllers
                     var ids = salesForBuyer
                         .Where(s =>
                             deliverySaleIds.Contains(s.Id) &&
-                            s.Status != "Completed")
+                            s.Status != SaleStatus.Completed)
                         .Select(s => s.AuctionId)
                         .ToList();
 
@@ -336,7 +313,6 @@ namespace ProductAuction.API.Controllers
                 }
             }
 
-            // Get total records
             var totalCount = await auctionsQuery.CountAsync();
 
             var auctions = await auctionsQuery
@@ -349,19 +325,17 @@ namespace ProductAuction.API.Controllers
                     productId = a.Product.Id,
                     productTitle = a.Product.Title,
 
-                    // Main product image.
                     mainImageUrl = _context.ProductImages
                         .Where(i => i.ProductId == a.Product.Id && i.IsMain)
                         .Select(i => i.ImageUrl)
                         .FirstOrDefault(),
 
                     winningAmount = a.CurrentHighestBid,
-                    auctionStatus = a.Status,
-                    result = a.Result,
+                    auctionStatus = a.Status.ToString(),
+                    result = a.Result != null ? a.Result.ToString() : null,
                     startTime = a.StartTime,
                     endTime = a.EndTime,
 
-                    // Sale information.
                     saleId = _context.Sales
                         .Where(s => s.AuctionId == a.Id && s.BuyerId == buyerId)
                         .Select(s => (int?)s.Id)
@@ -369,7 +343,7 @@ namespace ProductAuction.API.Controllers
 
                     paymentStatus = _context.Sales
                         .Where(s => s.AuctionId == a.Id && s.BuyerId == buyerId)
-                        .Select(s => s.Status)
+                        .Select(s => s.Status.ToString())
                         .FirstOrDefault() ?? "AwaitingPayment",
 
                     paymentDeadline = _context.Sales
@@ -382,7 +356,6 @@ namespace ProductAuction.API.Controllers
                         .Select(s => s.FinalAmount)
                         .FirstOrDefault(),
 
-                    // Delivery information.
                     deliveryRecord = _context.DeliveryRecords
                         .Where(d => _context.Sales
                             .Where(s => s.AuctionId == a.Id && s.BuyerId == buyerId)
@@ -413,7 +386,6 @@ namespace ProductAuction.API.Controllers
                         .Select(d => d.TrackingEvidence)
                         .FirstOrDefault(),
 
-                    // Dispute information.
                     dispute = _context.Disputes
                         .Where(d => _context.Sales.Any(s =>
                             s.AuctionId == a.Id &&
@@ -424,7 +396,7 @@ namespace ProductAuction.API.Controllers
                             id = d.Id,
                             complaint = d.Complaint,
                             evidenceUrl = d.EvidenceUrl,
-                            status = d.Status,
+                            status = d.Status.ToString(),
                             adminDecision = d.AdminDecision,
                             createdAt = d.CreatedAt,
                             raisedBy = d.RaisedBy
@@ -433,7 +405,6 @@ namespace ProductAuction.API.Controllers
                 })
                 .ToListAsync();
 
-            // Return response.
             return Ok(new
             {
                 status = 200,

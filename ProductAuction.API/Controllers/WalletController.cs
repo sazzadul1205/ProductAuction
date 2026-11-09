@@ -6,6 +6,7 @@ using ProductAuction.API.Data;
 using ProductAuction.API.DTOs.Common;
 using ProductAuction.API.DTOs.Wallet;
 using ProductAuction.API.Models;
+using ProductAuction.API.Models.Enums;
 using ProductAuction.API.Services;
 using System.Security.Claims;
 
@@ -59,13 +60,6 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            var response = new WalletResponseDto
-            {
-                Id = wallet.Id,
-                Balance = wallet.Balance,
-                ReservedBalance = wallet.ReservedBalance
-            };
-
             var availableBalance = wallet.Balance - wallet.ReservedBalance;
 
             return Ok(new
@@ -92,7 +86,6 @@ namespace ProductAuction.API.Controllers
 
             if (userId == null)
             {
-
                 return Unauthorized(new
                 {
                     status = 401,
@@ -107,7 +100,6 @@ namespace ProductAuction.API.Controllers
                     message = "Deposit request data and receipt image are required."
                 });
             }
-
 
             var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == userId);
             if (wallet == null)
@@ -128,7 +120,7 @@ namespace ProductAuction.API.Controllers
                 Amount = dto.Amount,
                 TransactionReference = dto.TransactionReference,
                 ReceiptImageUrl = receiptImageUrl,
-                Status = "PendingVerification",
+                Status = DepositRequestStatus.PendingVerification,
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -178,35 +170,21 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Normalize the page number Set Search 
-            var page = query.Page;
-            if (page < 1) page = 1;
-
-            // Normalize the page size 
-            var pageSize = query.PageSize;
-            if (pageSize < 1) pageSize = 20;
-            if (pageSize > 100) pageSize = 100;
-
-            // Set Search 
+            var page = query.Page < 1 ? 1 : query.Page;
+            var pageSize = query.PageSize < 1 ? 20 : (query.PageSize > 100 ? 100 : query.PageSize);
             var search = query.Search;
-
-            // Optional status filter
             var filter = query.Filter;
-
-            // _logger.LogInformation("GetMyDepositRequests called by user {UserId}: page={Page}, pageSize={PageSize}, filter={Filter}, search={Search}.",
-            //     userId, page, pageSize, filter, search);
 
             var requestsQuery = _context.DepositRequests
                 .Where(d => d.WalletId == wallet.Id)
                 .AsQueryable();
 
-            // apply status filter
-            if (!string.IsNullOrWhiteSpace(filter) && filter != "All")
+            if (!string.IsNullOrWhiteSpace(filter) && filter != "All"
+                && Enum.TryParse<DepositRequestStatus>(filter, ignoreCase: true, out var parsedStatus))
             {
-                requestsQuery = requestsQuery.Where(d => d.Status == filter);
+                requestsQuery = requestsQuery.Where(d => d.Status == parsedStatus);
             }
 
-            // apply search filter 
             if (!string.IsNullOrWhiteSpace(search))
             {
                 var term = search.Trim();
@@ -231,7 +209,7 @@ namespace ProductAuction.API.Controllers
                     Amount = d.Amount,
                     TransactionReference = d.TransactionReference,
                     ReceiptImageUrl = d.ReceiptImageUrl,
-                    Status = d.Status,
+                    Status = d.Status.ToString(),
                     RejectionReason = d.RejectionReason,
                     CreatedAt = d.CreatedAt
                 })
@@ -279,42 +257,28 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Normalize the page number
-            var page = query.Page;
-            if (page < 1) page = 1;
-
-            // Normalize the page size 
-            var pageSize = query.PageSize;
-            if (pageSize < 1) pageSize = 20;
-            if (pageSize > 100) pageSize = 100;
-
-            // Set Search 
+            var page = query.Page < 1 ? 1 : query.Page;
+            var pageSize = query.PageSize < 1 ? 20 : (query.PageSize > 100 ? 100 : query.PageSize);
             var search = query.Search;
-
-            // Optional type filter
             var filter = query.Filter;
-
-            // _logger.LogInformation("GetMyTransactions called by user {UserId}: page={Page}, pageSize={PageSize}, filter={Filter}, search={Search}.",
-            //     userId, page, pageSize, filter, search);
 
             var txQuery = _context.WalletTransactions
                 .Where(t => t.WalletId == wallet.Id)
                 .AsQueryable();
 
-            // apply type filter
-            if (!string.IsNullOrWhiteSpace(filter) && filter != "All")
+            if (!string.IsNullOrWhiteSpace(filter) && filter != "All"
+                && Enum.TryParse<WalletTransactionType>(filter, ignoreCase: true, out var parsedType))
             {
-                txQuery = txQuery.Where(t => t.Type == filter);
+                txQuery = txQuery.Where(t => t.Type == parsedType);
             }
 
-            // apply search filte
             if (!string.IsNullOrWhiteSpace(search))
             {
                 var term = search.Trim();
 
                 txQuery = txQuery.Where(t =>
                     (t.Reference != null && t.Reference.Contains(term)) ||
-                    t.Type.Contains(term));
+                    t.Type.ToString().Contains(term));
             }
 
             txQuery = txQuery.OrderByDescending(t => t.CreatedAt);
@@ -327,7 +291,7 @@ namespace ProductAuction.API.Controllers
                 .Select(t => new WalletTransactionResponseDto
                 {
                     Id = t.Id,
-                    Type = t.Type,
+                    Type = t.Type.ToString(),
                     Amount = t.Amount,
                     BalanceAfter = t.BalanceAfter,
                     Reference = t.Reference,
@@ -377,35 +341,21 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            // Normalize the page number Set Search 
-            var page = query.Page;
-            if (page < 1) page = 1;
-
-            // Normalize the page size 
-            var pageSize = query.PageSize;
-            if (pageSize < 1) pageSize = 20;
-            if (pageSize > 100) pageSize = 100;
-
-            // Set Search 
+            var page = query.Page < 1 ? 1 : query.Page;
+            var pageSize = query.PageSize < 1 ? 20 : (query.PageSize > 100 ? 100 : query.PageSize);
             var search = query.Search;
-
-            // Optional status filter
             var filter = query.Filter;
-
-            // _logger.LogInformation("GetMyReservations called by user {UserId}: page={Page}, pageSize={PageSize}, filter={Filter}, search={Search}.",
-            //     userId, page, pageSize, filter, search);
 
             var reservationsQuery = _context.WalletReservations
                 .Where(r => r.WalletId == wallet.Id)
                 .AsQueryable();
 
-            // apply status filter
-            if (!string.IsNullOrWhiteSpace(filter) && filter != "All")
+            if (!string.IsNullOrWhiteSpace(filter) && filter != "All"
+                && Enum.TryParse<ReservationStatus>(filter, ignoreCase: true, out var parsedStatus))
             {
-                reservationsQuery = reservationsQuery.Where(r => r.Status == filter);
+                reservationsQuery = reservationsQuery.Where(r => r.Status == parsedStatus);
             }
 
-            // apply search filter
             if (!string.IsNullOrWhiteSpace(search))
             {
                 var term = search.Trim();
@@ -416,10 +366,8 @@ namespace ProductAuction.API.Controllers
                     .ToListAsync();
 
                 reservationsQuery = reservationsQuery.Where(r =>
-                    r.Type.Contains(term) ||
+                    r.Type.ToString().Contains(term) ||
                     (r.ProductId != null && matchingProductIds.Contains(r.ProductId.Value)));
-
-                // _logger.LogDebug("GetMyReservations: search '{Term}' matched {Count} product(s).", term, matchingProductIds.Count);
             }
 
             var totalCount = await reservationsQuery.CountAsync();
@@ -440,9 +388,9 @@ namespace ProductAuction.API.Controllers
 
                     r.AuctionId,
                     r.SaleId,
-                    r.Type,
+                    Type = r.Type.ToString(),
                     r.Amount,
-                    r.Status
+                    Status = r.Status.ToString()
                 })
                 .ToListAsync();
 

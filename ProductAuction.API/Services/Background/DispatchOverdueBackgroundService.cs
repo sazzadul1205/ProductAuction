@@ -1,6 +1,6 @@
-﻿
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using ProductAuction.API.Data;
+using ProductAuction.API.Models.Enums;
 
 namespace ProductAuction.API.Services.Background
 {
@@ -30,13 +30,13 @@ namespace ProductAuction.API.Services.Background
 
                     // Find deliveries whose dispatch deadline has passed
                     var overdueDeliveries = await context.DeliveryRecords
-                        .Where(d => d.Status == "AwaitingDispatch" && d.DispatchDeadline <= now)
+                        .Where(d => d.Status == DeliveryStatus.AwaitingDispatch && d.DispatchDeadline <= now)
                         .ToListAsync(stoppingToken);
 
                     // Change each missed dispatch deadline.
                     foreach (var delivery in overdueDeliveries)
                     {
-                        delivery.Status = "DispatchOverdue";
+                        delivery.Status = DeliveryStatus.DispatchOverdue;
                         _logger.LogWarning("Delivery #{DeliveryId} marked as DispatchOverdue.", delivery.Id);
                     }
 

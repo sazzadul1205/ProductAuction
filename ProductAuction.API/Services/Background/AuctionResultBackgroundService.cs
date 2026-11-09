@@ -1,6 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using ProductAuction.API.Data;
 using ProductAuction.API.Models;
+using ProductAuction.API.Models.Enums;
 
 namespace ProductAuction.API.Services.Background
 {
@@ -33,7 +34,7 @@ namespace ProductAuction.API.Services.Background
                     {
                         var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
                         auctionIds = await context.Auctions
-                            .Where(a => a.Status == "Active" && a.EndTime <= now)
+                            .Where(a => a.Status == AuctionStatus.Active && a.EndTime <= now)
                             .Select(a => a.Id)
                             .ToListAsync(stoppingToken);
                     }
@@ -105,8 +106,8 @@ namespace ProductAuction.API.Services.Background
                 var sellerDeposit = await context.WalletReservations.FirstOrDefaultAsync(r =>
                     r.ProductId == auction.ProductId &&
                     r.WalletId == sellerWallet.Id &&
-                    r.Type == "SellerDeposit" &&
-                    r.Status == "Reserved", stoppingToken);
+                    r.Type == ReservationType.SellerDeposit &&
+                    r.Status == ReservationStatus.Reserved, stoppingToken);
 
                 if (sellerDeposit != null)
                 {
@@ -117,12 +118,12 @@ namespace ProductAuction.API.Services.Background
                     }
 
                     sellerWallet.ReservedBalance -= sellerDeposit.Amount;
-                    sellerDeposit.Status = "Released";
+                    sellerDeposit.Status = ReservationStatus.Released;
 
                     context.WalletTransactions.Add(new WalletTransaction
                     {
                         WalletId = sellerWallet.Id,
-                        Type = "Release",
+                        Type = WalletTransactionType.Release,
                         Amount = sellerDeposit.Amount,
                         BalanceAfter = sellerWallet.Balance,
                         Reference = $"Seller deposit release for no-winner auction #{auction.Id}",
@@ -130,11 +131,11 @@ namespace ProductAuction.API.Services.Background
                     });
                 }
 
-                auction.Status = "Completed";
-                auction.Result = "NoWinner";
+                auction.Status = AuctionStatus.Completed;
+                auction.Result = AuctionResult.NoWinner;
                 auction.WinnerId = null;
 
-                product.Status = "Available";
+                product.Status = ProductStatus.Available;
             }
             else
             {
@@ -143,13 +144,13 @@ namespace ProductAuction.API.Services.Background
 
                 winnerId = highestBid.BidderId;
 
-                auction.Status = "Completed";
-                auction.Result = "Sold";
+                auction.Status = AuctionStatus.Completed;
+                auction.Result = AuctionResult.Sold;
                 auction.WinnerId = highestBid.BidderId;
                 auction.CurrentHighestBid = highestBid.Amount;
                 auction.CurrentHighestBidderId = highestBid.BidderId;
 
-                product.Status = "Unavailable";
+                product.Status = ProductStatus.Unavailable;
 
                 decimal commissionAmount = Math.Round(highestBid.Amount * 0.10m, 2);
                 decimal sellerProceeds = highestBid.Amount - commissionAmount;
@@ -163,7 +164,7 @@ namespace ProductAuction.API.Services.Background
                     FinalAmount = highestBid.Amount,
                     CommissionAmount = commissionAmount,
                     SellerProceeds = sellerProceeds,
-                    Status = "AwaitingPayment",
+                    Status = SaleStatus.AwaitingPayment,
                     PaymentDeadline = now.AddDays(3),
                     CreatedAt = now
                 });
@@ -173,8 +174,8 @@ namespace ProductAuction.API.Services.Background
             var reservations = await context.WalletReservations
                 .Where(r =>
                     r.AuctionId == auction.Id &&
-                    r.Type == "BuyerFunds" &&
-                    r.Status == "Reserved")
+                    r.Type == ReservationType.BuyerFunds &&
+                    r.Status == ReservationStatus.Reserved)
                 .ToListAsync(stoppingToken);
 
             foreach (var reservation in reservations)
@@ -197,7 +198,7 @@ namespace ProductAuction.API.Services.Background
                     continue;
 
                 wallet.ReservedBalance -= reservation.Amount;
-                reservation.Status = "Released";
+                reservation.Status = ReservationStatus.Released;
             }
 
             await context.SaveChangesAsync(stoppingToken);

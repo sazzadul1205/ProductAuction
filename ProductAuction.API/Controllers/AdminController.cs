@@ -7,6 +7,7 @@ using ProductAuction.API.DTOs.Admin;
 using ProductAuction.API.DTOs.Common;
 using ProductAuction.API.DTOs.Wallet;
 using ProductAuction.API.Models;
+using ProductAuction.API.Models.Enums;
 
 namespace ProductAuction.API.Controllers
 {
@@ -39,13 +40,13 @@ namespace ProductAuction.API.Controllers
             var totalUsers = await _context.Users.CountAsync(u => u.UserName != "platform-system-account");
 
             // Pending items.
-            var pendingProducts = await _context.Products.CountAsync(p => p.ApprovalStatus == "PendingApproval");
-            var pendingDeposits = await _context.DepositRequests.CountAsync(d => d.Status == "PendingVerification");
-            var pendingVerifications = await _context.UserProfiles.CountAsync(p => p.VerificationStatus == "PendingReview");
-            var openDisputes = await _context.Disputes.CountAsync(d => d.Status == "Open" || d.Status == "UnderReview");
+            var pendingProducts = await _context.Products.CountAsync(p => p.ApprovalStatus == ProductApprovalStatus.PendingApproval);
+            var pendingDeposits = await _context.DepositRequests.CountAsync(d => d.Status == DepositRequestStatus.PendingVerification);
+            var pendingVerifications = await _context.UserProfiles.CountAsync(p => p.VerificationStatus == VerificationStatus.PendingReview);
+            var openDisputes = await _context.Disputes.CountAsync(d => d.Status == DisputeStatus.Open || d.Status == DisputeStatus.UnderReview);
 
             // Active.
-            var activeAuctions = await _context.Auctions.CountAsync(a => a.Status == "Active");
+            var activeAuctions = await _context.Auctions.CountAsync(a => a.Status == AuctionStatus.Active);
 
             // Platform wallet balance
             var platformUser = await _context.Users.FirstOrDefaultAsync(u => u.UserName == "platform-system-account");
@@ -157,9 +158,6 @@ namespace ProductAuction.API.Controllers
             // role filter: Admin / Seller / Buyer
             var filter = query.Filter;
 
-            // _logger.LogInformation("GetAllUsers called: page={Page}, pageSize={PageSize}, filter={Filter}, search={Search}.",
-            //     page, pageSize, filter, search);
-
             // grab registered users
             var userQuery = _userManager.Users
                 .Where(u => u.UserName != "platform-system-account")
@@ -193,8 +191,6 @@ namespace ProductAuction.API.Controllers
                     (u.Email != null && u.Email.Contains(term)) ||
                     (u.PhoneNumber != null && u.PhoneNumber.Contains(term)) ||
                     matchingProfileUserIds.Contains(u.Id));
-
-                // _logger.LogDebug("GetAllUsers: search '{Term}' matched {Count} profile(s).", term, matchingProfileUserIds.Count);
             }
 
             userQuery = userQuery.OrderByDescending(u => u.Id);
@@ -230,7 +226,7 @@ namespace ProductAuction.API.Controllers
                         address = profile.Address,
                         city = profile.City,
                         nationalIdNumber = profile.NationalIdNumber,
-                        verificationStatus = profile.VerificationStatus,
+                        verificationStatus = profile.VerificationStatus.ToString(),
                         createdAt = profile.CreatedAt
                     };
                 }
@@ -295,7 +291,6 @@ namespace ProductAuction.API.Controllers
             {
                 if (!request.DurationMinutes.HasValue || request.DurationMinutes.Value <= 0)
                 {
-
                     return BadRequest(new
                     {
                         status = 400,
@@ -307,7 +302,6 @@ namespace ProductAuction.API.Controllers
             // permanent lock shouldn't have a duration attached
             if (request.IsLocked && request.IsPermanent && request.DurationMinutes.HasValue)
             {
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -320,7 +314,6 @@ namespace ProductAuction.API.Controllers
 
             if (!enableLockout.Succeeded)
             {
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -349,7 +342,6 @@ namespace ProductAuction.API.Controllers
 
             if (!result.Succeeded)
             {
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -363,7 +355,6 @@ namespace ProductAuction.API.Controllers
             {
                 await _userManager.ResetAccessFailedCountAsync(user);
             }
-
 
             return Ok(new
             {
@@ -405,9 +396,6 @@ namespace ProductAuction.API.Controllers
             // status filter: Upcoming / Active / Completed / Cancelled.
             var filter = query.Filter;
 
-            // _logger.LogInformation("GetAllAuctionsForAdmin called: page={Page}, pageSize={PageSize}, filter={Filter}, search={Search}.",
-            //     page, pageSize, filter, search);
-
             var auctionsQuery = _context.Auctions.AsQueryable();
 
             // apply status filter
@@ -416,21 +404,21 @@ namespace ProductAuction.API.Controllers
                 if (filter == "NeedsSchedule")
                 {
                     auctionsQuery = auctionsQuery.Where(a =>
-                        a.Status == "Upcoming" && a.StartTime == null);
+                        a.Status == AuctionStatus.Upcoming && a.StartTime == null);
                 }
                 else if (filter == "Scheduled")
                 {
                     auctionsQuery = auctionsQuery.Where(a =>
-                        a.Status == "Upcoming" && a.StartTime != null);
+                        a.Status == AuctionStatus.Upcoming && a.StartTime != null);
                 }
                 else if (filter == "History")
                 {
                     auctionsQuery = auctionsQuery.Where(a =>
-                        a.Status == "Completed" || a.Status == "Cancelled");
+                        a.Status == AuctionStatus.Completed || a.Status == AuctionStatus.Cancelled);
                 }
-                else
+                else if (Enum.TryParse<AuctionStatus>(filter, ignoreCase: true, out var parsedStatus))
                 {
-                    auctionsQuery = auctionsQuery.Where(a => a.Status == filter);
+                    auctionsQuery = auctionsQuery.Where(a => a.Status == parsedStatus);
                 }
             }
 
@@ -477,7 +465,7 @@ namespace ProductAuction.API.Controllers
                         .FirstOrDefault(),
                     startTime = a.StartTime,
                     endTime = a.EndTime,
-                    status = a.Status,
+                    status = a.Status.ToString(),
                     currentHighestBid = a.CurrentHighestBid,
                     currentHighestBidderId = a.CurrentHighestBidderId,
                     bidCount = a.BidCount,
@@ -486,7 +474,7 @@ namespace ProductAuction.API.Controllers
                         .Where(p => p.UserId == a.WinnerId)
                         .Select(p => p.FullName)
                         .FirstOrDefault(),
-                    result = a.Result,
+                    result = a.Result != null ? a.Result.ToString() : null,
                     cancellationReason = a.CancellationReason
                 })
                 .ToListAsync();
@@ -523,9 +511,8 @@ namespace ProductAuction.API.Controllers
             }
 
             // can only start review on an open dispute
-            if (dispute.Status != "Open")
+            if (dispute.Status != DisputeStatus.Open)
             {
-
                 return BadRequest(new
                 {
                     status = 400,
@@ -533,7 +520,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            dispute.Status = "UnderReview";
+            dispute.Status = DisputeStatus.UnderReview;
 
             await _context.SaveChangesAsync();
 
@@ -544,7 +531,7 @@ namespace ProductAuction.API.Controllers
                 data = new
                 {
                     disputeId = dispute.Id,
-                    dispute.Status
+                    Status = dispute.Status.ToString()
                 }
             });
         }
@@ -555,7 +542,7 @@ namespace ProductAuction.API.Controllers
         public async Task<IActionResult> GetPendingDepositRequests()
         {
             var requests = await _context.DepositRequests
-                .Where(d => d.Status == "PendingVerification")
+                .Where(d => d.Status == DepositRequestStatus.PendingVerification)
                 .OrderByDescending(d => d.CreatedAt)
                 .Select(d => new DepositRequestResponseDto
                 {
@@ -565,7 +552,7 @@ namespace ProductAuction.API.Controllers
                     Amount = d.Amount,
                     TransactionReference = d.TransactionReference,
                     ReceiptImageUrl = d.ReceiptImageUrl,
-                    Status = d.Status,
+                    Status = d.Status.ToString(),
                     CreatedAt = d.CreatedAt
                 })
                 .ToListAsync();
@@ -596,7 +583,7 @@ namespace ProductAuction.API.Controllers
             }
 
             // already reviewed
-            if (depositRequest.Status != "PendingVerification")
+            if (depositRequest.Status != DepositRequestStatus.PendingVerification)
             {
                 return BadRequest(new
                 {
@@ -628,7 +615,10 @@ namespace ProductAuction.API.Controllers
             }
 
             // save the review info
-            depositRequest.Status = dto.Status;
+            depositRequest.Status = dto.Status == "Approved"
+                ? DepositRequestStatus.Approved
+                : DepositRequestStatus.Rejected;
+
             depositRequest.ReviewedAt = DateTime.UtcNow;
             depositRequest.RejectionReason = dto.Status == "Rejected" ? dto.RejectionReason : null;
 
@@ -642,7 +632,7 @@ namespace ProductAuction.API.Controllers
                 var transaction = new WalletTransaction
                 {
                     WalletId = wallet.Id,
-                    Type = "Credit",
+                    Type = WalletTransactionType.Credit,
                     Amount = depositRequest.Amount,
                     BalanceAfter = wallet.Balance,
                     Reference = $"DepositRequest-{depositRequest.Id}",
@@ -663,7 +653,7 @@ namespace ProductAuction.API.Controllers
                 data = new
                 {
                     depositRequest.Id,
-                    depositRequest.Status,
+                    Status = depositRequest.Status.ToString(),
                     depositRequest.RejectionReason,
                     wallet.Balance
                 }
@@ -691,15 +681,13 @@ namespace ProductAuction.API.Controllers
             // transaction type filter: Credit / Debit / Penalty / Release / Commission
             var filter = query.Filter;
 
-            // _logger.LogInformation("GetAllTransactions called: page={Page}, pageSize={PageSize}, filter={Filter}, search={Search}.",
-            //     page, pageSize, filter, search);
-
             var queryable = _context.WalletTransactions.AsQueryable();
 
             // apply type filter
-            if (!string.IsNullOrWhiteSpace(filter) && filter != "All")
+            if (!string.IsNullOrWhiteSpace(filter) && filter != "All"
+                && Enum.TryParse<WalletTransactionType>(filter, ignoreCase: true, out var parsedType))
             {
-                queryable = queryable.Where(wt => wt.Type == filter);
+                queryable = queryable.Where(wt => wt.Type == parsedType);
             }
 
             // apply search
@@ -738,26 +726,26 @@ namespace ProductAuction.API.Controllers
 
             // Total volume
             var totalVolume = await _context.WalletTransactions
-                .Where(t => t.Type == "Credit")
+                .Where(t => t.Type == WalletTransactionType.Credit)
                 .SumAsync(t => (decimal?)t.Amount) ?? 0;
 
             // Escrow currently held
             var totalEscrow = await _context.WalletReservations
-                .Where(r => r.Type == "SaleEscrow" && r.Status == "Reserved")
+                .Where(r => r.Type == ReservationType.SaleEscrow && r.Status == ReservationStatus.Reserved)
                 .SumAsync(r => (decimal?)r.Amount) ?? 0;
 
             // Active buyer eligibility deposits.
             var totalBuyerDeposits = await _context.WalletReservations
-                .Where(r => r.Type == "BuyerFunds" && r.Status == "Reserved")
+                .Where(r => r.Type == ReservationType.BuyerFunds && r.Status == ReservationStatus.Reserved)
                 .SumAsync(r => (decimal?)r.Amount) ?? 0;
 
             // Active seller deposits.
             var totalSellerDeposits = await _context.WalletReservations
-                .Where(r => r.Type == "SellerDeposit" && r.Status == "Reserved")
+                .Where(r => r.Type == ReservationType.SellerDeposit && r.Status == ReservationStatus.Reserved)
                 .SumAsync(r => (decimal?)r.Amount) ?? 0;
 
             // Count of active reservations
-            var totalActiveReservations = await _context.WalletReservations.CountAsync(r => r.Status == "Reserved");
+            var totalActiveReservations = await _context.WalletReservations.CountAsync(r => r.Status == ReservationStatus.Reserved);
 
 
             var transactions = await queryable
@@ -766,7 +754,7 @@ namespace ProductAuction.API.Controllers
                 .Select(wt => new
                 {
                     wt.Id,
-                    wt.Type,
+                    Type = wt.Type.ToString(),
                     wt.Amount,
                     wt.BalanceAfter,
                     wt.Reference,
@@ -826,7 +814,7 @@ namespace ProductAuction.API.Controllers
             var search = query.Search;
 
             var queryable = _context.WalletReservations
-                .Where(r => r.Status == "Reserved")
+                .Where(r => r.Status == ReservationStatus.Reserved)
                 .AsQueryable();
 
             if (!string.IsNullOrWhiteSpace(search))
@@ -848,7 +836,7 @@ namespace ProductAuction.API.Controllers
                 queryable = queryable.Where(r =>
                     matchingWalletIds.Contains(r.WalletId) ||
                     (r.ProductId.HasValue && matchingProductIds.Contains(r.ProductId.Value)) ||
-                    r.Type.ToLower().Contains(term));
+                    r.Type.ToString().ToLower().Contains(term));
             }
 
             var totalCount = await queryable.CountAsync();
@@ -860,9 +848,9 @@ namespace ProductAuction.API.Controllers
                 .Select(wr => new
                 {
                     wr.Id,
-                    wr.Type,
+                    Type = wr.Type.ToString(),
                     wr.Amount,
-                    wr.Status,
+                    Status = wr.Status.ToString(),
                     wr.ProductId,
                     wr.AuctionId,
                     wr.SaleId,
@@ -916,9 +904,6 @@ namespace ProductAuction.API.Controllers
             // Optional transaction-type filter
             var filter = query.Filter;
 
-            // _logger.LogInformation("GetPlatformWallet called: page={Page}, pageSize={PageSize}, filter={Filter}, search={Search}.",
-            //     page, pageSize, filter, search);
-
             var platformUser = await _userManager.FindByNameAsync("platform-system-account");
             if (platformUser == null)
             {
@@ -933,7 +918,6 @@ namespace ProductAuction.API.Controllers
 
             if (wallet == null)
             {
-
                 return NotFound(new
                 {
                     status = 404,
@@ -946,9 +930,10 @@ namespace ProductAuction.API.Controllers
                 .AsQueryable();
 
             // apply type filter
-            if (!string.IsNullOrWhiteSpace(filter) && filter != "All")
+            if (!string.IsNullOrWhiteSpace(filter) && filter != "All"
+                && Enum.TryParse<WalletTransactionType>(filter, ignoreCase: true, out var parsedType))
             {
-                txQuery = txQuery.Where(t => t.Type == filter);
+                txQuery = txQuery.Where(t => t.Type == parsedType);
             }
 
             // apply search filter 
@@ -958,7 +943,7 @@ namespace ProductAuction.API.Controllers
 
                 txQuery = txQuery.Where(t =>
                     (t.Reference != null && t.Reference.Contains(term)) ||
-                    t.Type.Contains(term));
+                    t.Type.ToString().Contains(term));
             }
 
             txQuery = txQuery.OrderByDescending(t => t.CreatedAt);
@@ -971,7 +956,7 @@ namespace ProductAuction.API.Controllers
                 .Select(t => new WalletTransactionResponseDto
                 {
                     Id = t.Id,
-                    Type = t.Type,
+                    Type = t.Type.ToString(),
                     Amount = t.Amount,
                     BalanceAfter = t.BalanceAfter,
                     Reference = t.Reference,
@@ -1008,7 +993,6 @@ namespace ProductAuction.API.Controllers
         [HttpGet("user/role-counts")]
         public async Task<IActionResult> GetUserRoleCounts()
         {
-
             // Get the IDs of every user, excluding the platform system account.
             var allUserIds = await _userManager.Users
                 .Where(u => u.UserName != "platform-system-account")

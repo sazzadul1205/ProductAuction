@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using ProductAuction.API.Data;
 using ProductAuction.API.DTOs.Bid;
 using ProductAuction.API.Models;
+using ProductAuction.API.Models.Enums;
 
 namespace ProductAuction.API.Controllers
 {
@@ -63,7 +64,7 @@ namespace ProductAuction.API.Controllers
             }
 
 
-            if (auction.Status != "Active")
+            if (auction.Status != AuctionStatus.Active)
             {
                 return BadRequest(new
                 {
@@ -83,7 +84,7 @@ namespace ProductAuction.API.Controllers
             }
 
             // product has to be approved and available
-            if (product.ApprovalStatus != "Approved" || product.Status != "Available")
+            if (product.ApprovalStatus != ProductApprovalStatus.Approved || product.Status != ProductStatus.Available)
             {
 
                 return BadRequest(new
@@ -148,8 +149,8 @@ namespace ProductAuction.API.Controllers
                 .FirstOrDefaultAsync(r =>
                     r.AuctionId == auction.Id &&
                     r.WalletId == wallet.Id &&
-                    r.Type == "BuyerFunds" &&
-                    r.Status == "Reserved");
+                    r.Type == ReservationType.BuyerFunds &&
+                    r.Status == ReservationStatus.Reserved);
 
             // reserve 25% of the starting price,
             if (reservation == null)
@@ -173,9 +174,9 @@ namespace ProductAuction.API.Controllers
                     WalletId = wallet.Id,
                     ProductId = auction.ProductId,
                     AuctionId = auction.Id,
-                    Type = "BuyerFunds",
+                    Type = ReservationType.BuyerFunds,
                     Amount = requiredAmount,
-                    Status = "Reserved"
+                    Status = ReservationStatus.Reserved
                 };
 
                 _context.WalletReservations.Add(reservation);
@@ -314,7 +315,7 @@ namespace ProductAuction.API.Controllers
                 {
                     auctionId = auction.Id,
                     productTitle = auction.Product?.Title,
-                    auctionStatus = auction.Status,
+                    auctionStatus = auction.Status.ToString(),
                     currentHighestBid = auction.CurrentHighestBid,
                     currentHighestBidderId = auction.CurrentHighestBidderId,
                     bidCount = bids.Count,
@@ -353,7 +354,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            if (auction.Status != "Active")
+            if (auction.Status != AuctionStatus.Active)
             {
                 return BadRequest(new
                 {
@@ -382,7 +383,7 @@ namespace ProductAuction.API.Controllers
             }
 
             // product has to be approved and available
-            if (product.ApprovalStatus != "Approved" || product.Status != "Available")
+            if (product.ApprovalStatus != ProductApprovalStatus.Approved || product.Status != ProductStatus.Available)
             {
                 return BadRequest(new
                 {
@@ -429,8 +430,8 @@ namespace ProductAuction.API.Controllers
                 .FirstOrDefaultAsync(r =>
                     r.WalletId == wallet.Id &&
                     r.AuctionId == auctionId &&
-                    r.Type == "BuyerFunds" &&
-                    r.Status == "Reserved");
+                    r.Type == ReservationType.BuyerFunds &&
+                    r.Status == ReservationStatus.Reserved);
 
             // first time participating reserve 25% of the starting price.
             if (reservation == null)
@@ -454,9 +455,9 @@ namespace ProductAuction.API.Controllers
                     WalletId = wallet.Id,
                     ProductId = product.Id,
                     AuctionId = auction.Id,
-                    Type = "BuyerFunds",
+                    Type = ReservationType.BuyerFunds,
                     Amount = requiredAmount,
-                    Status = "Reserved"
+                    Status = ReservationStatus.Reserved
                 };
 
                 _context.WalletReservations.Add(reservation);
@@ -475,15 +476,15 @@ namespace ProductAuction.API.Controllers
             _context.Bids.Add(buyoutBid);
 
             // mark the auction as sold and assign the winner
-            auction.Status = "Completed";
-            auction.Result = "Sold";
+            auction.Status = AuctionStatus.Completed;
+            auction.Result = AuctionResult.Sold;
             auction.WinnerId = userId;
             auction.CurrentHighestBid = product.BuyoutPrice;
             auction.CurrentHighestBidderId = userId;
             auction.BidCount++;
 
             // lock the product now so it can't be relisted or bid on while payment is pending
-            product.Status = "Unavailable";
+            product.Status = ProductStatus.Unavailable;
 
             // platform takes 10%, seller gets the rest.
             decimal commissionAmount = Math.Round(product.BuyoutPrice * 0.10m, 2);
@@ -501,7 +502,7 @@ namespace ProductAuction.API.Controllers
                 FinalAmount = product.BuyoutPrice,
                 CommissionAmount = commissionAmount,
                 SellerProceeds = sellerProceeds,
-                Status = "AwaitingPayment",
+                Status = SaleStatus.AwaitingPayment,
                 PaymentDeadline = now.AddDays(3),
                 CreatedAt = now
             };
@@ -512,8 +513,8 @@ namespace ProductAuction.API.Controllers
             var reservations = await _context.WalletReservations
                 .Where(r =>
                     r.AuctionId == auction.Id &&
-                    r.Type == "BuyerFunds" &&
-                    r.Status == "Reserved")
+                    r.Type == ReservationType.BuyerFunds &&
+                    r.Status == ReservationStatus.Reserved)
                 .ToListAsync();
 
             foreach (var buyerReservation in reservations)
@@ -532,7 +533,7 @@ namespace ProductAuction.API.Controllers
                 }
 
                 otherWallet.ReservedBalance -= buyerReservation.Amount;
-                buyerReservation.Status = "Released";
+                buyerReservation.Status = ReservationStatus.Released;
             }
 
             // save the bid, auction, sale, and reservation changes together
@@ -549,7 +550,7 @@ namespace ProductAuction.API.Controllers
                     auction.Id,
                     product.BuyoutPrice,
                     WinnerId = userId,
-                    sale.Status,
+                    SaleStatus = sale.Status.ToString(),
                     sale.PaymentDeadline
                 }
             });

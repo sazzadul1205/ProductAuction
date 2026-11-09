@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ProductAuction.API.Data;
 using ProductAuction.API.DTOs.Profile;
+using ProductAuction.API.Models.Enums;
 using System.Security.Claims;
 
 namespace ProductAuction.API.Controllers
@@ -36,7 +37,6 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-
             var profile = await _context.UserProfiles.FirstOrDefaultAsync(p => p.UserId == userId);
             if (profile == null)
             {
@@ -58,7 +58,7 @@ namespace ProductAuction.API.Controllers
             }
 
             // move it into the review
-            profile.VerificationStatus = "PendingReview";
+            profile.VerificationStatus = VerificationStatus.PendingReview;
             profile.VerifiedBy = null;
             profile.VerifiedAt = null;
             profile.RejectionReason = null;
@@ -73,7 +73,7 @@ namespace ProductAuction.API.Controllers
                 data = new
                 {
                     id = profile.Id,
-                    verificationStatus = profile.VerificationStatus,
+                    verificationStatus = profile.VerificationStatus.ToString(),
                     submittedAt = profile.UpdatedAt
                 }
             });
@@ -86,9 +86,8 @@ namespace ProductAuction.API.Controllers
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> GetPendingVerificationProfiles()
         {
-
             var profiles = await _context.UserProfiles
-                .Where(p => p.VerificationStatus == "PendingReview")
+                .Where(p => p.VerificationStatus == VerificationStatus.PendingReview)
                 .OrderByDescending(p => p.CreatedAt)
                 .Select(p => new ProfileVerificationResponseDto
                 {
@@ -113,7 +112,7 @@ namespace ProductAuction.API.Controllers
                     NationalIdNumber = p.NationalIdNumber,
                     NationalIdFrontImageUrl = p.NationalIdFrontImageUrl,
                     NationalIdBackImageUrl = p.NationalIdBackImageUrl,
-                    VerificationStatus = p.VerificationStatus,
+                    VerificationStatus = p.VerificationStatus.ToString(),
                     RejectionReason = p.RejectionReason,
                     CreatedAt = p.CreatedAt
                 })
@@ -164,7 +163,11 @@ namespace ProductAuction.API.Controllers
 
             var adminId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-            profile.VerificationStatus = dto.Status;
+            // map the DTO string to the enum
+            profile.VerificationStatus = dto.Status == "Verified"
+                ? VerificationStatus.Verified
+                : VerificationStatus.Rejected;
+
             profile.VerifiedBy = adminId;
             profile.VerifiedAt = DateTime.UtcNow;
 
@@ -183,7 +186,7 @@ namespace ProductAuction.API.Controllers
                 {
                     id = profile.Id,
                     userId = profile.UserId,
-                    verificationStatus = profile.VerificationStatus,
+                    verificationStatus = profile.VerificationStatus.ToString(),
                     verifiedBy = profile.VerifiedBy,
                     verifiedAt = profile.VerifiedAt,
                     rejectionReason = profile.RejectionReason

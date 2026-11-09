@@ -8,12 +8,19 @@ using ProductAuction.API.Data.Seeder;
 using ProductAuction.API.Services;
 using ProductAuction.API.Services.Background;
 using System.Text;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        // Serialize/deserialize enums as their string names, not integers,
+        // so the frontend keeps seeing "Active", "Completed", etc.
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    });
 
 
 builder.Services.AddCors(options =>

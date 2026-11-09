@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using ProductAuction.API.Data;
 using ProductAuction.API.DTOs.Dispute;
 using ProductAuction.API.Models;
+using ProductAuction.API.Models.Enums;
 using ProductAuction.API.Services;
 using System.Data;
 using System.Security.Claims;
@@ -34,7 +35,6 @@ namespace ProductAuction.API.Controllers
         // Admin views all disputes.
         [HttpGet]
         [Authorize(Roles = "Admin")]
-
         public async Task<IActionResult> GetAllDisputes(
     [FromQuery] ProductAuction.API.DTOs.Common.PaginationQueryDto query)
         {
@@ -50,12 +50,10 @@ namespace ProductAuction.API.Controllers
                 ? query.Filter
                 : query.Status;
 
-            if (!string.IsNullOrWhiteSpace(status))
+            if (!string.IsNullOrWhiteSpace(status)
+                && Enum.TryParse<DisputeStatus>(status, ignoreCase: true, out var parsedStatus))
             {
-                var searchStatus = status.Trim().ToLower();
-
-                disputesQuery = disputesQuery.Where(d =>
-                    d.Status.ToLower() == searchStatus);
+                disputesQuery = disputesQuery.Where(d => d.Status == parsedStatus);
             }
 
             // Search disputes.
@@ -76,9 +74,9 @@ namespace ProductAuction.API.Controllers
             var totalCount = await disputesQuery.CountAsync();
 
             // Get counts for all dispute statuses.
-            var openCount = await _context.Disputes.CountAsync(d => d.Status == "Open");
-            var underReviewCount = await _context.Disputes.CountAsync(d => d.Status == "UnderReview");
-            var resolvedCount = await _context.Disputes.CountAsync(d => d.Status == "Resolved" || d.Status == "Rejected");
+            var openCount = await _context.Disputes.CountAsync(d => d.Status == DisputeStatus.Open);
+            var underReviewCount = await _context.Disputes.CountAsync(d => d.Status == DisputeStatus.UnderReview);
+            var resolvedCount = await _context.Disputes.CountAsync(d => d.Status == DisputeStatus.Resolved || d.Status == DisputeStatus.Rejected);
 
             // Get paginated disputes.
             var disputes = await disputesQuery
@@ -171,7 +169,7 @@ namespace ProductAuction.API.Controllers
                     d.RaisedBy,
                     d.Complaint,
                     d.EvidenceUrl,
-                    d.Status,
+                    Status = d.Status.ToString(),
                     d.AdminDecision,
                     d.DecidedBy,
                     d.CreatedAt,
@@ -223,7 +221,6 @@ namespace ProductAuction.API.Controllers
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (userId == null)
             {
-
                 return Unauthorized(new
                 {
                     status = 401,
@@ -254,7 +251,7 @@ namespace ProductAuction.API.Controllers
             {
                 return Forbid();
             }
-            if (sale.Status == "AwaitingPayment")
+            if (sale.Status == SaleStatus.AwaitingPayment)
             {
                 return BadRequest(new
                 {
@@ -262,7 +259,7 @@ namespace ProductAuction.API.Controllers
                     message = "A dispute cannot be submitted before payment."
                 });
             }
-            if (sale.Status == "Completed")
+            if (sale.Status == SaleStatus.Completed)
             {
                 return BadRequest(new
                 {
@@ -305,11 +302,11 @@ namespace ProductAuction.API.Controllers
                 RaisedBy = userId,
                 Complaint = dto.Complaint,
                 EvidenceUrl = evidenceUrl,
-                Status = "Open",
+                Status = DisputeStatus.Open,
                 CreatedAt = DateTime.UtcNow
             };
 
-            sale.Status = "Disputed";
+            sale.Status = SaleStatus.Disputed;
 
             _context.Disputes.Add(dispute);
 
@@ -327,7 +324,7 @@ namespace ProductAuction.API.Controllers
                     dispute.RaisedBy,
                     dispute.Complaint,
                     dispute.EvidenceUrl,
-                    dispute.Status,
+                    Status = dispute.Status.ToString(),
                     dispute.CreatedAt
                 }
             });
@@ -388,7 +385,7 @@ namespace ProductAuction.API.Controllers
             }
 
             // dispute has to be under revie
-            if (dispute.Status != "UnderReview")
+            if (dispute.Status != DisputeStatus.UnderReview)
             {
                 return BadRequest(new
                 {
@@ -430,8 +427,8 @@ namespace ProductAuction.API.Controllers
             var escrow = await _context.WalletReservations
                 .FirstOrDefaultAsync(r =>
                     r.SaleId == sale.Id &&
-                    r.Type == "SaleEscrow" &&
-                    r.Status == "Reserved");
+                    r.Type == ReservationType.SaleEscrow &&
+                    r.Status == ReservationStatus.Reserved);
 
 
             if (sale.PaymentSubmittedAt.HasValue && escrow == null)
@@ -471,9 +468,6 @@ namespace ProductAuction.API.Controllers
             decimal oppositePartyAmount = Math.Round(totalPenalty * 0.80m, 2);
             decimal platformAmount = totalPenalty - oppositePartyAmount;
 
-            // _logger.LogDebug("ResolveDispute: penalty breakdown for dispute #{DisputeId}: total={Total}, opposite={Opposite}, platform={Platform}.",
-            //     id, totalPenalty, oppositePartyAmount, platformAmount);
-
             // OPTION 1: system fault
             // no penalty, just refund escrow and release deposits
             if (dto.FaultType == "System")
@@ -491,20 +485,18 @@ namespace ProductAuction.API.Controllers
                     }
 
                     buyerWallet.Balance += escrow.Amount;
-                    escrow.Status = "Released";
+                    escrow.Status = ReservationStatus.Released;
 
                     _context.WalletTransactions.Add(new WalletTransaction
                     {
                         WalletId = buyerWallet.Id,
-                        Type = "Credit",
+                        Type = WalletTransactionType.Credit,
                         Amount = escrow.Amount,
                         BalanceAfter = buyerWallet.Balance,
                         Reference = $"System-fault refund for dispute #{dispute.Id}",
                         CreatedAt = DateTime.UtcNow
                     });
                 }
-
-                // _logger.LogInformation("ResolveDispute: system-fault escrow refunded for dispute #{DisputeId}.", id);
             }
 
             // OPTION 2: buyer fault, no penalty
@@ -524,20 +516,18 @@ namespace ProductAuction.API.Controllers
                     }
 
                     buyerWallet.Balance += escrow.Amount;
-                    escrow.Status = "Released";
+                    escrow.Status = ReservationStatus.Released;
 
                     _context.WalletTransactions.Add(new WalletTransaction
                     {
                         WalletId = buyerWallet.Id,
-                        Type = "Credit",
+                        Type = WalletTransactionType.Credit,
                         Amount = escrow.Amount,
                         BalanceAfter = buyerWallet.Balance,
                         Reference = $"No-penalty refund for dispute #{dispute.Id}",
                         CreatedAt = DateTime.UtcNow
                     });
                 }
-
-                // _logger.LogInformation("ResolveDispute: buyer fault without penalty; escrow refunded for dispute #{DisputeId}.", id);
             }
 
             // OPTION 3: seller fault, no penalty
@@ -557,20 +547,18 @@ namespace ProductAuction.API.Controllers
                     }
 
                     buyerWallet.Balance += escrow.Amount;
-                    escrow.Status = "Released";
+                    escrow.Status = ReservationStatus.Released;
 
                     _context.WalletTransactions.Add(new WalletTransaction
                     {
                         WalletId = buyerWallet.Id,
-                        Type = "Credit",
+                        Type = WalletTransactionType.Credit,
                         Amount = escrow.Amount,
                         BalanceAfter = buyerWallet.Balance,
                         Reference = $"Seller-fault refund for dispute #{dispute.Id}",
                         CreatedAt = DateTime.UtcNow
                     });
                 }
-
-                // _logger.LogInformation("ResolveDispute: seller fault without penalty; escrow refunded for dispute #{DisputeId}.", id);
             }
 
             // OPTION 4: buyer fault, penalty applied
@@ -592,8 +580,8 @@ namespace ProductAuction.API.Controllers
                     .FirstOrDefaultAsync(r =>
                         r.WalletId == buyerWallet.Id &&
                         r.AuctionId == sale.AuctionId &&
-                        r.Type == "BuyerFunds" &&
-                        r.Status == "Reserved");
+                        r.Type == ReservationType.BuyerFunds &&
+                        r.Status == ReservationStatus.Reserved);
 
                 if (buyerDeposit == null || buyerDeposit.Amount < totalPenalty || buyerWallet.ReservedBalance < buyerDeposit.Amount || buyerWallet.Balance < totalPenalty)
                 {
@@ -639,7 +627,7 @@ namespace ProductAuction.API.Controllers
                 // forfeit the buyer's deposit
                 buyerWallet.Balance -= totalPenalty;
                 buyerWallet.ReservedBalance -= buyerDeposit.Amount;
-                buyerDeposit.Status = "Forfeited";
+                buyerDeposit.Status = ReservationStatus.Forfeited;
 
                 // split it
                 sellerWallet.Balance += oppositePartyAmount;
@@ -650,7 +638,7 @@ namespace ProductAuction.API.Controllers
                 _context.WalletTransactions.Add(new WalletTransaction
                 {
                     WalletId = buyerWallet.Id,
-                    Type = "Penalty",
+                    Type = WalletTransactionType.Penalty,
                     Amount = totalPenalty,
                     BalanceAfter = buyerWallet.Balance,
                     Reference = $"Buyer penalty for dispute #{dispute.Id}",
@@ -660,7 +648,7 @@ namespace ProductAuction.API.Controllers
                 _context.WalletTransactions.Add(new WalletTransaction
                 {
                     WalletId = sellerWallet.Id,
-                    Type = "Credit",
+                    Type = WalletTransactionType.Credit,
                     Amount = oppositePartyAmount,
                     BalanceAfter = sellerWallet.Balance,
                     Reference = $"Dispute compensation #{dispute.Id}",
@@ -670,7 +658,7 @@ namespace ProductAuction.API.Controllers
                 _context.WalletTransactions.Add(new WalletTransaction
                 {
                     WalletId = platformWallet.Id,
-                    Type = "Penalty",
+                    Type = WalletTransactionType.Penalty,
                     Amount = platformAmount,
                     BalanceAfter = platformWallet.Balance,
                     Reference = $"Platform penalty share for dispute #{dispute.Id}",
@@ -685,11 +673,8 @@ namespace ProductAuction.API.Controllers
                     TotalAmount = totalPenalty,
                     OppositePartyAmount = oppositePartyAmount,
                     PlatformAmount = platformAmount,
-                    Status = "Applied"
+                    Status = PenaltyStatus.Applied
                 });
-
-                // _logger.LogInformation("ResolveDispute: buyer penalty of {Amount} applied for dispute #{DisputeId}.",
-                //     totalPenalty, id);
             }
 
             // OPTION 5: seller fault, penalty applied
@@ -710,12 +695,12 @@ namespace ProductAuction.API.Controllers
                     }
 
                     buyerWallet.Balance += escrow.Amount;
-                    escrow.Status = "Released";
+                    escrow.Status = ReservationStatus.Released;
 
                     _context.WalletTransactions.Add(new WalletTransaction
                     {
                         WalletId = buyerWallet.Id,
-                        Type = "Credit",
+                        Type = WalletTransactionType.Credit,
                         Amount = escrow.Amount,
                         BalanceAfter = buyerWallet.Balance,
                         Reference = $"Seller-fault refund for dispute #{dispute.Id}",
@@ -738,8 +723,8 @@ namespace ProductAuction.API.Controllers
                     .FirstOrDefaultAsync(r =>
                         r.WalletId == sellerWallet.Id &&
                         r.ProductId == sale.ProductId &&
-                        r.Type == "SellerDeposit" &&
-                        r.Status == "Reserved");
+                        r.Type == ReservationType.SellerDeposit &&
+                        r.Status == ReservationStatus.Reserved);
 
                 if (sellerDeposit == null || sellerDeposit.Amount < totalPenalty || sellerWallet.ReservedBalance < sellerDeposit.Amount || sellerWallet.Balance < totalPenalty)
                 {
@@ -778,7 +763,6 @@ namespace ProductAuction.API.Controllers
 
                 if (platformWallet == null)
                 {
-
                     return BadRequest(new
                     {
                         status = 400,
@@ -789,7 +773,7 @@ namespace ProductAuction.API.Controllers
                 // forfeit the seller's deposit
                 sellerWallet.Balance -= totalPenalty;
                 sellerWallet.ReservedBalance -= sellerDeposit.Amount;
-                sellerDeposit.Status = "Forfeited";
+                sellerDeposit.Status = ReservationStatus.Forfeited;
 
                 // split it
                 buyerWalletForPenalty.Balance += oppositePartyAmount;
@@ -800,7 +784,7 @@ namespace ProductAuction.API.Controllers
                 _context.WalletTransactions.Add(new WalletTransaction
                 {
                     WalletId = sellerWallet.Id,
-                    Type = "Penalty",
+                    Type = WalletTransactionType.Penalty,
                     Amount = totalPenalty,
                     BalanceAfter = sellerWallet.Balance,
                     Reference = $"Seller penalty for dispute #{dispute.Id}",
@@ -810,7 +794,7 @@ namespace ProductAuction.API.Controllers
                 _context.WalletTransactions.Add(new WalletTransaction
                 {
                     WalletId = buyerWalletForPenalty.Id,
-                    Type = "Credit",
+                    Type = WalletTransactionType.Credit,
                     Amount = oppositePartyAmount,
                     BalanceAfter = buyerWalletForPenalty.Balance,
                     Reference = $"Dispute compensation #{dispute.Id}",
@@ -820,7 +804,7 @@ namespace ProductAuction.API.Controllers
                 _context.WalletTransactions.Add(new WalletTransaction
                 {
                     WalletId = platformWallet.Id,
-                    Type = "Penalty",
+                    Type = WalletTransactionType.Penalty,
                     Amount = platformAmount,
                     BalanceAfter = platformWallet.Balance,
                     Reference = $"Platform penalty share for dispute #{dispute.Id}",
@@ -835,11 +819,8 @@ namespace ProductAuction.API.Controllers
                     TotalAmount = totalPenalty,
                     OppositePartyAmount = oppositePartyAmount,
                     PlatformAmount = platformAmount,
-                    Status = "Applied"
+                    Status = PenaltyStatus.Applied
                 });
-
-                // _logger.LogInformation("ResolveDispute: seller penalty of {Amount} applied for dispute #{DisputeId}.",
-                //     totalPenalty, id);
             }
 
             // release the seller's deposit if it wasn't forfeited
@@ -851,13 +832,13 @@ namespace ProductAuction.API.Controllers
                     .FirstOrDefaultAsync(r =>
                         r.WalletId == sellerWalletForRelease.Id &&
                         r.ProductId == sale.ProductId &&
-                        r.Type == "SellerDeposit" &&
-                        r.Status == "Reserved");
+                        r.Type == ReservationType.SellerDeposit &&
+                        r.Status == ReservationStatus.Reserved);
 
                 if (sellerDepositToRelease != null)
                 {
                     sellerWalletForRelease.ReservedBalance -= sellerDepositToRelease.Amount;
-                    sellerDepositToRelease.Status = "Released";
+                    sellerDepositToRelease.Status = ReservationStatus.Released;
                 }
             }
 
@@ -870,13 +851,13 @@ namespace ProductAuction.API.Controllers
                     .FirstOrDefaultAsync(r =>
                         r.WalletId == buyerWalletForRelease.Id &&
                         r.AuctionId == sale.AuctionId &&
-                        r.Type == "BuyerFunds" &&
-                        r.Status == "Reserved");
+                        r.Type == ReservationType.BuyerFunds &&
+                        r.Status == ReservationStatus.Reserved);
 
                 if (buyerDepositToRelease != null)
                 {
                     buyerWalletForRelease.ReservedBalance -= buyerDepositToRelease.Amount;
-                    buyerDepositToRelease.Status = "Released";
+                    buyerDepositToRelease.Status = ReservationStatus.Released;
                 }
             }
 
@@ -886,8 +867,8 @@ namespace ProductAuction.API.Controllers
             var otherBuyerReservations = await _context.WalletReservations
                 .Where(r =>
                     r.AuctionId == sale.AuctionId &&
-                    r.Type == "BuyerFunds" &&
-                    r.Status == "Reserved" &&
+                    r.Type == ReservationType.BuyerFunds &&
+                    r.Status == ReservationStatus.Reserved &&
                     r.WalletId != currentBuyerWalletId)
                 .ToListAsync();
 
@@ -897,9 +878,6 @@ namespace ProductAuction.API.Controllers
 
                 if (wallet == null)
                 {
-                    // _logger.LogError("ResolveDispute: wallet #{WalletId} for reservation #{ReservationId} not found.",
-                    //     reservation.WalletId, reservation.Id);
-
                     return BadRequest(new
                     {
                         status = 400,
@@ -908,12 +886,12 @@ namespace ProductAuction.API.Controllers
                 }
 
                 wallet.ReservedBalance -= reservation.Amount;
-                reservation.Status = "Released";
+                reservation.Status = ReservationStatus.Released;
 
                 _context.WalletTransactions.Add(new WalletTransaction
                 {
                     WalletId = wallet.Id,
-                    Type = "Release",
+                    Type = WalletTransactionType.Release,
                     Amount = reservation.Amount,
                     BalanceAfter = wallet.Balance,
                     Reference = $"Auction deposit released after dispute #{dispute.Id}",
@@ -922,15 +900,12 @@ namespace ProductAuction.API.Controllers
             }
 
             // wrap it up
-            dispute.Status = "Resolved";
-            product.Status = "Unavailable";
-            sale.Status = "Refunded";
+            dispute.Status = DisputeStatus.Resolved;
+            product.Status = ProductStatus.Unavailable;
+            sale.Status = SaleStatus.Refunded;
 
             await _context.SaveChangesAsync();
             await transaction.CommitAsync();
-
-            // _logger.LogInformation("ResolveDispute: dispute #{DisputeId} resolved (fault={Fault}, penaltyApplied={Apply}).",
-            //     id, dto.FaultType, dto.ApplyPenalty);
 
             return Ok(new
             {
@@ -941,12 +916,12 @@ namespace ProductAuction.API.Controllers
                 data = new
                 {
                     dispute.Id,
-                    dispute.Status,
+                    Status = dispute.Status.ToString(),
                     dto.FaultType,
                     dispute.AdminDecision,
                     dispute.DecidedBy,
-                    ProductStatus = product.Status,
-                    SaleStatus = sale.Status,
+                    ProductStatus = product.Status.ToString(),
+                    SaleStatus = sale.Status.ToString(),
                     PenaltyApplied = dto.ApplyPenalty,
                     Penalty = dto.ApplyPenalty
                         ? new

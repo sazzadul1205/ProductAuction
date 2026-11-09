@@ -1,6 +1,6 @@
-﻿
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using ProductAuction.API.Data;
+using ProductAuction.API.Models.Enums;
 
 namespace ProductAuction.API.Services.Background
 {
@@ -30,13 +30,13 @@ namespace ProductAuction.API.Services.Background
 
                     // Find sales whose payment deadline has passed.
                     var overdueSales = await context.Sales
-                        .Where(s => s.Status == "AwaitingPayment" && s.PaymentDeadline <= now)
+                        .Where(s => s.Status == SaleStatus.AwaitingPayment && s.PaymentDeadline <= now)
                         .ToListAsync(stoppingToken);
 
                     // Change each unpaid sale as overdue.
                     foreach (var sale in overdueSales)
                     {
-                        sale.Status = "PaymentOverdue";
+                        sale.Status = SaleStatus.PaymentOverdue;
                         _logger.LogWarning("Sale #{SaleId} marked as PaymentOverdue.", sale.Id);
                     }
 

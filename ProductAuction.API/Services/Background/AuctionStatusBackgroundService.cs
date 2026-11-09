@@ -1,6 +1,6 @@
-﻿
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using ProductAuction.API.Data;
+using ProductAuction.API.Models.Enums;
 
 namespace ProductAuction.API.Services.Background
 {
@@ -30,13 +30,13 @@ namespace ProductAuction.API.Services.Background
 
                     // Find scheduled auctions whose start time has arrived.
                     var auctions = await context.Auctions
-                        .Where(a => a.Status == "Upcoming" && a.StartTime <= now)
+                        .Where(a => a.Status == AuctionStatus.Upcoming && a.StartTime <= now)
                         .ToListAsync(stoppingToken);
 
                     // Change each matching auction to "Active".
                     foreach (var auction in auctions)
                     {
-                        auction.Status = "Active";
+                        auction.Status = AuctionStatus.Active;
                         _logger.LogInformation("Auction #{AuctionId} activated.", auction.Id);
                     }
 

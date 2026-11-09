@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ProductAuction.API.Data;
+using ProductAuction.API.Models.Enums;
 
 namespace ProductAuction.API.Controllers
 {
@@ -29,7 +30,6 @@ namespace ProductAuction.API.Controllers
 
             if (string.IsNullOrEmpty(userId))
             {
-
                 return Unauthorized();
             }
 
@@ -38,23 +38,23 @@ namespace ProductAuction.API.Controllers
                 .ToListAsync();
 
             var totalProducts = products.Count;
-            var pendingApproval = products.Count(p => p.ApprovalStatus == "PendingApproval");
-            var approved = products.Count(p => p.ApprovalStatus == "Approved");
-            var rejected = products.Count(p => p.ApprovalStatus == "Rejected");
+            var pendingApproval = products.Count(p => p.ApprovalStatus == ProductApprovalStatus.PendingApproval);
+            var approved = products.Count(p => p.ApprovalStatus == ProductApprovalStatus.Approved);
+            var rejected = products.Count(p => p.ApprovalStatus == ProductApprovalStatus.Rejected);
 
             // auction stats
             var activeAuctions = await _context.Auctions
-                .CountAsync(a => a.SellerId == userId && a.Status == "Active");
+                .CountAsync(a => a.SellerId == userId && a.Status == AuctionStatus.Active);
 
             // sales & earnings
             var sales = await _context.Sales
                 .Where(s => s.SellerId == userId)
                 .ToListAsync();
 
-            var soldCount = sales.Count(s => s.Status == "Completed");
-            var awaitingDispatch = sales.Count(s => s.Status == "Paid");
+            var soldCount = sales.Count(s => s.Status == SaleStatus.Completed);
+            var awaitingDispatch = sales.Count(s => s.Status == SaleStatus.Paid);
             var totalEarnings = sales
-                .Where(s => s.Status == "Completed")
+                .Where(s => s.Status == SaleStatus.Completed)
                 .Sum(s => s.SellerProceeds);
 
             // wallet stats

@@ -5,6 +5,7 @@
         AwaitingPayment,
         Paid,
         PaymentOverdue,
+        Dispatched,
         Completed,
         Disputed,
         Refunded
