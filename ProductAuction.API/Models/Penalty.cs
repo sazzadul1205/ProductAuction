@@ -22,7 +22,7 @@ namespace ProductAuction.API.Models
         [Precision(18, 2)]
         public decimal PlatformAmount { get; set; }
 
-        // Expected values: Proposed, Approved, Applied, Waived
+        // Status audit (non-migration code refs): Proposed=USED, Approved=USED, Applied=USED,
         public string Status { get; set; } = "Proposed";
     }
 }

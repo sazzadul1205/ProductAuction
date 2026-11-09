@@ -22,8 +22,7 @@ namespace ProductAuction.API.Models
         [Precision(18, 2)]
         public decimal SellerProceeds { get; set; }
 
-        // Expected values: AwaitingPayment, PaymentSubmitted, Paid,
-        // PaymentOverdue, Completed, Disputed
+        // Status audit (non-migration code refs): AwaitingPayment=USED, Paid=USED, PaymentOverdue=USED, Completed=USED, Disputed=USED, Refunded=USED
         public string Status { get; set; } = "AwaitingPayment";
 
         public DateTime PaymentDeadline { get; set; }

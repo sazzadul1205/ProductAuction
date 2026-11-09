@@ -15,7 +15,7 @@ namespace ProductAuction.API.Models
         public string TransactionReference { get; set; } = string.Empty;
         public string ReceiptImageUrl { get; set; } = string.Empty;
 
-        // Expected values: PendingVerification, Approved, Rejected
+        // Status audit (non-migration code refs): PendingVerification=USED, Approved=USED, Rejected=USED
         public string Status { get; set; } = "PendingVerification";
 
         public string? ReviewedBy { get; set; }

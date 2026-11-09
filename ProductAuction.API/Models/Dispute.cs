@@ -13,7 +13,7 @@ namespace ProductAuction.API.Models
         public string Complaint { get; set; } = string.Empty;
         public string? EvidenceUrl { get; set; }
 
-        // Expected values: Open, UnderReview, Resolved, Rejected
+        // Status audit (non-migration code refs): Open=USED, UnderReview=USED, Resolved=USED, Rejected=USED
         public string Status { get; set; } = "Open";
 
         public string? AdminDecision { get; set; }

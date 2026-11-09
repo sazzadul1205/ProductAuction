@@ -19,7 +19,7 @@ namespace ProductAuction.API.Models
         [Precision(18, 2)]
         public decimal Amount { get; set; }
 
-        // Expected values: Reserved, Released, Forfeited
+        // Status audit (non-migration code refs): Reserved=USED, Released=USED, Forfeited=USED
         public string Status { get; set; } = "Reserved";
     }
 }

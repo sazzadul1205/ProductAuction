@@ -14,7 +14,7 @@
         public string? NationalIdNumber { get; set; }
         public string? NationalIdFrontImageUrl { get; set; }
         public string? NationalIdBackImageUrl { get; set; }
-
+        // VerificationStatus audit (non-migration code refs): NotSubmitted=USED, PendingReview=USED, Verified=USED, Rejected=USED
         public string VerificationStatus { get; set; } = "NotSubmitted";
 
         public string? VerifiedBy { get; set; }

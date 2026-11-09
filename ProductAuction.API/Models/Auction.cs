@@ -15,7 +15,7 @@ namespace ProductAuction.API.Models
         public DateTime? StartTime { get; set; }
         public DateTime? EndTime { get; set; }
 
-        // Expected values: Upcoming, Active, Completed, Cancelled
+        // Status audit (non-migration code refs): Upcoming=USED, Active=USED, Completed=USED, Cancelled=USED
         public string Status { get; set; } = "Upcoming";
         public string? CancellationReason { get; set; }
 
@@ -27,7 +27,7 @@ namespace ProductAuction.API.Models
 
         public string? WinnerId { get; set; }
 
-        // Expected values: Sold, NoWinner
+        // Result audit (non-migration code refs): Sold=USED, NoWinner=USED
         public string? Result { get; set; }
 
         // Used by EF Core to detect conflicting updates.

@@ -30,11 +30,11 @@ namespace ProductAuction.API.Models
         [Precision(18, 2)]
         public decimal BuyoutPrice { get; set; }
 
-        // Expected values: PendingApproval, Approved, Rejected
+        // ApprovalStatus audit (non-migration code refs): PendingApproval=USED, Approved=USED, Rejected=USED
         public string ApprovalStatus { get; set; } = "PendingApproval";
         public string? RejectionReason { get; set; }
 
-        // Expected values: Available, Draft, Unavailable
+        // Status audit (non-migration code refs): Available=USED, Draft=USED, Unavailable=USED
         public string Status { get; set; } = "Draft";
 
         public DateTime CreatedAt { get; set; }
