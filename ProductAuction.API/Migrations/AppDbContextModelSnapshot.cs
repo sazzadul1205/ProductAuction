@@ -247,8 +247,9 @@ namespace ProductAuction.API.Migrations
                     b.Property<int>("ProductId")
                         .HasColumnType("int");
 
-                    b.Property<string>("Result")
-                        .HasColumnType("nvarchar(max)");
+                    b.Property<int?>("Result")
+                        .HasMaxLength(30)
+                        .HasColumnType("int");
 
                     b.Property<byte[]>("RowVersion")
                         .IsRequired()
@@ -261,9 +262,9 @@ namespace ProductAuction.API.Migrations
                     b.Property<DateTime?>("StartTime")
                         .HasColumnType("datetime2");
 
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                    b.Property<int>("Status")
+                        .HasMaxLength(30)
+                        .HasColumnType("int");
 
                     b.Property<string>("WinnerId")
                         .HasColumnType("nvarchar(max)");
@@ -353,9 +354,9 @@ namespace ProductAuction.API.Migrations
                     b.Property<int>("SaleId")
                         .HasColumnType("int");
 
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                    b.Property<int>("Status")
+                        .HasMaxLength(30)
+                        .HasColumnType("int");
 
                     b.Property<string>("TrackingEvidence")
                         .HasColumnType("nvarchar(max)");
@@ -397,9 +398,9 @@ namespace ProductAuction.API.Migrations
                     b.Property<string>("ReviewedBy")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                    b.Property<int>("Status")
+                        .HasMaxLength(30)
+                        .HasColumnType("int");
 
                     b.Property<string>("TransactionReference")
                         .IsRequired()
@@ -447,9 +448,9 @@ namespace ProductAuction.API.Migrations
                     b.Property<int>("SaleId")
                         .HasColumnType("int");
 
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                    b.Property<int>("Status")
+                        .HasMaxLength(30)
+                        .HasColumnType("int");
 
                     b.HasKey("Id");
 
@@ -483,9 +484,9 @@ namespace ProductAuction.API.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                    b.Property<int>("Status")
+                        .HasMaxLength(30)
+                        .HasColumnType("int");
 
                     b.Property<decimal>("TotalAmount")
                         .HasPrecision(18, 2)
@@ -504,9 +505,9 @@ namespace ProductAuction.API.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<string>("ApprovalStatus")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                    b.Property<int>("ApprovalStatus")
+                        .HasMaxLength(30)
+                        .HasColumnType("int");
 
                     b.Property<string>("Brand")
                         .HasColumnType("nvarchar(max)");
@@ -558,9 +559,9 @@ namespace ProductAuction.API.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                    b.Property<int>("Status")
+                        .HasMaxLength(30)
+                        .HasColumnType("int");
 
                     b.Property<string>("Title")
                         .IsRequired()
@@ -655,9 +656,9 @@ namespace ProductAuction.API.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                    b.Property<int>("Status")
+                        .HasMaxLength(30)
+                        .HasColumnType("int");
 
                     b.HasKey("Id");
 
@@ -707,9 +708,9 @@ namespace ProductAuction.API.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("VerificationStatus")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                    b.Property<int>("VerificationStatus")
+                        .HasMaxLength(30)
+                        .HasColumnType("int");
 
                     b.Property<DateTime?>("VerifiedAt")
                         .HasColumnType("datetime2");
@@ -768,13 +769,13 @@ namespace ProductAuction.API.Migrations
                     b.Property<int?>("SaleId")
                         .HasColumnType("int");
 
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                    b.Property<int>("Status")
+                        .HasMaxLength(30)
+                        .HasColumnType("int");
 
-                    b.Property<string>("Type")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                    b.Property<int>("Type")
+                        .HasMaxLength(30)
+                        .HasColumnType("int");
 
                     b.Property<int>("WalletId")
                         .HasColumnType("int");
@@ -806,9 +807,9 @@ namespace ProductAuction.API.Migrations
                     b.Property<string>("Reference")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("Type")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                    b.Property<int>("Type")
+                        .HasMaxLength(30)
+                        .HasColumnType("int");
 
                     b.Property<int>("WalletId")
                         .HasColumnType("int");

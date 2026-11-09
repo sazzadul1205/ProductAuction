@@ -212,7 +212,7 @@ namespace ProductAuction.API.Controllers
             {
                 var roles = await _userManager.GetRolesAsync(user);
 
-                //  user's profile / wallet
+                //  users profile / wallet
                 var profile = profiles.FirstOrDefault(p => p.UserId == user.Id);
                 var wallet = wallets.FirstOrDefault(w => w.UserId == user.Id);
 
