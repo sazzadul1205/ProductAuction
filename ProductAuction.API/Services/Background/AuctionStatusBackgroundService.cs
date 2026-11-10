@@ -33,7 +33,7 @@ namespace ProductAuction.API.Services.Background
                         .Where(a => a.Status == AuctionStatus.Upcoming && a.StartTime <= now)
                         .ToListAsync(stoppingToken);
 
-                    // Change each matching auction to "Active".
+                    // Change each matching auction.
                     foreach (var auction in auctions)
                     {
                         auction.Status = AuctionStatus.Active;

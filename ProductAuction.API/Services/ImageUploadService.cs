@@ -14,31 +14,24 @@ namespace ProductAuction.API.Services
         // Saves the uploaded image to disk and returns its relative URL.
         public async Task<string> UploadImageAsync(IFormFile image)
         {
-            // Make sure a file was actually sent.
             if (image == null || image.Length == 0)
             {
                 throw new ArgumentException("Please select an image.");
             }
-
-            // Reject files larger than 5 MB.
             if (image.Length > 5 * 1024 * 1024)
             {
                 throw new ArgumentException("Image size cannot exceed 5 MB.");
             }
-
-            // List of extensions we accept.
             var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".webp" };
 
             // Get the file extension in lowercase.
             var extension = Path.GetExtension(image.FileName).ToLowerInvariant();
 
-            // Reject anything that is not an allowed image type.
             if (!allowedExtensions.Contains(extension))
             {
                 throw new ArgumentException("Only JPG, JPEG, PNG, and WEBP images are allowed.");
             }
 
-            // Resolve the web root (wwwroot)
             var webRoot = _environment.WebRootPath ?? Path.Combine(_environment.ContentRootPath, "wwwroot");
 
             // Build the path to the uploads folder 

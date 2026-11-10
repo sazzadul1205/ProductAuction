@@ -36,24 +36,26 @@ namespace ProductAuction.API.Controllers
         [HttpGet("dashboard")]
         public async Task<IActionResult> GetDashboard()
         {
-            // Total users
+            // Total users 
             var totalUsers = await _context.Users.CountAsync(u => u.UserName != "platform-system-account");
 
-            // Pending items.
+            // Pending items
             var pendingProducts = await _context.Products.CountAsync(p => p.ApprovalStatus == ProductApprovalStatus.PendingApproval);
             var pendingDeposits = await _context.DepositRequests.CountAsync(d => d.Status == DepositRequestStatus.PendingVerification);
             var pendingVerifications = await _context.UserProfiles.CountAsync(p => p.VerificationStatus == VerificationStatus.PendingReview);
             var openDisputes = await _context.Disputes.CountAsync(d => d.Status == DisputeStatus.Open || d.Status == DisputeStatus.UnderReview);
 
-            // Active.
+            // Active auctions
             var activeAuctions = await _context.Auctions.CountAsync(a => a.Status == AuctionStatus.Active);
 
             // Platform wallet balance
-            var platformUser = await _context.Users.FirstOrDefaultAsync(u => u.UserName == "platform-system-account");
-            var platformWallet = platformUser != null
-                ? await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == platformUser.Id)
-                : null;
-            var platformBalance = platformWallet?.Balance;
+            var platformUser = await _userManager.FindByNameAsync("platform-system-account");
+            var platformBalance = platformUser == null
+                ? 0m
+                : await _context.Wallets
+                    .Where(w => w.UserId == platformUser.Id)
+                    .Select(w => w.Balance)
+                    .FirstOrDefaultAsync();
 
             return Ok(new
             {

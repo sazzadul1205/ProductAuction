@@ -17,8 +17,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
-        // Serialize/deserialize enums as their string names, not integers,
-        // so the frontend keeps seeing "Active", "Completed", etc.
+        // Serialize/deserialize enums as their string names, not integers.
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
     });
 
