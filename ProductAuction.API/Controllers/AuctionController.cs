@@ -684,7 +684,7 @@ namespace ProductAuction.API.Controllers
                         Type = WalletTransactionType.Penalty,
                         Amount = reservation.Amount,
                         BalanceAfter = sellerWallet.Balance,
-                        Reference = $"Seller deposit forfeited for auction #{auction.Id}",
+                        Reference = $"Seller deposit forfeited for auction {auction.Id}",
                         CreatedAt = now
                     });
 
@@ -694,7 +694,7 @@ namespace ProductAuction.API.Controllers
                         Type = WalletTransactionType.Credit,
                         Amount = reservation.Amount,
                         BalanceAfter = platformWallet.Balance,
-                        Reference = $"Seller deposit forfeiture for auction #{auction.Id}",
+                        Reference = $"Seller deposit forfeiture for auction {auction.Id}",
                         CreatedAt = now
                     });
                 }

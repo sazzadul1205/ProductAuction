@@ -37,7 +37,7 @@ namespace ProductAuction.API.Services.Background
                     foreach (var auction in auctions)
                     {
                         auction.Status = AuctionStatus.Active;
-                        _logger.LogInformation("Auction #{AuctionId} activated.", auction.Id);
+                        _logger.LogInformation("Auction {AuctionId} activated.", auction.Id);
                     }
 
                     await context.SaveChangesAsync(stoppingToken);

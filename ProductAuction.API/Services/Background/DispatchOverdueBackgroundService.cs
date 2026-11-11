@@ -37,7 +37,7 @@ namespace ProductAuction.API.Services.Background
                     foreach (var delivery in overdueDeliveries)
                     {
                         delivery.Status = DeliveryStatus.DispatchOverdue;
-                        _logger.LogWarning("Delivery #{DeliveryId} marked as DispatchOverdue.", delivery.Id);
+                        _logger.LogWarning("Delivery {DeliveryId} marked as DispatchOverdue.", delivery.Id);
                     }
 
                     await context.SaveChangesAsync(stoppingToken);

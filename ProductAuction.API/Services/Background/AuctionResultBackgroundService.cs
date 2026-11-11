@@ -55,7 +55,7 @@ namespace ProductAuction.API.Services.Background
                         }
                         catch (Exception ex)
                         {
-                            _logger.LogError(ex, "Failed to process auction #{AuctionId}.", auctionId);
+                            _logger.LogError(ex, "Failed to process auction {AuctionId}.", auctionId);
                         }
                     }
                 }
@@ -71,13 +71,13 @@ namespace ProductAuction.API.Services.Background
 
         private async Task ProcessAuctionAsync(AppDbContext context, Auction auction, DateTime now, CancellationToken stoppingToken)
         {
-            _logger.LogInformation("Processing ended auction #{AuctionId}.", auction.Id);
+            _logger.LogInformation("Processing ended auction {AuctionId}.", auction.Id);
 
             var product = await context.Products.FirstOrDefaultAsync(p => p.Id == auction.ProductId, stoppingToken);
 
             if (product == null)
             {
-                _logger.LogWarning("Auction #{AuctionId} skipped: product #{ProductId} not found.", auction.Id, auction.ProductId);
+                _logger.LogWarning("Auction {AuctionId} skipped: product {ProductId} not found.", auction.Id, auction.ProductId);
                 return;
             }
 
@@ -93,13 +93,13 @@ namespace ProductAuction.API.Services.Background
             if (highestBid == null)
             {
                 // No bids
-                _logger.LogInformation("Auction #{AuctionId} ended with no bids; releasing seller deposit.", auction.Id);
+                _logger.LogInformation("Auction {AuctionId} ended with no bids; releasing seller deposit.", auction.Id);
 
                 var sellerWallet = await context.Wallets.FirstOrDefaultAsync(w => w.UserId == product.SellerId, stoppingToken);
 
                 if (sellerWallet == null)
                 {
-                    _logger.LogWarning("Auction #{AuctionId} skipped: seller wallet not found.", auction.Id);
+                    _logger.LogWarning("Auction {AuctionId} skipped: seller wallet not found.", auction.Id);
                     return;
                 }
 
@@ -113,7 +113,7 @@ namespace ProductAuction.API.Services.Background
                 {
                     if (sellerWallet.ReservedBalance < sellerDeposit.Amount)
                     {
-                        _logger.LogWarning("Auction #{AuctionId} skipped: seller reserved balance invalid.", auction.Id);
+                        _logger.LogWarning("Auction {AuctionId} skipped: seller reserved balance invalid.", auction.Id);
                         return;
                     }
 
@@ -126,7 +126,7 @@ namespace ProductAuction.API.Services.Background
                         Type = WalletTransactionType.Release,
                         Amount = sellerDeposit.Amount,
                         BalanceAfter = sellerWallet.Balance,
-                        Reference = $"Seller deposit release for no-winner auction #{auction.Id}",
+                        Reference = $"Seller deposit release for no-winner auction {auction.Id}",
                         CreatedAt = now
                     });
                 }
@@ -140,7 +140,7 @@ namespace ProductAuction.API.Services.Background
             else
             {
                 // There is a winner
-                _logger.LogInformation("Auction #{AuctionId} sold to {BidderId} for {Amount}.", auction.Id, highestBid.BidderId, highestBid.Amount);
+                _logger.LogInformation("Auction {AuctionId} sold to {BidderId} for {Amount}.", auction.Id, highestBid.BidderId, highestBid.Amount);
 
                 winnerId = highestBid.BidderId;
 
@@ -184,13 +184,13 @@ namespace ProductAuction.API.Services.Background
 
                 if (wallet == null)
                 {
-                    _logger.LogWarning("Reservation #{ReservationId} skipped: wallet #{WalletId} not found.", reservation.Id, reservation.WalletId);
+                    _logger.LogWarning("Reservation {ReservationId} skipped: wallet {WalletId} not found.", reservation.Id, reservation.WalletId);
                     continue;
                 }
 
                 if (wallet.ReservedBalance < reservation.Amount)
                 {
-                    _logger.LogWarning("Reservation #{ReservationId} wallet #{WalletId} reserved balance inconsistent.", reservation.Id, reservation.WalletId);
+                    _logger.LogWarning("Reservation {ReservationId} wallet {WalletId} reserved balance inconsistent.", reservation.Id, reservation.WalletId);
                     continue;
                 }
 
@@ -203,7 +203,7 @@ namespace ProductAuction.API.Services.Background
 
             await context.SaveChangesAsync(stoppingToken);
 
-            _logger.LogDebug("Auction #{AuctionId} finalized. Result={Result}, Winner={WinnerId}", auction.Id, auction.Result, auction.WinnerId ?? "<none>");
+            _logger.LogDebug("Auction {AuctionId} finalized. Result={Result}, Winner={WinnerId}", auction.Id, auction.Result, auction.WinnerId ?? "<none>");
         }
     }
 }

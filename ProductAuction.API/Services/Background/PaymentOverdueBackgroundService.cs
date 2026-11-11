@@ -37,7 +37,7 @@ namespace ProductAuction.API.Services.Background
                     foreach (var sale in overdueSales)
                     {
                         sale.Status = SaleStatus.PaymentOverdue;
-                        _logger.LogWarning("Sale #{SaleId} marked as PaymentOverdue.", sale.Id);
+                        _logger.LogWarning("Sale {SaleId} marked as PaymentOverdue.", sale.Id);
                     }
 
                     await context.SaveChangesAsync(stoppingToken);
