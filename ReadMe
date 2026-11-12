@@ -468,7 +468,7 @@ Registered as hosted services in `Program.cs`; each polls every **30 seconds** u
 | `ConnectionStrings:DefaultConnection` | SQL Server connection string.                |
 | `Jwt:Key`                             | Symmetric signing key (keep secret, rotate). |
 | `Jwt:Issuer`                          | Token issuer.                                |
-| `Jwt:Audience`                        | Token audience (matches the React client).   |
+| `Jwt:Audience` | Token audience (matches the React client). |
 
 ---
 

@@ -21,11 +21,11 @@ Effort: **S** = minutes, **M** = ~1 hour, **L** = a few hours.
 
 ## Frontend
 
-- [ ] **Set `DEBUG = false` in `authApi.js`** (P0, S) — currently logs every request/response/data to the console.
-- [ ] **Add an `ErrorBoundary` around `<Routes>`** (P1, M) — show a fallback instead of a blank screen on render errors.
-- [ ] **Add `.env.example`** (P2, S) — `.env` currently contains a real LAN URL.
-- [ ] **Centralize API error messages** (P2, S) — a helper to read `err.response?.data?.message` for consistent toasts.
-- [ ] **Cancel in-flight requests on unmount** (P2, M) — AbortController on polling pages (e.g. AuctionDetails).
+- [x] **Set `DEBUG = false` in `authApi.js`** (P0, S) — now `import.meta.env.DEV` (logs in dev only, silent in production builds). *(done)*
+- [x] **Add an `ErrorBoundary` around `<Routes>`** (P1, M) — `components/ErrorBoundary/ErrorBoundary.jsx` wraps routes in `App.jsx`; shows a fallback with Reload / Go home (dev-only error detail). *(done)*
+- [x] **Add `.env.example`** (P2, S) — `.env` now documented via `.env.example`; `.gitignore` ignores `.env`/`.env.*` but keeps the example tracked. *(done)*
+- [x] **Centralize API error messages** (P2, S) — `utils/apiError.js` (`getErrorMessage`) + `toast.errorFrom(error, fallback)`; call sites migrated. *(done)*
+- [x] **Cancel in-flight requests on unmount** (P2, M) — `AbortController` on AuctionDetails fetch + 4s bid polling; `getAuctionById`/`getAuctionBids` accept an Axios `signal`. *(done)*
 
 ## Data / Correctness
 

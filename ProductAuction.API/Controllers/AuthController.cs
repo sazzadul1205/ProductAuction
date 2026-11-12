@@ -233,7 +233,7 @@ namespace ProductAuction.API.Controllers
 
 
         // GET: api/auth/me
-        // Returns the current user's account and profile info.
+        // Returns the current user's account and profile info. 
         [Authorize]
         [HttpGet("me")]
         public async Task<IActionResult> Me()
