@@ -1,120 +1,546 @@
 # Bidora — Product Auction API
 
-A RESTful backend API for **Bidora**, an online auction platform where sellers list products, buyers place bids, and administrators manage auctions, payments, verification, and disputes.
+A RESTful backend API for **Bidora**, an online auction platform where sellers list products, buyers place bids, and administrators manage auctions, wallet/escrow payments, verification, delivery, and disputes.
 
-Built with **ASP.NET Core 10**, **Entity Framework Core**, **SQL Server**, and **JWT authentication**.
+Built with **ASP.NET Core 10**, **Entity Framework Core 10**, **SQL Server**, **ASP.NET Core Identity**, and **JWT Bearer authentication**.
+
+---
+
+## Table of Contents
+
+1. [Overview](#overview)
+2. [Roles](#roles)
+3. [Core Workflows](#core-workflows)
+4. [Architecture](#architecture)
+5. [Technology Stack](#technology-stack)
+6. [Standardized API Response Format](#standardized-api-response-format)
+7. [Features](#features)
+8. [API Reference](#api-reference)
+9. [Data Models](#data-models)
+10. [Background Services](#background-services)
+11. [Authentication & Security](#authentication--security)
+12. [Configuration](#configuration)
+13. [Getting Started](#getting-started)
+14. [Default Seeded Accounts](#default-seeded-accounts)
+15. [Project Structure](#project-structure)
+16. [Testing](#testing)
+17. [Development Notes](#development-notes)
+18. [Repository](#repository)
+
+---
 
 ## Overview
 
-Bidora is a multi-role online auction platform backend. It coordinates the full lifecycle of an auctioned product: seller listing and admin approval, scheduled auction activation, live bidding with wallet-backed funds, automatic result processing when an auction ends, buyer payment, seller dispatch with tracking, buyer receipt confirmation, and dispute resolution with penalty settlement.
+Bidora is a multi-role online auction platform backend. It coordinates the full lifecycle of an auctioned product:
+
+**seller listing → admin approval → scheduled auction activation → live bidding with wallet-backed funds → automatic result processing at auction end → buyer payment → seller dispatch with tracking → buyer receipt confirmation → dispute resolution with penalty settlement.**
+
+All monetary operations run against an internal **wallet + escrow** ledger (balance, reserved balance, reservations, and transactions). There is no external payment gateway; deposits are submitted with a payment receipt image and approved by an admin.
 
 ### Roles
 
-- **Buyer**: browses auctions, places bids, wins auctions, pays for won items, confirms receipt, opens disputes.
-- **Seller**: creates products, submits them for approval, configures auctions, dispatches sold items, provides tracking.
-- **Admin**: manages users, categories, products, auctions, deposit requests, disputes, and the platform wallet; reviews NID verification.
+| Role            | Capabilities                                                                                                                                          |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Buyer**       | Browse auctions, place bids, buy out, win auctions, pay for won items, confirm receipt, raise disputes, manage wallet.                                |
+| **Seller**      | Create/edit products, submit for approval, configure auctions, dispatch sold items with tracking, report non-delivery, raise disputes, manage wallet. |
+| **Admin**       | Manage users, categories, product approvals, auctions, deposit requests, disputes, platform wallet, roles; review NID verification.                   |
+| **Super Admin** | Extends Admin with staff-account creation/management and protected role administration.                                                               |
 
-### Core Workflows
+> A non-human **platform system account** (`platform-system-account`) holds forfeited deposits and platform commission.
 
-1. **Product listing**: seller creates product with images -> submits for approval -> admin approves/rejects -> product becomes available.
-2. **Auction creation**: seller configures auction (start/end time, starting price, buyout) -> `AuctionStatusBackgroundService` activates it at start time.
-3. **Bidding**: buyers place bids; wallet funds are reserved as buyer funds; bid history tracked.
-4. **Auction end**: `AuctionResultBackgroundService` processes ended auctions, determines winner (highest bid), creates a Sale, releases non-winner reservations, handles no-bid case by releasing seller deposit.
-5. **Payment**: buyer pays within deadline; `PaymentOverdueBackgroundService` marks unpaid sales as overdue.
-6. **Dispatch**: seller dispatches with tracking; `DispatchOverdueBackgroundService` marks missed deadlines; buyer confirms receipt or reports non-delivery.
-7. **Disputes**: either party opens a dispute with evidence; admin resolves with penalty/wallet settlement.
+---
 
-### Architecture
+## Core Workflows
 
-- ASP.NET Core 10 REST API with controllers grouped by feature.
-- EF Core 10 + SQL Server for persistence; migrations under `Migrations/`.
-- ASP.NET Core Identity for users/roles; JWT Bearer for authentication.
-- Background hosted services for scheduled/overdue processing (30s polling).
-- Static files served from `wwwroot/` for uploaded images.
-- CORS policy `AllowAll`; rate limiting on login endpoint.
+1. **Product listing** — seller creates a product with images → submits for approval (reserves a 25% seller deposit) → admin approves/rejects → product becomes `Available`.
+2. **Auction scheduling** — admin sets `StartTime`/`EndTime` for an upcoming auction → `AuctionStatusBackgroundService` activates it at start time.
+3. **Bidding** — buyers place bids; a 25% buyer-funds reservation is held; bid history is tracked; highest bid is maintained on the auction.
+4. **Auction end** — `AuctionResultBackgroundService` finalizes ended auctions: highest bidder wins (creates a `Sale`), or `NoWinner` (releases the seller deposit). Non-winner buyer reservations are released.
+5. **Payment** — buyer pays from wallet before the 3-day deadline; `PaymentOverdueBackgroundService` marks unpaid sales as `PaymentOverdue`.
+6. **Delivery** — seller dispatches with tracking (5-day deadline) → `DispatchOverdueBackgroundService` marks missed dispatch → buyer confirms receipt (with proof) or seller reports non-delivery after the pickup window.
+7. **Disputes** — buyer or seller opens a dispute with optional evidence → admin reviews and resolves with fault attribution and an 80/20 penalty split, adjusting wallets.
 
-## Features
+---
 
-### Authentication and User Management
+## Architecture
 
-- User registration and login using JWT authentication.
-- ASP.NET Core Identity integration.
-- Role-based authorization for Admin, Buyer, and Seller.
-- Profile management and password changes.
-- NID image submission and profile verification.
-- Login rate limiting.
+- **ASP.NET Core 10 REST API** with feature-grouped controllers.
+- **EF Core 10 + SQL Server** for persistence; migrations under `Migrations/`.
+- **ASP.NET Core Identity** for users/roles; **JWT Bearer** for authentication.
+- **Hosted background services** for scheduled/overdue processing (30-second polling).
+- **Static files** served from `wwwroot/` for uploaded images (`/uploads/...`).
+- **CORS** policy `AllowAll`; **rate limiting** on the login endpoint.
+- **Standardized response envelope** across all controllers (see below).
 
-### Product and Category Management
-
-- Seller product creation and editing.
-- Product image uploads.
-- Product submission for admin approval.
-- Product availability and lifecycle management.
-- Category listing and administration.
-
-### Auction Management
-
-- Public auction listing and details.
-- Active and upcoming auction filtering.
-- Auction configuration and cancellation.
-- Seller-specific auction details.
-- Automatic auction status management.
-- Automatic auction result processing.
-
-### Bidding
-
-- Buyer bid placement.
-- Auction bid history.
-- Administrative bid-history access.
-- Buyout functionality.
-- Bid validation and wallet eligibility checks.
-
-### Wallet and Financial Management
-
-- User wallet information.
-- Deposit requests and administrative review.
-- Wallet transaction history.
-- Wallet reservation tracking.
-- Platform wallet management.
-- Balance validation during financial operations.
-
-### Sales and Delivery
-
-- Winning auction to sale workflow.
-- Buyer payment submission.
-- Seller dispatch and tracking information.
-- Buyer receipt confirmation.
-- Non-delivery reporting.
-- Overdue payment and dispatch monitoring.
-
-### Dispute Management
-
-- Dispute submission and review.
-- Evidence image uploads.
-- Administrative dispute resolution.
-- Penalty and wallet settlement handling.
-
-### Background Processing
-
-Hosted background services handle:
-
-- Auction activation.
-- Auction result processing.
-- Overdue payment monitoring.
-- Overdue dispatch monitoring.
+---
 
 ## Technology Stack
 
-| Technology                | Purpose                            |
-| ------------------------- | ---------------------------------- |
-| C#                        | Backend programming language       |
-| ASP.NET Core 10           | REST API framework                 |
-| Entity Framework Core 10  | ORM and database access            |
-| Microsoft SQL Server      | Relational database                |
-| ASP.NET Core Identity     | User and role management           |
-| JWT Bearer Authentication | API authentication                 |
-| Swashbuckle.AspNetCore    | OpenAPI/Swagger tooling dependency |
-| .NET Hosted Services      | Background processing              |
+| Technology              | Version      | Purpose                         |
+| ----------------------- | ------------ | ------------------------------- |
+| C#                      | 14 (net10.0) | Backend language                |
+| ASP.NET Core            | 10.0         | REST API framework              |
+| Entity Framework Core   | 10.0.13      | ORM / database access           |
+| Microsoft SQL Server    | —            | Relational database             |
+| ASP.NET Core Identity   | 10.0.13      | Users, roles, password hashing  |
+| ASP.NET Core JWT Bearer | 10.0.13      | Authentication                  |
+| Swashbuckle / OpenAPI   | 10.3.0       | API documentation (Development) |
+| .NET Hosted Services    | built-in     | Background processing           |
+
+Key NuGet packages (from `ProductAuction.API.csproj`):
+
+- `Microsoft.AspNetCore.Authentication.JwtBearer`
+- `Microsoft.AspNetCore.Identity.EntityFrameworkCore`
+- `Microsoft.AspNetCore.OpenApi`
+- `Microsoft.EntityFrameworkCore.SqlServer`
+- `Microsoft.EntityFrameworkCore.Tools`
+- `Swashbuckle.AspNetCore`
+- `System.Security.Cryptography.Pkcs`
+
+---
+
+## Standardized API Response Format
+
+Every endpoint returns a consistent envelope so any client can parse responses uniformly.
+
+### Success (with payload)
+
+```json
+{
+  "status": 200,
+  "message": "Login successful.",
+  "data": {
+    "token": "...",
+    "roles": ["Buyer"],
+    "email": "...",
+    "expiresInMinutes": 120
+  }
+}
+```
+
+### Success (no payload)
+
+When there is no data to return, the `data` field is omitted entirely (never `null`):
+
+```json
+{ "status": 200, "message": "Category deleted successfully." }
+```
+
+### Paginated list
+
+```json
+{
+  "status": 200,
+  "message": "Auctions retrieved successfully.",
+  "data": [
+    /* items */
+  ],
+  "pagination": { "page": 1, "pageSize": 20, "totalCount": 137 }
+}
+```
+
+> `totalPages` is intentionally **not** returned; clients compute it from `totalCount` and `pageSize`.
+
+### Error
+
+```json
+{
+  "status": 400,
+  "message": "Invalid email or password.",
+  "errors": ["Field is required."]
+}
+```
+
+> `errors` is present only for validation/error detail.
+
+### Endpoint-specific shapes
+
+- Most list endpoints return `data` as an **array** plus `pagination`.
+- A few endpoints that carry aggregate counters keep those counters **inside `data`** (e.g. `data = { items, totalSalesCount, ... }`) while still returning `pagination` as a sibling.
+- The admin disputes list adds a sibling `summary` object with status counts.
+
+### HTTP status codes used
+
+| Code | Meaning                              |
+| ---- | ------------------------------------ |
+| 200  | OK                                   |
+| 201  | Created                              |
+| 400  | Bad Request / validation             |
+| 401  | Unauthorized (missing/invalid token) |
+| 403  | Forbidden (role/ownership)           |
+| 404  | Not Found                            |
+| 409  | Conflict                             |
+| 500  | Server error                         |
+
+---
+
+## Features
+
+### Authentication & User Management
+
+- Registration (Buyer/Seller) and login with JWT.
+- ASP.NET Core Identity integration (password hashing, lockout).
+- Role-based authorization (Admin, Super Admin, Seller, Buyer, plus custom roles).
+- Current-user retrieval and profile update (including NID image upload).
+- Password change.
+- Login rate limiting (5 requests/minute).
+
+### Product & Category Management
+
+- Seller product creation/editing with image uploads (jpg/jpeg/png/webp, max 5 MB each).
+- Submit for approval (reserves 25% seller deposit) / withdraw / delete (Draft/Rejected).
+- Admin approval/rejection workflow.
+- Category listing, creation, deletion (admin only).
+
+### Auction Management
+
+- Public auction listing, home feed (banner + active + upcoming), and detail.
+- Admin auction configuration (start/end time) and cancellation.
+- Seller-scoped auction details (includes cancellation reason).
+- Automatic activation/result processing via background services.
+- Re-auction: sellers reset eligible products (`NoWinner`/`PaymentOverdue`) back to Draft.
+
+### Bidding
+
+- Buyer bid placement with min-increment, starting-price, buyout-cap, and wallet checks.
+- Bid history (public and admin views).
+- Buyout ("Buy It Now") that creates a sale immediately.
+
+### Wallet & Financial Management
+
+- Per-user wallet (balance, reserved balance, available balance).
+- Deposit requests with receipt image + admin review.
+- Wallet transactions ledger (Credit/Debit/Reserve/Release/Penalty/Commission).
+- Wallet reservations (SellerDeposit / BuyerFunds / SaleEscrow).
+- Platform wallet, global transactions, reservations, and summary stats.
+
+### Sales & Delivery
+
+- Sale lifecycle: `AwaitingPayment → Paid → Dispatched → Completed` (plus `PaymentOverdue`, `Disputed`, `Refunded`).
+- Buyer payment from wallet; escrow hold; platform commission (10%).
+- Seller dispatch with tracking info + evidence (5-day deadline).
+- Buyer receipt confirmation (with proof) releasing seller proceeds.
+- Seller non-delivery reporting.
+- Overdue payment/dispatch monitoring via background services.
+
+### Dispute Management
+
+- Buyer/seller dispute submission with optional evidence image.
+- Admin review (`start-review`) and resolution with fault type, penalty split, and wallet settlement.
+
+### Verification (KYC-style)
+
+- Users submit NID number + front/back images.
+- Admin verifies or rejects (with reason).
+
+### Background Processing
+
+- Auction activation, auction result finalization, payment-overdue, dispatch-overdue (30s polling).
+
+---
+
+## API Reference
+
+All routes are prefixed with `/api`. Protected endpoints require `Authorization: Bearer <token>` unless marked Public.
+
+### Auth — `/api/auth`
+
+| Method | Route              | Auth   | Description                                                                          |
+| ------ | ------------------ | ------ | ------------------------------------------------------------------------------------ |
+| POST   | `/register`        | Public | Register a Buyer or Seller (creates profile + wallet).                               |
+| POST   | `/login`           | Public | Validate credentials; returns token, roles, email, `expiresInMinutes`. Rate-limited. |
+| GET    | `/test-token`      | Bearer | Decode/inspect current token claims.                                                 |
+| GET    | `/me`              | Bearer | Current account + profile.                                                           |
+| PUT    | `/me`              | Bearer | Update profile fields and NID images (multipart).                                    |
+| POST   | `/change-password` | Bearer | Change the current user's password.                                                  |
+
+### Admin — `/api/Admin` `[Authorize(Roles = "Admin,Super Admin")]`
+
+| Method | Route                           | Description                                                 |
+| ------ | ------------------------------- | ----------------------------------------------------------- |
+| GET    | `/dashboard`                    | Aggregated platform stats.                                  |
+| POST   | `/create-admin`                 | Create a staff account (Super Admin gated for admin roles). |
+| PUT    | `/user/{id}`                    | Edit a staff account (name/email/role).                     |
+| PUT    | `/user/{id}/reset-password`     | Reset a staff account password.                             |
+| GET    | `/user`                         | Paginated user list (search + role filter).                 |
+| PUT    | `/user/{id}/lock`               | Lock/unlock a user (temporary or permanent).                |
+| GET    | `/auctions`                     | All auctions (status filter, search, pagination).           |
+| POST   | `/disputes/{id}/start-review`   | Move a dispute to `UnderReview`.                            |
+| GET    | `/deposit-requests`             | Deposit requests (status filter + pagination).              |
+| PUT    | `/deposit-requests/{id}/review` | Approve (credit wallet) or reject a deposit.                |
+| GET    | `/transactions`                 | All wallet transactions + summary stats.                    |
+| GET    | `/reservations`                 | All wallet reservations.                                    |
+| GET    | `/platform-wallet`              | Platform system wallet + history + totals.                  |
+| GET    | `/user/role-counts`             | User counts per role.                                       |
+
+### Auction — `/api/auction`
+
+| Method | Route                                      | Auth         | Description                                                                   |
+| ------ | ------------------------------------------ | ------------ | ----------------------------------------------------------------------------- |
+| GET    | `/`                                        | Public       | List auctions (search, category, status filter, pagination, banner fallback). |
+| GET    | `/home`                                    | Public       | Banner + up to 8 active + up to 8 upcoming.                                   |
+| GET    | `/{id}`                                    | Public       | Auction detail (product, images, bids).                                       |
+| GET    | `/{id}/seller`                             | Bearer       | Seller-scoped detail (incl. cancellation reason).                             |
+| PUT    | `/{id}/configure`                          | Admin        | Set start/end time for an upcoming auction.                                   |
+| PUT    | `/{id}/cancel`                             | Seller/Admin | Cancel an upcoming (seller) or upcoming/active (admin) auction.               |
+| POST   | `/product/{productId}/reset-for-reauction` | Seller       | Reset a settled product to Draft for re-auction.                              |
+
+### Bid — `/api/bid` `[Authorize]`
+
+| Method | Route                             | Auth   | Description                                               |
+| ------ | --------------------------------- | ------ | --------------------------------------------------------- |
+| POST   | `/`                               | Buyer  | Place a bid.                                              |
+| GET    | `/auction/{auctionId}/bids`       | Public | Bid history (newest first).                               |
+| GET    | `/auction/{auctionId}/bids/admin` | Admin  | Admin bid history (bidder email, buyout flag, isHighest). |
+| POST   | `/{auctionId}/buyout`             | Buyer  | Instant buyout; creates a sale.                           |
+
+### Buyer — `/api/Buyer` `[Authorize(Roles = "Buyer")]`
+
+| Method | Route           | Description                                                |
+| ------ | --------------- | ---------------------------------------------------------- |
+| GET    | `/dashboard`    | Buyer stats and balances.                                  |
+| GET    | `/my-bids`      | Paginated bid history (search + status filter).            |
+| GET    | `/won-auctions` | Paginated won auctions (payment/delivery/dispute details). |
+
+### Category — `/api/category`
+
+| Method | Route   | Auth   | Description                                          |
+| ------ | ------- | ------ | ---------------------------------------------------- |
+| GET    | `/`     | Public | List categories (product count, search, pagination). |
+| POST   | `/`     | Admin  | Create a category.                                   |
+| DELETE | `/{id}` | Admin  | Delete a category.                                   |
+
+### Dispute — `/api/dispute` `[Authorize]`
+
+| Method | Route           | Auth   | Description                                                |
+| ------ | --------------- | ------ | ---------------------------------------------------------- |
+| GET    | `/`             | Admin  | All disputes (status filter, search, pagination, summary). |
+| POST   | `/`             | Bearer | Buyer/seller creates a dispute (evidence optional).        |
+| PUT    | `/{id}/resolve` | Admin  | Resolve with fault type, penalty split, wallet settlement. |
+
+### Health — `/api/health`
+
+| Method | Route | Auth   | Description                                                                                |
+| ------ | ----- | ------ | ------------------------------------------------------------------------------------------ |
+| GET    | `/`   | Public | Lightweight DB connectivity probe; returns `healthy`, `database`, `serverTime`, `message`. |
+
+### Product — `/api/product` `[Authorize]`
+
+| Method | Route                       | Auth   | Description                                                           |
+| ------ | --------------------------- | ------ | --------------------------------------------------------------------- |
+| GET    | `/my-products`              | Seller | Seller products (approval/auction status filter, search, pagination). |
+| GET    | `/my-products/{id}`         | Seller | Single seller-owned product with images.                              |
+| POST   | `/`                         | Seller | Create a Draft product (multipart).                                   |
+| PUT    | `/{id}`                     | Seller | Update a Draft/Rejected product + images.                             |
+| POST   | `/{id}/submit-for-approval` | Seller | Submit for approval (reserves seller deposit).                        |
+| POST   | `/{id}/withdraw`            | Seller | Withdraw a pending submission (releases deposit).                     |
+| DELETE | `/{id}`                     | Seller | Delete a Draft/Rejected product.                                      |
+| GET    | `/pending-approval`         | Admin  | Products awaiting approval.                                           |
+| GET    | `/pending-approval/{id}`    | Admin  | Full details of a pending product.                                    |
+| PUT    | `/{id}/approval`            | Admin  | Approve (creates auction) or reject (releases deposit).               |
+
+### Profile — `/api/profile` `[Authorize]`
+
+| Method | Route                   | Auth   | Description                     |
+| ------ | ----------------------- | ------ | ------------------------------- |
+| PUT    | `/submit-verification`  | Bearer | Submit NID for verification.    |
+| GET    | `/pending-verification` | Admin  | Profiles awaiting verification. |
+| PUT    | `/{id}/verify`          | Admin  | Mark profile Verified/Rejected. |
+
+### Role — `/api/admin/roles` `[Authorize(Roles = "Admin,Super Admin")]`
+
+| Method | Route   | Description                                       |
+| ------ | ------- | ------------------------------------------------- |
+| GET    | `/`     | List roles (with user counts).                    |
+| GET    | `/{id}` | Get a role.                                       |
+| POST   | `/`     | Create a custom role.                             |
+| PUT    | `/{id}` | Rename a role (protected roles blocked).          |
+| DELETE | `/{id}` | Delete a role (protected/assigned roles blocked). |
+
+### Sale — `/api/sale` `[Authorize]`
+
+| Method | Route                       | Auth   | Description                                                    |
+| ------ | --------------------------- | ------ | -------------------------------------------------------------- |
+| GET    | `/`                         | Admin  | All sales (status/delivery filter, search, pagination, stats). |
+| GET    | `/my-sales`                 | Bearer | Buyer/seller's own sales (pagination, revenue totals).         |
+| POST   | `/{id}/pay`                 | Buyer  | Pay for an `AwaitingPayment` sale from wallet (escrow hold).   |
+| POST   | `/{id}/dispatch`            | Seller | Record dispatch (tracking + evidence).                         |
+| POST   | `/{id}/report-non-delivery` | Seller | Report non-delivery after pickup window.                       |
+| POST   | `/{id}/confirm-receipt`     | Buyer  | Confirm receipt (proof) → pays seller, releases escrow.        |
+
+### Seller — `/api/Seller` `[Authorize(Roles = "Seller")]`
+
+| Method | Route        | Description                         |
+| ------ | ------------ | ----------------------------------- |
+| GET    | `/dashboard` | Seller stats and available balance. |
+
+### Wallet — `/api/wallet` `[Authorize]`
+
+| Method | Route               | Description                                                               |
+| ------ | ------------------- | ------------------------------------------------------------------------- |
+| GET    | `/me`               | Current wallet (balance, reserved, available).                            |
+| POST   | `/deposit-request`  | Create a deposit request (multipart: method, amount, reference, receipt). |
+| GET    | `/deposit-requests` | User's deposit requests (status filter, search, pagination).              |
+| GET    | `/transactions`     | User's wallet transactions (type filter, search, pagination).             |
+| GET    | `/reservations`     | User's wallet reservations (status filter, pagination).                   |
+
+---
+
+## Data Models
+
+Entities live in `Models/`; relationships are configured in `Data/ApplicationDbContext.cs`.
+
+| Model                 | Key fields                                                                                                                                                                                                         |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Auction**           | `ProductId`, `SellerId`, `StartTime?`, `EndTime?`, `Status`, `CurrentHighestBid?`, `CurrentHighestBidderId?`, `BidCount`, `WinnerId?`, `Result?`, `CancellationReason?`, `RowVersion`.                             |
+| **Product**           | `SellerId`, `CategoryId`, `Title`, `ShortSummary`, `Description`, `Brand?`, `ModelNumber?`, `Condition`, `StartingPrice`, `BuyoutPrice`, `ApprovalStatus`, `Status`, `RejectionReason?`.                           |
+| **ProductImage**      | `ProductId`, `ImageUrl`, `IsMain`.                                                                                                                                                                                 |
+| **Category**          | `Name`.                                                                                                                                                                                                            |
+| **Bid**               | `AuctionId`, `BidderId`, `Amount`, `IsBuyout`, `PlacedAt`.                                                                                                                                                         |
+| **Sale**              | `AuctionId`, `ProductId`, `BuyerId`, `SellerId`, `FinalAmount`, `CommissionAmount`, `SellerProceeds`, `Status`, `PaymentDeadline`, `CreatedAt`.                                                                    |
+| **Wallet**            | `UserId`, `Balance`, `ReservedBalance`.                                                                                                                                                                            |
+| **WalletTransaction** | `WalletId`, `Type`, `Amount`, `BalanceAfter`, `Reference?`, `CreatedAt`.                                                                                                                                           |
+| **WalletReservation** | `WalletId`, `ProductId?`, `AuctionId?`, `SaleId?`, `Type`, `Amount`, `Status`.                                                                                                                                     |
+| **DepositRequest**    | `WalletId`, `Method`, `TransactionReference`, `ReceiptImageUrl`, `Amount`, `Status`, `ReviewedBy?`, `ReviewedAt?`, `RejectionReason?`.                                                                             |
+| **DeliveryRecord**    | `SaleId`, `Status`, `DispatchDeadline?`, `DispatchedAt?`, `DispatchInfo?`, `TrackingEvidence?`, `ReceiptProofUrl?`, `ReceiptConfirmedAt?`.                                                                         |
+| **Dispute**           | `SaleId`, `ProductId`, `RaisedBy`, `Complaint`, `EvidenceUrl?`, `Status`, `AdminDecision?`, `DecidedBy?`.                                                                                                          |
+| **Penalty**           | `DisputeId`, `AgainstUserId`, `ProductValue`, `TotalAmount`, `OppositePartyAmount`, `PlatformAmount`, `Status`.                                                                                                    |
+| **UserProfile**       | `UserId`, `FullName`, `ProfilePhotoUrl?`, `Address?`, `City?`, `NationalIdNumber?`, `NationalIdFrontImageUrl?`, `NationalIdBackImageUrl?`, `VerificationStatus`, `VerifiedBy?`, `VerifiedAt?`, `RejectionReason?`. |
+
+Key enums: `AuctionStatus`, `AuctionResult`, `SaleStatus`, `DepositRequestStatus`, `DeliveryStatus`, `DisputeStatus`, `PenaltyStatus`, `ReservationType`, `ReservationStatus`, `WalletTransactionType`, `VerificationStatus`, `ProductApprovalStatus`, `ProductStatus`.
+
+---
+
+## Background Services
+
+Registered as hosted services in `Program.cs`; each polls every **30 seconds** using a per-iteration DI scope and logs exceptions.
+
+| Service                            | Responsibility                                                                                                                            |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `AuctionStatusBackgroundService`   | Activates `Upcoming` auctions whose `StartTime <= now`.                                                                                   |
+| `AuctionResultBackgroundService`   | Finalizes `Active` auctions past `EndTime`: `NoWinner` (release seller deposit) or `Sold` (create sale, release non-winner reservations). |
+| `PaymentOverdueBackgroundService`  | Marks `AwaitingPayment` sales past `PaymentDeadline` as `PaymentOverdue`.                                                                 |
+| `DispatchOverdueBackgroundService` | Marks `AwaitingDispatch` deliveries past `DispatchDeadline` as `DispatchOverdue`.                                                         |
+
+---
+
+## Authentication & Security
+
+- **JWT Bearer** tokens (HMAC-SHA256), validated for issuer, audience, lifetime, and signing key.
+- **Claims**: `NameIdentifier` (userId), `Email`, and one `Role` per assigned role.
+- **Token lifetime**: 2 hours (`expiresInMinutes: 120` is returned by login).
+- **Passwords**: hashed via ASP.NET Core Identity; lockout supported.
+- **Authorization**: `[Authorize]`, `[Authorize(Roles = "...")]`, plus inline ownership checks.
+- **Rate limiting**: fixed-window policy `login` (5 requests/minute) on `/auth/login`.
+- **CORS**: `AllowAll` (development). Restrict origins for production.
+- **Secrets**: keep the DB connection string and JWT key out of source control (use user-secrets/environment variables).
+
+> ⚠️ The committed `appsettings.json` currently contains a development connection string and a JWT key. Move these to **user-secrets** or environment-specific configuration before any shared/production deployment, and rotate the JWT key.
+
+---
+
+## Configuration
+
+`appsettings.json` (and user-secrets/environment variables) provide:
+
+```json
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Data Source=localhost\\SQLEXPRESS;Initial Catalog=ProductAuctionDb;Integrated Security=True;Encrypt=True;TrustServerCertificate=True"
+  },
+  "Jwt": {
+    "Key": "YOUR_LONG_RANDOM_SECRET_KEY",
+    "Issuer": "ProductAuction.API",
+    "Audience": "ProductAuction.React"
+  },
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  "AllowedHosts": "*"
+}
+```
+
+| Setting                               | Description                                  |
+| ------------------------------------- | -------------------------------------------- |
+| `ConnectionStrings:DefaultConnection` | SQL Server connection string.                |
+| `Jwt:Key`                             | Symmetric signing key (keep secret, rotate). |
+| `Jwt:Issuer`                          | Token issuer.                                |
+| `Jwt:Audience`                        | Token audience (matches the React client).   |
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
+- Microsoft SQL Server or SQL Server LocalDB
+- Visual Studio 2026 / JetBrains Rider / VS Code with C# tooling
+- Git
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/sazzadul1205/ProductAuction.git
+cd ProductAuction
+```
+
+### 2. Configure Secrets
+
+Do **not** commit credentials or the JWT signing key. From the API project directory:
+
+```bash
+cd ProductAuction.API
+dotnet user-secrets init
+
+dotnet user-secrets set "ConnectionStrings:DefaultConnection" "YOUR_SQL_SERVER_CONNECTION_STRING"
+dotnet user-secrets set "Jwt:Key" "YOUR_LONG_RANDOM_SECRET_KEY"
+dotnet user-secrets set "Jwt:Issuer" "ProductAuction.API"
+dotnet user-secrets set "Jwt:Audience" "ProductAuction.React"
+```
+
+### 3. Restore
+
+```bash
+dotnet restore
+```
+
+### 4. Apply Migrations
+
+```bash
+dotnet ef database update
+```
+
+If the EF CLI is missing:
+
+```bash
+dotnet tool install --global dotnet-ef
+```
+
+### 5. Run
+
+```bash
+dotnet run
+```
+
+OpenAPI/Swagger is enabled in the **Development** environment. The API listens according to your launch profile (e.g. `https://localhost:7285` or the configured HTTP port).
+
+---
+
+## Default Seeded Accounts
+
+On startup the API seeds:
+
+- **Roles**: `Admin`, `Super Admin`, `Seller`, `Buyer`.
+- **Admin accounts**: `admin@gmail.com`, `superadmin@gmail.com` (see `Data/Seeder/AdminAccountSeeder.cs` for the passwords configured at seed time).
+- **Platform account**: `platform-system-account` with a wallet (holds forfeited deposits and commission).
+
+> Change these credentials immediately in any non-local environment.
+
+---
 
 ## Project Structure
 
@@ -130,21 +556,21 @@ ProductAuction/
 │   │   ├── BuyerController.cs
 │   │   ├── CategoryController.cs
 │   │   ├── DisputeController.cs
+│   │   ├── HealthController.cs
 │   │   ├── ProductController.cs
 │   │   ├── ProfileController.cs
+│   │   ├── RoleController.cs
 │   │   ├── SaleController.cs
 │   │   ├── SellerController.cs
 │   │   └── WalletController.cs
 │   │
-│   ├── DTOs/
-│   ├── Data/
-│   │   └── Seeder/
-│   ├── Migrations/
-│   ├── Models/
-│   ├── Services/
-│   │   └── Background/
-│   ├── wwwroot/
-│   ├── Program.cs
+│   ├── DTOs/            # Request/response DTOs grouped by feature
+│   ├── Data/            # ApplicationDbContext + Seeder/
+│   ├── Migrations/      # EF Core migrations
+│   ├── Models/          # Entities + enums
+│   ├── Services/        # Image upload + Background/
+│   ├── wwwroot/uploads/ # Uploaded product/NID/receipt images
+│   ├── Program.cs       # Pipeline, DI, auth, CORS, rate limiter
 │   ├── appsettings.json
 │   └── ProductAuction.API.csproj
 │
@@ -152,147 +578,36 @@ ProductAuction/
 │   └── Test-Endpoints.ps1
 │
 ├── ProductAuction.slnx
+├── ReadMe
 └── WorkLog.md
 ```
 
-## API Controller Overview
-
-All controllers use the `/api/[controller]` route convention.
-
-| Controller | Main responsibilities                                                                   |
-| ---------- | --------------------------------------------------------------------------------------- |
-| Auth       | Registration, login, current user, profile update, password change                      |
-| Admin      | Dashboard, user management, auction administration, deposits, disputes, platform wallet |
-| Auction    | Public auction listing, details, configuration, cancellation                            |
-| Product    | Seller product management and admin approval                                            |
-| Category   | Category listing and administration                                                     |
-| Bid        | Bid placement, bid history, buyout                                                      |
-| Buyer      | Buyer dashboard, bids, won auctions                                                     |
-| Seller     | Seller dashboard                                                                        |
-| Profile    | Verification submission and admin verification                                          |
-| Wallet     | Wallet details, deposit requests, transactions, reservations                            |
-| Sale       | Sales listing, payment, dispatch, receipt confirmation, non-delivery reports            |
-| Dispute    | Dispute listing, submission, and resolution                                             |
-
-## Getting Started
-
-### Prerequisites
-
-Install the following:
-
-- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
-- Microsoft SQL Server or SQL Server LocalDB
-- Visual Studio 2026 or another compatible .NET IDE
-- Git
-
-### 1. Clone the Repository
-
-```bash
-git clone https://github.com/sazzadul1205/ProductAuction.git
-cd ProductAuction
-```
-
-### 2. Configure Application Secrets
-
-Do not commit database credentials or JWT signing keys.
-
-Initialize User Secrets from the API project directory:
-
-```bash
-cd ProductAuction.API
-dotnet user-secrets init
-```
-
-Configure the database connection string and JWT settings:
-
-```bash
-dotnet user-secrets set "ConnectionStrings:DefaultConnection" "YOUR_SQL_SERVER_CONNECTION_STRING"
-
-dotnet user-secrets set "Jwt:Key" "YOUR_LONG_RANDOM_SECRET_KEY"
-
-dotnet user-secrets set "Jwt:Issuer" "ProductAuction.API"
-
-dotnet user-secrets set "Jwt:Audience" "ProductAuction.React"
-```
-
-Use a newly generated, sufficiently long random JWT signing key. Never reuse a key that has been exposed in a public repository.
-
-### 3. Restore Dependencies
-
-```bash
-dotnet restore
-```
-
-### 4. Apply Database Migrations
-
-```bash
-dotnet ef database update
-```
-
-If the EF Core CLI tool is not installed:
-
-```bash
-dotnet tool install --global dotnet-ef
-```
-
-### 5. Run the API
-
-```bash
-dotnet run
-```
-
-The application uses the configured ASP.NET Core launch profile and exposes its API according to the selected environment and launch settings.
-
-## Authentication
-
-Most protected endpoints require a JWT access token.
-
-Include the token in the request header:
-
-```http
-Authorization: Bearer YOUR_ACCESS_TOKEN
-```
-
-Access is restricted according to the authenticated user's role where role-based authorization is configured.
-
-## Database
-
-The API uses Entity Framework Core with SQL Server.
-
-Database-related code is organized into:
-
-- `Models/` — Entity models.
-- `Data/` — Application database context and seeders.
-- `Migrations/` — Entity Framework Core migration history.
-
-The application seeds default roles, an administrator account, and a platform account during startup. Configure the required environment settings securely before running the application.
+---
 
 ## Testing
 
-A PowerShell endpoint testing script is available:
+A PowerShell smoke-test script is available:
 
 ```text
 Scripts/Test-Endpoints.ps1
 ```
 
-The backend work log records 48 passing smoke tests and a build with zero warnings and errors for the changes documented on 29 October 2026. These are historical recorded results, not a guarantee that the current checkout has been tested in every environment.
+The backend work log (`WorkLog.md`) records historical smoke-test and build results for specific changes. Treat those as historical records, not a guarantee for the current checkout.
+
+---
 
 ## Development Notes
 
-- API endpoints are organized into separate controllers.
-- DTOs are grouped by feature.
-- JWT authentication and role-based authorization protect restricted operations.
-- Background services handle scheduled auction and overdue-work processing.
-- Uploaded images are served through the application's static-file configuration.
+- Controllers are grouped by feature; DTOs are grouped by feature.
+- All responses use the standardized envelope (`status`, `message`, `data`, optional `pagination`/`errors`).
+- Uploaded images are served as static files under `/uploads/`.
+- Background services run on a 30-second poll; adjust intervals for faster/slower processing if needed.
+- Use `dotnet watch run` for iterative development.
+
+---
 
 ## Repository
 
 **GitHub:** https://github.com/sazzadul1205/ProductAuction
 
 **Project:** Bidora — Product Auction System
-
----
-
-## Re-Auction Feature
-
-Sellers can reset eligible products (NoWinner or PaymentOverdue settled) back to Draft for re-approval via `POST /api/auction/product/{id}/reset-for-reauction`. Previous auctions are preserved and viewable via `GET /api/auction/product/{id}`.
