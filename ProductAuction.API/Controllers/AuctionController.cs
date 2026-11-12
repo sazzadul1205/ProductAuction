@@ -152,42 +152,6 @@ namespace ProductAuction.API.Controllers
         }
 
 
-        // GET: api/auction/active
-        // Returns auctions that are currently running.
-        [HttpGet("active")]
-        public async Task<IActionResult> GetActiveAuctions()
-        {
-            var auctions = await _context.Auctions
-                .Where(a => a.Status == AuctionStatus.Active)
-                .OrderByDescending(a => a.EndTime)
-                .Select(a => new AuctionListDto
-                {
-                    Id = a.Id,
-                    ProductId = a.ProductId,
-                    ProductTitle = a.Product.Title,
-                    StartingPrice = a.Product.StartingPrice,
-                    BuyoutPrice = a.Product.BuyoutPrice,
-                    StartTime = a.StartTime,
-                    EndTime = a.EndTime,
-                    Status = a.Status.ToString(),
-                    CurrentHighestBid = a.CurrentHighestBid,
-                    BidCount = a.BidCount,
-                    MainImageUrl = _context.ProductImages
-                        .Where(i => i.ProductId == a.ProductId && i.IsMain)
-                        .Select(i => i.ImageUrl)
-                        .FirstOrDefault() ?? "",
-                    CategoryId = a.Product.CategoryId,
-                    CategoryName = a.Product.Category.Name
-                })
-                .ToListAsync();
-
-            return Ok(new
-            {
-                status = 200,
-                message = "Active auctions retrieved successfully.",
-                data = auctions
-            });
-        }
 
 
         // GET: api/auction/home
@@ -295,44 +259,6 @@ namespace ProductAuction.API.Controllers
             });
         }
         
-        public async Task<IActionResult> GetUpcomingAuctions()
-        {
-            var now = DateTime.UtcNow;
-
-            var auctions = await _context.Auctions
-                .Where(a =>
-                    a.Status == AuctionStatus.Upcoming &&
-                    a.StartTime.HasValue &&
-                    a.EndTime > now)
-                .OrderBy(a => a.StartTime)
-                .Select(a => new AuctionListDto
-                {
-                    Id = a.Id,
-                    ProductId = a.ProductId,
-                    ProductTitle = a.Product.Title,
-                    StartingPrice = a.Product.StartingPrice,
-                    BuyoutPrice = a.Product.BuyoutPrice,
-                    StartTime = a.StartTime,
-                    EndTime = a.EndTime,
-                    Status = a.Status.ToString(),
-                    CurrentHighestBid = a.CurrentHighestBid,
-                    BidCount = a.BidCount,
-                    MainImageUrl = _context.ProductImages
-                        .Where(i => i.ProductId == a.ProductId && i.IsMain)
-                        .Select(i => i.ImageUrl)
-                        .FirstOrDefault() ?? "",
-                    CategoryId = a.Product.CategoryId,
-                    CategoryName = a.Product.Category.Name
-                })
-                .ToListAsync();
-
-            return Ok(new
-            {
-                status = 200,
-                message = "Upcoming auctions retrieved successfully.",
-                data = auctions
-            });
-        }
 
         // GET: api/auction/{id}
         // Returns full auction details
@@ -849,41 +775,6 @@ namespace ProductAuction.API.Controllers
             });
         }
 
-        // GET: api/auction/product/{productId}
-        [HttpGet("product/{productId}")]
-        public async Task<IActionResult> GetAuctionsByProduct(int productId)
-        {
-            var auctions = await _context.Auctions
-                .Where(a => a.ProductId == productId)
-                .OrderByDescending(a => a.Id)
-                .Select(a => new AuctionListDto
-                {
-                    Id = a.Id,
-                    ProductId = a.ProductId,
-                    ProductTitle = a.Product.Title,
-                    StartingPrice = a.Product.StartingPrice,
-                    BuyoutPrice = a.Product.BuyoutPrice,
-                    StartTime = a.StartTime,
-                    EndTime = a.EndTime,
-                    Status = a.Status.ToString(),
-                    CurrentHighestBid = a.CurrentHighestBid,
-                    BidCount = a.BidCount,
-                    MainImageUrl = _context.ProductImages
-                        .Where(i => i.ProductId == a.ProductId && i.IsMain)
-                        .Select(i => i.ImageUrl)
-                        .FirstOrDefault() ?? "",
-                    CategoryId = a.Product.CategoryId,
-                    CategoryName = a.Product.Category.Name
-                })
-                .ToListAsync();
-
-            return Ok(new
-            {
-                status = 200,
-                message = "Auctions retrieved successfully.",
-                data = auctions
-            });
-        }
 
     }
 }

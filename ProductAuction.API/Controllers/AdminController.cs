@@ -811,40 +811,6 @@ namespace ProductAuction.API.Controllers
             return Ok(new { status = 200, message = "Deposit requests retrieved successfully.", data = items, pagination = new { page, pageSize, totalCount = total } });
         }
 
-        // GET: api/wallet/deposit-requests/pending (kept for compatibility)
-        [HttpGet("deposit-requests/pending")]
-        public async Task<IActionResult> GetPendingDepositRequests()
-        {
-            var requests = await _context.DepositRequests
-                .Where(d => d.Status == DepositRequestStatus.PendingVerification)
-                .OrderByDescending(d => d.CreatedAt)
-                .Select(d => new DepositRequestResponseDto
-                {
-                    Id = d.Id,
-                    WalletId = d.WalletId,
-                    UserId = _context.Wallets.Where(w => w.Id == d.WalletId).Select(w => w.UserId).FirstOrDefault(),
-                    UserName = _context.Wallets.Where(w => w.Id == d.WalletId)
-                        .Join(_context.UserProfiles, w => w.UserId, p => p.UserId, (w, p) => p.FullName).FirstOrDefault(),
-                    UserEmail = _context.Wallets.Where(w => w.Id == d.WalletId)
-                        .Join(_context.Users, w => w.UserId, u => u.Id, (w, u) => u.Email).FirstOrDefault(),
-                    Method = d.Method,
-                    Amount = d.Amount,
-                    TransactionReference = d.TransactionReference,
-                    ReceiptImageUrl = d.ReceiptImageUrl,
-                    Status = d.Status.ToString(),
-                    RejectionReason = d.RejectionReason,
-                    CreatedAt = d.CreatedAt,
-                    ReviewedAt = d.ReviewedAt
-                })
-                .ToListAsync();
-
-            return Ok(new
-            {
-                status = 200,
-                message = "Pending deposit requests retrieved successfully.",
-                data = requests
-            });
-        }
 
 
         // PUT: api/wallet/deposit-requests/{id}/review
