@@ -200,7 +200,8 @@ namespace ProductAuction.API.Controllers
                 message = "Login successful.",
                 email = user.Email,
                 roles,
-                token = tokenString
+                token = tokenString,
+                expiresInMinutes = 120
             });
         }
 
