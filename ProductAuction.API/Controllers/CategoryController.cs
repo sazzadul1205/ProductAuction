@@ -56,9 +56,12 @@ namespace ProductAuction.API.Controllers
                 status = 200,
                 message = "Categories retrieved successfully.",
                 data = categories,
-                page,
-                pageSize,
-                totalCount
+                pagination = new
+                {
+                    page,
+                    pageSize,
+                    totalCount
+                }
             });
         }
 
@@ -100,7 +103,7 @@ namespace ProductAuction.API.Controllers
 
             return Ok(new
             {
-                status = 201,
+                status = 200,
                 message = "Category created successfully.",
                 data = new { category.Id, category.Name, ProductCount = 0 }
             });

@@ -150,9 +150,7 @@ namespace ProductAuction.API.Controllers
                 status = 200,
                 message = "Products retrieved successfully.",
                 data = products,
-                page,
-                pageSize,
-                totalCount
+                pagination = new { page, pageSize, totalCount }
             });
         }
 
@@ -167,7 +165,11 @@ namespace ProductAuction.API.Controllers
 
             if (userId == null)
             {
-                return Unauthorized();
+                return Unauthorized(new
+                {
+                    status = 401,
+                    message = "User identity was not found in the token."
+                });
             }
 
             var product = await _context.Products
@@ -227,7 +229,7 @@ namespace ProductAuction.API.Controllers
 
 
         // POST: api/product
-        // Creates a new product as a Draft — no wallet reservation yet.
+        // Creates a new product as a Draft ï¿½ no wallet reservation yet.
         [HttpPost]
         [Authorize(Roles = "Seller")]
         public async Task<IActionResult> CreateProduct([FromForm] CreateProductDto dto)
@@ -354,7 +356,11 @@ namespace ProductAuction.API.Controllers
             // only the seller who owns it can edit
             if (product.SellerId != userId)
             {
-                return Forbid();
+                return StatusCode(403, new
+                {
+                    status = 403,
+                    message = "You are not authorized to update this product."
+                });
             }
 
             if (product.ApprovalStatus != ProductApprovalStatus.Draft && product.ApprovalStatus != ProductApprovalStatus.Rejected)
@@ -527,7 +533,11 @@ namespace ProductAuction.API.Controllers
             // only the owner can submit
             if (product.SellerId != userId)
             {
-                return Forbid();
+                return StatusCode(403, new
+                {
+                    status = 403,
+                    message = "You are not authorized to submit this product."
+                });
             }
 
             // only drafts can be submitted
@@ -562,8 +572,7 @@ namespace ProductAuction.API.Controllers
                 {
                     status = 400,
                     message = "Insufficient available wallet balance.",
-                    requiredAmount = reservationAmount,
-                    availableBalance
+                    data = new { requiredAmount = reservationAmount, availableBalance }
                 });
             }
 
@@ -626,7 +635,11 @@ namespace ProductAuction.API.Controllers
             // only the owner can withdraw
             if (product.SellerId != userId)
             {
-                return Forbid();
+                return StatusCode(403, new
+                {
+                    status = 403,
+                    message = "You are not authorized to withdraw this product."
+                });
             }
 
             // can only withdraw while still waiting for review
@@ -713,7 +726,11 @@ namespace ProductAuction.API.Controllers
             // only the seller who owns it can delete
             if (product.SellerId != userId)
             {
-                return Forbid();
+                return StatusCode(403, new
+                {
+                    status = 403,
+                    message = "You are not authorized to delete this product."
+                });
             }
 
 
@@ -806,9 +823,7 @@ namespace ProductAuction.API.Controllers
                 status = 200,
                 message = "Pending approval products retrieved successfully.",
                 data = products,
-                page,
-                pageSize,
-                totalCount
+                pagination = new { page, pageSize, totalCount }
             });
         }
 

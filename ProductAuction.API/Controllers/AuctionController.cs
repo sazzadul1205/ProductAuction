@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ProductAuction.API.Data;
@@ -141,9 +141,9 @@ namespace ProductAuction.API.Controllers
             {
                 status = 200,
                 message = "Auctions retrieved successfully.",
-                data = new
+                data = auctions,
+                pagination = new
                 {
-                    items = auctions,
                     page,
                     pageSize,
                     totalCount
@@ -572,7 +572,11 @@ namespace ProductAuction.API.Controllers
 
             if (!isSeller && !isAdmin)
             {
-                return Forbid();
+                return StatusCode(403, new
+                {
+                    status = 403,
+                    message = "Forbidden."
+                });
             }
 
             if (auction.Status != AuctionStatus.Upcoming && auction.Status != AuctionStatus.Active)

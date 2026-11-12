@@ -37,10 +37,13 @@ namespace ProductAuction.API.Controllers
             return Ok(new
             {
                 status = 200,
-                healthy,
-                database = dbOk ? "up" : "down",
-                serverTime = DateTime.UtcNow,
-                message = healthy ? "OK" : "Degraded"
+                message = healthy ? "OK" : "Degraded",
+                data = new
+                {
+                    healthy,
+                    database = dbOk ? "up" : "down",
+                    serverTime = DateTime.UtcNow
+                }
             });
         }
     }

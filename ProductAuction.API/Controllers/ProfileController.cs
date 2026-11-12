@@ -81,7 +81,7 @@ namespace ProductAuction.API.Controllers
 
 
         // GET: api/profile/pending-verification
-        // Admin view — profiles waiting for review.
+        // Admin view ï¿½ profiles waiting for review.
         [HttpGet("pending-verification")]
         [Authorize(Roles = "Admin,Super Admin")]
         public async Task<IActionResult> GetPendingVerificationProfiles()

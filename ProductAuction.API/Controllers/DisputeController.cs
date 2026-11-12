@@ -203,12 +203,18 @@ namespace ProductAuction.API.Controllers
                 status = 200,
                 message = "Disputes retrieved successfully.",
                 data = result,
-                page,
-                pageSize,
-                totalCount,
-                openCount,
-                underReviewCount,
-                resolvedCount
+                pagination = new
+                {
+                    page,
+                    pageSize,
+                    totalCount
+                },
+                summary = new
+                {
+                    openCount,
+                    underReviewCount,
+                    resolvedCount
+                }
             });
         }
 
@@ -249,7 +255,11 @@ namespace ProductAuction.API.Controllers
             // only the buyer or seller involved can dispute it
             if (sale.BuyerId != userId && sale.SellerId != userId)
             {
-                return Forbid();
+                return StatusCode(403, new
+                {
+                    status = 403,
+                    message = "Only the buyer or seller involved can dispute this sale."
+                });
             }
             if (sale.Status == SaleStatus.AwaitingPayment)
             {

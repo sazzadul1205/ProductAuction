@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -219,9 +219,9 @@ namespace ProductAuction.API.Controllers
             {
                 status = 200,
                 message = "Deposit requests retrieved successfully.",
-                data = new
+                data = requests,
+                pagination = new
                 {
-                    items = requests,
                     page,
                     pageSize,
                     totalCount
@@ -303,9 +303,9 @@ namespace ProductAuction.API.Controllers
             {
                 status = 200,
                 message = "Wallet transactions retrieved successfully.",
-                data = new
+                data = transactions,
+                pagination = new
                 {
-                    items = transactions,
                     page,
                     pageSize,
                     totalCount
@@ -398,9 +398,9 @@ namespace ProductAuction.API.Controllers
             {
                 status = 200,
                 message = "Wallet reservations retrieved successfully.",
-                data = new
+                data = reservations,
+                pagination = new
                 {
-                    items = reservations,
                     page,
                     pageSize,
                     totalCount

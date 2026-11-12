@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -79,7 +79,7 @@ namespace ProductAuction.API.Controllers
                 {
                     status = 400,
                     message = "Registration failed.",
-                    errors = result.Errors
+                    errors = result.Errors.Select(e => e.Description)
                 });
             }
 
@@ -91,7 +91,7 @@ namespace ProductAuction.API.Controllers
                 {
                     status = 400,
                     message = "Role assignment failed.",
-                    errors = roleResult.Errors
+                    errors = roleResult.Errors.Select(e => e.Description)
                 });
             }
 
@@ -118,8 +118,11 @@ namespace ProductAuction.API.Controllers
             {
                 status = 200,
                 message = "Registration successful.",
-                email = user.Email,
-                role = dto.Role
+                data = new
+                {
+                    email = user.Email,
+                    role = dto.Role
+                }
             });
         }
 
@@ -198,10 +201,13 @@ namespace ProductAuction.API.Controllers
             {
                 status = 200,
                 message = "Login successful.",
-                email = user.Email,
-                roles,
-                token = tokenString,
-                expiresInMinutes = 120
+                data = new
+                {
+                    email = user.Email,
+                    roles,
+                    token = tokenString,
+                    expiresInMinutes = 120
+                }
             });
         }
 
@@ -216,9 +222,12 @@ namespace ProductAuction.API.Controllers
             {
                 status = 200,
                 message = "JWT authentication successful.",
-                userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value,
-                email = User.FindFirst(ClaimTypes.Email)?.Value,
-                role = User.FindFirst(ClaimTypes.Role)?.Value
+                data = new
+                {
+                    userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value,
+                    email = User.FindFirst(ClaimTypes.Email)?.Value,
+                    role = User.FindFirst(ClaimTypes.Role)?.Value
+                }
             });
         }
 
@@ -260,28 +269,31 @@ namespace ProductAuction.API.Controllers
                 status = 200,
                 message = "Current user retrieved successfully.",
 
-                account = new
+                data = new
                 {
-                    userId = user.Id,
-                    email = user.Email,
-                    emailConfirmed = user.EmailConfirmed,
-                    phoneNumber = user.PhoneNumber,
-                    roles
-                },
+                    account = new
+                    {
+                        userId = user.Id,
+                        email = user.Email,
+                        emailConfirmed = user.EmailConfirmed,
+                        phoneNumber = user.PhoneNumber,
+                        roles
+                    },
 
-                profile = new
-                {
-                    fullName = profile?.FullName,
-                    profilePhotoUrl = profile?.ProfilePhotoUrl,
-                    address = profile?.Address,
-                    city = profile?.City,
-                    nationalIdNumber = profile?.NationalIdNumber,
-                    nationalIdFrontImageUrl = profile?.NationalIdFrontImageUrl,
-                    nationalIdBackImageUrl = profile?.NationalIdBackImageUrl,
-                    verificationStatus = profile?.VerificationStatus,
-                    rejectionReason = profile?.RejectionReason,
-                    createdAt = profile?.CreatedAt,
-                    updatedAt = profile?.UpdatedAt
+                    profile = new
+                    {
+                        fullName = profile?.FullName,
+                        profilePhotoUrl = profile?.ProfilePhotoUrl,
+                        address = profile?.Address,
+                        city = profile?.City,
+                        nationalIdNumber = profile?.NationalIdNumber,
+                        nationalIdFrontImageUrl = profile?.NationalIdFrontImageUrl,
+                        nationalIdBackImageUrl = profile?.NationalIdBackImageUrl,
+                        verificationStatus = profile?.VerificationStatus,
+                        rejectionReason = profile?.RejectionReason,
+                        createdAt = profile?.CreatedAt,
+                        updatedAt = profile?.UpdatedAt
+                    }
                 }
             });
         }
@@ -297,7 +309,11 @@ namespace ProductAuction.API.Controllers
 
             if (string.IsNullOrEmpty(userId))
             {
-                return Unauthorized();
+                return Unauthorized(new
+                {
+                    status = 401,
+                    message = "User identity was not found."
+                });
             }
 
             var profile = await _context.UserProfiles.FirstOrDefaultAsync(p => p.UserId == userId);
@@ -306,6 +322,7 @@ namespace ProductAuction.API.Controllers
             {
                 return NotFound(new
                 {
+                    status = 404,
                     message = "User profile not found."
                 });
             }
@@ -348,6 +365,7 @@ namespace ProductAuction.API.Controllers
                     {
                         return BadRequest(new
                         {
+                            status = 400,
                             message = "Failed to update phone number."
                         });
                     }

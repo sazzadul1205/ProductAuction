@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -60,6 +60,7 @@ namespace ProductAuction.API.Controllers
             return Ok(new
             {
                 status = 200,
+                message = "Dashboard data retrieved successfully.",
                 data = new
                 {
                     totalUsers,
@@ -495,12 +496,12 @@ namespace ProductAuction.API.Controllers
             {
                 status = 200,
                 message = "Users retrieved successfully.",
-                data = new
+                data = userList,
+                pagination = new
                 {
-                    items = userList,
                     page,
                     pageSize,
-                    totalCount,
+                    totalCount
                 }
             });
         }
@@ -717,9 +718,9 @@ namespace ProductAuction.API.Controllers
             {
                 status = 200,
                 message = "All auctions retrieved successfully.",
-                data = new
+                data = auctions,
+                pagination = new
                 {
-                    items = auctions,
                     page,
                     pageSize,
                     totalCount
@@ -807,7 +808,7 @@ namespace ProductAuction.API.Controllers
                 })
                 .ToListAsync();
 
-            return Ok(new { status = 200, message = "Deposit requests retrieved successfully.", data = items, pagination = new { page, pageSize, totalCount = total, totalPages = (int)Math.Ceiling(total / (double)pageSize) } });
+            return Ok(new { status = 200, message = "Deposit requests retrieved successfully.", data = items, pagination = new { page, pageSize, totalCount = total } });
         }
 
         // GET: api/wallet/deposit-requests/pending (kept for compatibility)
@@ -1068,14 +1069,17 @@ namespace ProductAuction.API.Controllers
                 data = new
                 {
                     items = transactions,
-                    page,
-                    pageSize,
-                    totalCount,
                     totalVolume,
                     totalEscrow,
                     totalBuyerDeposits,
                     totalSellerDeposits,
                     totalActiveReservations
+                },
+                pagination = new
+                {
+                    page,
+                    pageSize,
+                    totalCount
                 }
             });
         }
@@ -1157,9 +1161,12 @@ namespace ProductAuction.API.Controllers
                 status = 200,
                 message = "Reservations retrieved successfully.",
                 data = reservations,
-                page,
-                pageSize,
-                totalCount
+                pagination = new
+                {
+                    page,
+                    pageSize,
+                    totalCount
+                }
             });
         }
 
@@ -1291,9 +1298,12 @@ namespace ProductAuction.API.Controllers
                     transactions = new
                     {
                         items = transactions,
-                        page,
-                        pageSize,
-                        totalCount
+                        pagination = new
+                        {
+                            page,
+                            pageSize,
+                            totalCount
+                        }
                     }
                 }
             });

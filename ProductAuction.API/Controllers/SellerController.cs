@@ -30,7 +30,7 @@ namespace ProductAuction.API.Controllers
 
             if (string.IsNullOrEmpty(userId))
             {
-                return Unauthorized();
+                return Unauthorized(new { status = 401, message = "Unauthorized" });
             }
 
             var products = await _context.Products
@@ -65,6 +65,7 @@ namespace ProductAuction.API.Controllers
             return Ok(new
             {
                 status = 200,
+                message = "Dashboard retrieved successfully",
                 data = new
                 {
                     totalProducts,

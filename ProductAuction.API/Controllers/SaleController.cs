@@ -165,13 +165,16 @@ namespace ProductAuction.API.Controllers
                 data = new
                 {
                     items = sales,
-                    page,
-                    pageSize,
-                    totalCount,
                     totalSalesCount,
                     awaitingPaymentCount,
                     activeDeliveriesCount,
                     completedCount
+                },
+                pagination = new
+                {
+                    page,
+                    pageSize,
+                    totalCount
                 }
             });
         }
@@ -319,12 +322,15 @@ namespace ProductAuction.API.Controllers
                 data = new
                 {
                     items = sales,
-                    page,
-                    pageSize,
-                    totalCount,
                     totalSalesCount,
                     awaitingDispatchCount,
                     totalRevenue
+                },
+                pagination = new
+                {
+                    page,
+                    pageSize,
+                    totalCount
                 }
             });
         }

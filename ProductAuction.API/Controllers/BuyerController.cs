@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ProductAuction.API.Data;
@@ -31,7 +31,7 @@ namespace ProductAuction.API.Controllers
 
             if (string.IsNullOrEmpty(userId))
             {
-                return Unauthorized();
+                return Unauthorized(new { status = 401, message = "Please log in first." });
             }
 
             // grab all of this user's bids along with their auctions
@@ -71,6 +71,7 @@ namespace ProductAuction.API.Controllers
             return Ok(new
             {
                 status = 200,
+                message = "Dashboard retrieved successfully.",
                 data = new
                 {
                     activeBids,
@@ -188,15 +189,12 @@ namespace ProductAuction.API.Controllers
             {
                 status = 200,
                 message = "Your bids were retrieved successfully.",
-                data = new
+                data = bids,
+                pagination = new
                 {
-                    items = bids,
                     page,
                     pageSize,
-                    totalCount,
-                    totalBidsCount,
-                    activeBidsCount,
-                    highestBidsCount
+                    totalCount
                 }
             });
         }
@@ -409,15 +407,12 @@ namespace ProductAuction.API.Controllers
             {
                 status = 200,
                 message = "Won auctions retrieved successfully.",
-                data = new
+                data = auctions,
+                pagination = new
                 {
-                    items = auctions,
                     page,
                     pageSize,
-                    totalCount,
-                    totalWon,
-                    pendingPaymentCount,
-                    totalSpent
+                    totalCount
                 }
             });
         }
