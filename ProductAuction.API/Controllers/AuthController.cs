@@ -261,7 +261,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            var profile = await _context.UserProfiles.FirstOrDefaultAsync(p => p.UserId == user.Id);
+            var profile = await _context.UserProfiles.AsNoTracking().FirstOrDefaultAsync(p => p.UserId == user.Id);
             var roles = await _userManager.GetRolesAsync(user);
 
             return Ok(new

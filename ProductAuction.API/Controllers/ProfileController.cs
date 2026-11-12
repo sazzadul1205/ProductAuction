@@ -89,6 +89,7 @@ namespace ProductAuction.API.Controllers
             var profiles = await _context.UserProfiles
                 .Where(p => p.VerificationStatus == VerificationStatus.PendingReview)
                 .OrderByDescending(p => p.CreatedAt)
+                .AsNoTracking()
                 .Select(p => new ProfileVerificationResponseDto
                 {
                     Id = p.Id,
@@ -98,6 +99,7 @@ namespace ProductAuction.API.Controllers
                     Address = p.Address,
                     PhoneNumber = _context.Users
                         .Where(u => u.Id == p.UserId)
+                        .AsNoTracking()
                         .Select(u => u.PhoneNumber)
                         .FirstOrDefault(),
 
@@ -107,6 +109,7 @@ namespace ProductAuction.API.Controllers
                             ur => ur.RoleId,
                             r => r.Id,
                             (ur, r) => r.Name)
+                        .AsNoTracking()
                         .FirstOrDefault(),
 
                     NationalIdNumber = p.NationalIdNumber,

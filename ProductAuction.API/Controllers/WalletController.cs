@@ -49,7 +49,7 @@ namespace ProductAuction.API.Controllers
             }
 
             // find the wallet linked to this user
-            var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == userId);
+            var wallet = await _context.Wallets.AsNoTracking().FirstOrDefaultAsync(w => w.UserId == userId);
 
             if (wallet == null)
             {
@@ -159,7 +159,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == userId);
+            var wallet = await _context.Wallets.AsNoTracking().FirstOrDefaultAsync(w => w.UserId == userId);
 
             if (wallet == null)
             {
@@ -177,6 +177,7 @@ namespace ProductAuction.API.Controllers
 
             var requestsQuery = _context.DepositRequests
                 .Where(d => d.WalletId == wallet.Id)
+                .AsNoTracking()
                 .AsQueryable();
 
             if (!string.IsNullOrWhiteSpace(filter) && filter != "All"
@@ -246,7 +247,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == userId);
+            var wallet = await _context.Wallets.AsNoTracking().FirstOrDefaultAsync(w => w.UserId == userId);
 
             if (wallet == null)
             {
@@ -264,6 +265,7 @@ namespace ProductAuction.API.Controllers
 
             var txQuery = _context.WalletTransactions
                 .Where(t => t.WalletId == wallet.Id)
+                .AsNoTracking()
                 .AsQueryable();
 
             if (!string.IsNullOrWhiteSpace(filter) && filter != "All"
@@ -330,7 +332,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == userId);
+            var wallet = await _context.Wallets.AsNoTracking().FirstOrDefaultAsync(w => w.UserId == userId);
 
             if (wallet == null)
             {
@@ -348,6 +350,7 @@ namespace ProductAuction.API.Controllers
 
             var reservationsQuery = _context.WalletReservations
                 .Where(r => r.WalletId == wallet.Id)
+                .AsNoTracking()
                 .AsQueryable();
 
             if (!string.IsNullOrWhiteSpace(filter) && filter != "All"
@@ -362,6 +365,7 @@ namespace ProductAuction.API.Controllers
 
                 var matchingProductIds = await _context.Products
                     .Where(p => p.Title.Contains(term))
+                    .AsNoTracking()
                     .Select(p => p.Id)
                     .ToListAsync();
 
@@ -383,6 +387,7 @@ namespace ProductAuction.API.Controllers
 
                     ProductTitle = _context.Products
                         .Where(p => p.Id == r.ProductId)
+                        .AsNoTracking()
                         .Select(p => p.Title)
                         .FirstOrDefault(),
 

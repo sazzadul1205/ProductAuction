@@ -35,6 +35,7 @@ namespace ProductAuction.API.Controllers
 
             var products = await _context.Products
                 .Where(p => p.SellerId == userId)
+                .AsNoTracking()
                 .ToListAsync();
 
             var totalProducts = products.Count;
@@ -44,11 +45,13 @@ namespace ProductAuction.API.Controllers
 
             // auction stats
             var activeAuctions = await _context.Auctions
+                .AsNoTracking()
                 .CountAsync(a => a.SellerId == userId && a.Status == AuctionStatus.Active);
 
             // sales & earnings
             var sales = await _context.Sales
                 .Where(s => s.SellerId == userId)
+                .AsNoTracking()
                 .ToListAsync();
 
             var soldCount = sales.Count(s => s.Status == SaleStatus.Completed);
@@ -58,7 +61,9 @@ namespace ProductAuction.API.Controllers
                 .Sum(s => s.SellerProceeds);
 
             // wallet stats
-            var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == userId);
+            var wallet = await _context.Wallets
+                .AsNoTracking()
+                .FirstOrDefaultAsync(w => w.UserId == userId);
 
             var availableBalance = wallet != null ? (wallet.Balance - wallet.ReservedBalance) : 0;
 

@@ -230,7 +230,7 @@ namespace ProductAuction.API.Controllers
         public async Task<IActionResult> GetAuctionBidHistory(int auctionId)
         {
             // make sure the auction exists
-            var auction = await _context.Auctions.FirstOrDefaultAsync(a => a.Id == auctionId);
+            var auction = await _context.Auctions.AsNoTracking().FirstOrDefaultAsync(a => a.Id == auctionId);
 
             if (auction == null)
             {
@@ -244,12 +244,14 @@ namespace ProductAuction.API.Controllers
             var bids = await _context.Bids
                 .Where(b => b.AuctionId == auctionId)
                 .OrderByDescending(b => b.PlacedAt)
+                .AsNoTracking()
                 .Select(b => new BidHistoryDto
                 {
                     BidderId = b.BidderId,
                     BidderName = _context.UserProfiles
                         .Where(p => p.UserId == b.BidderId)
                         .Select(p => p.FullName)
+                        .AsNoTracking()
                         .FirstOrDefault() ?? "Unknown User",
 
                     Amount = b.Amount,
@@ -274,6 +276,7 @@ namespace ProductAuction.API.Controllers
         {
             var auction = await _context.Auctions
                 .Include(a => a.Product)
+                .AsNoTracking()
                 .FirstOrDefaultAsync(a => a.Id == auctionId);
 
             if (auction == null)
@@ -288,6 +291,7 @@ namespace ProductAuction.API.Controllers
             var bids = await _context.Bids
                 .Where(b => b.AuctionId == auctionId)
                 .OrderByDescending(b => b.PlacedAt)
+                .AsNoTracking()
                 .Select(b => new
                 {
                     bidId = b.Id,
@@ -297,12 +301,14 @@ namespace ProductAuction.API.Controllers
                     bidderEmail = _context.Users
                         .Where(u => u.Id == b.BidderId)
                         .Select(u => u.Email)
+                        .AsNoTracking()
                         .FirstOrDefault() ?? "",
 
                     // bidder name from their profile
                     bidderName = _context.UserProfiles
                         .Where(p => p.UserId == b.BidderId)
                         .Select(p => p.FullName)
+                        .AsNoTracking()
                         .FirstOrDefault() ?? "Unknown User",
 
                     amount = b.Amount,

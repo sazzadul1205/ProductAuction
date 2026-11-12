@@ -44,7 +44,7 @@ namespace ProductAuction.API.Controllers
             var filter = query.Filter;
             var deliveryStatus = query.DeliveryStatus;
 
-            var salesQuery = _context.Sales.AsQueryable();
+            var salesQuery = _context.Sales.AsNoTracking().AsQueryable();
 
             if (!string.IsNullOrWhiteSpace(filter) && filter != "All")
             {
@@ -86,11 +86,13 @@ namespace ProductAuction.API.Controllers
 
                 var matchingProductIds = await _context.Products
                     .Where(p => p.Title.Contains(term))
+                    .AsNoTracking()
                     .Select(p => p.Id)
                     .ToListAsync();
 
                 var matchingUserIds = await _context.UserProfiles
                     .Where(p => p.FullName.Contains(term))
+                    .AsNoTracking()
                     .Select(p => p.UserId)
                     .ToListAsync();
 
@@ -104,12 +106,12 @@ namespace ProductAuction.API.Controllers
 
             var totalCount = await salesQuery.CountAsync();
 
-            var totalSalesCount = await _context.Sales.CountAsync();
-            var awaitingPaymentCount = await _context.Sales.CountAsync(s =>
+            var totalSalesCount = await _context.Sales.AsNoTracking().CountAsync();
+            var awaitingPaymentCount = await _context.Sales.AsNoTracking().CountAsync(s =>
                 s.Status == SaleStatus.AwaitingPayment || s.Status == SaleStatus.PaymentOverdue);
-            var activeDeliveriesCount = await _context.Sales.CountAsync(s =>
+            var activeDeliveriesCount = await _context.Sales.AsNoTracking().CountAsync(s =>
                 s.Status == SaleStatus.Paid || s.Status == SaleStatus.Dispatched);
-            var completedCount = await _context.Sales.CountAsync(s =>
+            var completedCount = await _context.Sales.AsNoTracking().CountAsync(s =>
                 s.Status == SaleStatus.Completed);
 
             var sales = await salesQuery
@@ -203,6 +205,7 @@ namespace ProductAuction.API.Controllers
 
             var salesQuery = _context.Sales
                 .Where(s => s.BuyerId == userId || s.SellerId == userId)
+                .AsNoTracking()
                 .AsQueryable();
 
             if (!string.IsNullOrWhiteSpace(filter) && filter != "All")
@@ -239,6 +242,7 @@ namespace ProductAuction.API.Controllers
 
                 var matchingProductIds = await _context.Products
                     .Where(p => p.Title.Contains(term))
+                    .AsNoTracking()
                     .Select(p => p.Id)
                     .ToListAsync();
 
@@ -249,11 +253,12 @@ namespace ProductAuction.API.Controllers
 
             var totalCount = await salesQuery.CountAsync();
 
-            var totalSalesCount = await _context.Sales.CountAsync(s => s.BuyerId == userId || s.SellerId == userId);
-            var awaitingDispatchCount = await _context.Sales.CountAsync(s => (s.BuyerId == userId || s.SellerId == userId) && s.Status == SaleStatus.Paid);
+            var totalSalesCount = await _context.Sales.AsNoTracking().CountAsync(s => s.BuyerId == userId || s.SellerId == userId);
+            var awaitingDispatchCount = await _context.Sales.AsNoTracking().CountAsync(s => (s.BuyerId == userId || s.SellerId == userId) && s.Status == SaleStatus.Paid);
             var totalRevenue = await _context.Sales
                 .Where(s => (s.BuyerId == userId || s.SellerId == userId)
                     && (s.Status == SaleStatus.Completed || s.Status == SaleStatus.Dispatched || s.Status == SaleStatus.Paid))
+                .AsNoTracking()
                 .SumAsync(s => s.SellerProceeds);
 
             var sales = await salesQuery

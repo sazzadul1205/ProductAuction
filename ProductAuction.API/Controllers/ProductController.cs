@@ -56,7 +56,8 @@ namespace ProductAuction.API.Controllers
 
             var productsQuery = _context.Products
                 .Where(p => p.SellerId == userId)
-                .AsQueryable();
+                .AsQueryable()
+                .AsNoTracking();
 
             if (!string.IsNullOrWhiteSpace(approvalStatus) && approvalStatus != "All"
                 && Enum.TryParse<ProductApprovalStatus>(approvalStatus, ignoreCase: true, out var parsedApproval))
@@ -104,6 +105,7 @@ namespace ProductAuction.API.Controllers
 
                     MainImageUrl = _context.ProductImages
                         .Where(i => i.ProductId == p.Id && i.IsMain)
+                        .AsNoTracking()
                         .Select(i => i.ImageUrl)
                         .FirstOrDefault(),
 
@@ -111,36 +113,43 @@ namespace ProductAuction.API.Controllers
 
                     AuctionStatus = _context.Auctions
                         .Where(a => a.ProductId == p.Id)
+                        .AsNoTracking()
                         .Select(a => a.Status.ToString())
                         .FirstOrDefault(),
 
                     AuctionStartTime = _context.Auctions
                         .Where(a => a.ProductId == p.Id)
+                        .AsNoTracking()
                         .Select(a => a.StartTime)
                         .FirstOrDefault(),
 
                     AuctionEndTime = _context.Auctions
                         .Where(a => a.ProductId == p.Id)
+                        .AsNoTracking()
                         .Select(a => a.EndTime)
                         .FirstOrDefault(),
 
                     AuctionId = _context.Auctions
                         .Where(a => a.ProductId == p.Id)
+                        .AsNoTracking()
                         .Select(a => a.Id)
                         .FirstOrDefault(),
 
                     AuctionBidCount = _context.Auctions
                         .Where(a => a.ProductId == p.Id)
+                        .AsNoTracking()
                         .Select(a => a.BidCount)
                         .FirstOrDefault(),
 
                     AuctionCurrentHighestBid = _context.Auctions
                         .Where(a => a.ProductId == p.Id)
+                        .AsNoTracking()
                         .Select(a => a.CurrentHighestBid)
                         .FirstOrDefault(),
 
                     AuctionCancellationReason = _context.Auctions
                         .Where(a => a.ProductId == p.Id)
+                        .AsNoTracking()
                         .Select(a => a.CancellationReason)
                         .FirstOrDefault()
                 }).ToListAsync();
@@ -174,6 +183,7 @@ namespace ProductAuction.API.Controllers
 
             var product = await _context.Products
                 .Where(p => p.Id == id && p.SellerId == userId)
+                .AsNoTracking()
                 .Select(p => new ProductResponseDto
                 {
                     Id = p.Id,
@@ -200,6 +210,7 @@ namespace ProductAuction.API.Controllers
                     // all images for this product
                     Images = _context.ProductImages
                         .Where(i => i.ProductId == p.Id)
+                        .AsNoTracking()
                         .Select(i => new ProductImageResponseDto
                         {
                             Id = i.Id,
@@ -779,7 +790,8 @@ namespace ProductAuction.API.Controllers
 
             var productsQuery = _context.Products
                 .Where(p => p.ApprovalStatus == ProductApprovalStatus.PendingApproval)
-                .AsQueryable();
+                .AsQueryable()
+                .AsNoTracking();
 
             if (!string.IsNullOrWhiteSpace(search))
             {
@@ -811,6 +823,7 @@ namespace ProductAuction.API.Controllers
 
                     MainImageUrl = _context.ProductImages
                         .Where(i => i.ProductId == p.Id && i.IsMain)
+                        .AsNoTracking()
                         .Select(i => i.ImageUrl)
                         .FirstOrDefault(),
 
@@ -836,6 +849,7 @@ namespace ProductAuction.API.Controllers
         {
             var product = await _context.Products
                 .Where(p => p.Id == id && p.ApprovalStatus == ProductApprovalStatus.PendingApproval)
+                .AsNoTracking()
                 .Select(p => new ProductResponseDto
                 {
                     Id = p.Id,
@@ -859,6 +873,7 @@ namespace ProductAuction.API.Controllers
                     CreatedAt = p.CreatedAt,
                     Images = _context.ProductImages
                         .Where(i => i.ProductId == p.Id)
+                        .AsNoTracking()
                         .Select(i => new ProductImageResponseDto
                         {
                             Id = i.Id,

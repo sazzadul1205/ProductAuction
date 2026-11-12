@@ -38,6 +38,7 @@ namespace ProductAuction.API.Controllers
             var bids = await _context.Bids
                 .Where(b => b.BidderId == userId)
                 .Include(b => b.Auction)
+                .AsNoTracking()
                 .ToListAsync();
 
             // count active ones, and how many the user is currently winning
@@ -50,6 +51,7 @@ namespace ProductAuction.API.Controllers
             //  sales & won auctions
             var sales = await _context.Sales
                 .Where(s => s.BuyerId == userId)
+                .AsNoTracking()
                 .ToListAsync();
 
             var wonCount = sales.Count;
@@ -63,7 +65,9 @@ namespace ProductAuction.API.Controllers
                 .Sum(s => s.FinalAmount);
 
             //  wallet stats
-            var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == userId);
+            var wallet = await _context.Wallets
+                .AsNoTracking()
+                .FirstOrDefaultAsync(w => w.UserId == userId);
 
             var availableBalance = wallet != null ? (wallet.Balance - wallet.ReservedBalance) : 0;
             var reservedBalance = wallet?.ReservedBalance ?? 0;
@@ -142,6 +146,7 @@ namespace ProductAuction.API.Controllers
 
                 var matchingProductIds = await _context.Products
                     .Where(p => p.Title.Contains(term))
+                    .AsNoTracking()
                     .Select(p => p.Id)
                     .ToListAsync();
 
@@ -150,12 +155,18 @@ namespace ProductAuction.API.Controllers
 
             bidsQuery = bidsQuery.OrderByDescending(b => b.PlacedAt);
 
-            var totalCount = await bidsQuery.CountAsync();
+            var totalCount = await bidsQuery.AsNoTracking().CountAsync();
 
-            var totalBidsCount = await _context.Bids.CountAsync(b => b.BidderId == buyerId);
-            var activeBidsCount = await _context.Bids.CountAsync(b =>
+            var totalBidsCount = await _context.Bids
+                .AsNoTracking()
+                .CountAsync(b => b.BidderId == buyerId);
+            var activeBidsCount = await _context.Bids
+                .AsNoTracking()
+                .CountAsync(b =>
                 b.BidderId == buyerId && b.Auction.Status == AuctionStatus.Active);
-            var highestBidsCount = await _context.Bids.CountAsync(b =>
+            var highestBidsCount = await _context.Bids
+                .AsNoTracking()
+                .CountAsync(b =>
                 b.BidderId == buyerId
                 && b.Auction.CurrentHighestBidderId == buyerId
                 && b.Auction.CurrentHighestBid == b.Amount);
@@ -163,6 +174,7 @@ namespace ProductAuction.API.Controllers
             var bids = await bidsQuery
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
+                .AsNoTracking()
                 .Select(b => new
                 {
                     bidId = b.Id,
@@ -224,11 +236,13 @@ namespace ProductAuction.API.Controllers
 
             var allWonAuctionIds = await _context.Auctions
                 .Where(a => a.WinnerId == buyerId)
+                .AsNoTracking()
                 .Select(a => a.Id)
                 .ToListAsync();
 
             var salesForBuyer = await _context.Sales
                 .Where(s => s.BuyerId == buyerId && allWonAuctionIds.Contains(s.AuctionId))
+                .AsNoTracking()
                 .ToListAsync();
 
             var totalWon = allWonAuctionIds.Count;
@@ -256,11 +270,13 @@ namespace ProductAuction.API.Controllers
 
             var deliverySaleIds = await _context.DeliveryRecords
                 .Where(d => saleIds.Contains(d.SaleId))
+                .AsNoTracking()
                 .Select(d => d.SaleId)
                 .ToListAsync();
 
             var disputedSaleIds = await _context.Disputes
                 .Where(d => saleIds.Contains(d.SaleId))
+                .AsNoTracking()
                 .Select(d => d.SaleId)
                 .Distinct()
                 .ToListAsync();

@@ -74,9 +74,9 @@ namespace ProductAuction.API.Controllers
             var totalCount = await disputesQuery.CountAsync();
 
             // Get counts for all dispute statuses.
-            var openCount = await _context.Disputes.CountAsync(d => d.Status == DisputeStatus.Open);
-            var underReviewCount = await _context.Disputes.CountAsync(d => d.Status == DisputeStatus.UnderReview);
-            var resolvedCount = await _context.Disputes.CountAsync(d => d.Status == DisputeStatus.Resolved || d.Status == DisputeStatus.Rejected);
+            var openCount = await _context.Disputes.AsNoTracking().CountAsync(d => d.Status == DisputeStatus.Open);
+            var underReviewCount = await _context.Disputes.AsNoTracking().CountAsync(d => d.Status == DisputeStatus.UnderReview);
+            var resolvedCount = await _context.Disputes.AsNoTracking().CountAsync(d => d.Status == DisputeStatus.Resolved || d.Status == DisputeStatus.Rejected);
 
             // Get paginated disputes.
             var disputes = await disputesQuery
@@ -89,73 +89,79 @@ namespace ProductAuction.API.Controllers
             var saleIds = disputes.Select(d => d.SaleId).Distinct().ToList();
 
             var sales = await _context.Sales
+                .AsNoTracking()
                 .Where(s => saleIds.Contains(s.Id))
-                .ToDictionaryAsync(s => s.Id);
+                .ToListAsync();
 
-            // Find users involved in the disputes.
-            var raisedByIds = disputes.Select(d => d.RaisedBy).Distinct().ToList();
-            var againstUserIds = new List<string>();
+            // Collect everyone involved: the user who raised it + the other party.
+            var allUserIds = disputes.Select(d => d.RaisedBy).ToList();
 
             foreach (var dispute in disputes)
             {
-                if (sales.TryGetValue(dispute.SaleId, out var sale))
+                var sale = sales.FirstOrDefault(s => s.Id == dispute.SaleId);
+                if (sale != null)
                 {
-                    var againstUserId = sale.BuyerId == dispute.RaisedBy
-                        ? sale.SellerId
-                        : sale.BuyerId;
-
+                    var againstUserId = sale.BuyerId == dispute.RaisedBy ? sale.SellerId : sale.BuyerId;
                     if (!string.IsNullOrEmpty(againstUserId))
                     {
-                        againstUserIds.Add(againstUserId);
+                        allUserIds.Add(againstUserId);
                     }
                 }
             }
 
-            var allUserIds = raisedByIds
-                .Concat(againstUserIds)
-                .Distinct()
-                .ToList();
+            allUserIds = allUserIds.Distinct().ToList();
 
             // Get user profiles.
             var profiles = await _context.UserProfiles
+                .AsNoTracking()
                 .Where(p => allUserIds.Contains(p.UserId))
-                .ToDictionaryAsync(p => p.UserId, p => p.FullName);
+                .Select(p => new { p.UserId, p.FullName })
+                .ToListAsync();
 
-            // Get user roles.
-            var roles = await _context.UserRoles
+            // Get user roles (load the links and the roles, then match them up).
+            var userRoles = await _context.UserRoles
+                .AsNoTracking()
                 .Where(ur => allUserIds.Contains(ur.UserId))
-                .Join(
-                    _context.Roles,
-                    ur => ur.RoleId,
-                    r => r.Id,
-                    (ur, r) => new { ur.UserId, RoleName = r.Name }
-                )
-                .GroupBy(x => x.UserId)
-                .Select(g => new
-                {
-                    UserId = g.Key,
-                    g.First().RoleName
-                })
-                .ToDictionaryAsync(x => x.UserId, x => x.RoleName);
+                .ToListAsync();
+
+            var roleIds = userRoles.Select(ur => ur.RoleId).Distinct().ToList();
+
+            var roles = await _context.Roles
+                .AsNoTracking()
+                .Where(r => roleIds.Contains(r.Id))
+                .Select(r => new { r.Id, r.Name })
+                .ToListAsync();
 
             // Get penalties for these disputes.
             var disputeIds = disputes.Select(d => d.Id).ToList();
 
             var penalties = await _context.Penalties
+                .AsNoTracking()
                 .Where(p => disputeIds.Contains(p.DisputeId))
-                .ToDictionaryAsync(p => p.DisputeId, p => new
-                {
-                    p.TotalAmount,
-                    p.OppositePartyAmount,
-                    p.PlatformAmount,
-                    p.AgainstUserId
-                });
+                .ToListAsync();
+
+            // Small helpers to look up a name/role from the loaded lists.
+            string GetName(string? userId)
+            {
+                if (string.IsNullOrEmpty(userId)) { return "Unknown"; }
+                var profile = profiles.FirstOrDefault(p => p.UserId == userId);
+                return profile?.FullName ?? "Unknown";
+            }
+
+            string GetRole(string? userId)
+            {
+                if (string.IsNullOrEmpty(userId)) { return "User"; }
+                var userRole = userRoles.FirstOrDefault(ur => ur.UserId == userId);
+                if (userRole == null) { return "User"; }
+                var role = roles.FirstOrDefault(r => r.Id == userRole.RoleId);
+                return role?.Name ?? "User";
+            }
 
             // Prepare final response.
             var result = disputes.Select(d =>
             {
-                sales.TryGetValue(d.SaleId, out var sale);
-                penalties.TryGetValue(d.Id, out var penalty);
+                var sale = sales.FirstOrDefault(s => s.Id == d.SaleId);
+                var penalty = penalties.FirstOrDefault(p => p.DisputeId == d.Id);
 
                 var againstUserId = sale == null
                     ? null
@@ -174,27 +180,22 @@ namespace ProductAuction.API.Controllers
                     d.DecidedBy,
                     d.CreatedAt,
 
-                    RaisedByName = profiles.TryGetValue(d.RaisedBy, out var raisedName)
-                        ? raisedName
-                        : "Unknown",
-
-                    RaisedByRole = roles.TryGetValue(d.RaisedBy, out var raisedRole)
-                        ? raisedRole
-                        : "User",
+                    RaisedByName = GetName(d.RaisedBy),
+                    RaisedByRole = GetRole(d.RaisedBy),
 
                     AgainstUserId = againstUserId,
+                    AgainstName = GetName(againstUserId),
+                    AgainstRole = GetRole(againstUserId),
 
-                    AgainstName = !string.IsNullOrEmpty(againstUserId) &&
-                                  profiles.TryGetValue(againstUserId, out var againstName)
-                        ? againstName
-                        : "Unknown",
-
-                    AgainstRole = !string.IsNullOrEmpty(againstUserId) &&
-                                  roles.TryGetValue(againstUserId, out var againstRole)
-                        ? againstRole
-                        : "User",
-
-                    Penalty = penalty
+                    Penalty = penalty == null
+                        ? null
+                        : new
+                        {
+                            penalty.TotalAmount,
+                            penalty.OppositePartyAmount,
+                            penalty.PlatformAmount,
+                            penalty.AgainstUserId
+                        }
                 };
             }).ToList();
 

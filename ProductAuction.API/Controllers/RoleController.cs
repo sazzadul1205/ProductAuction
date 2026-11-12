@@ -34,7 +34,7 @@ public class RoleController : ControllerBase
     public async Task<IActionResult> GetRoles()
     {
         var isSuperAdmin = User.IsInRole("Super Admin");
-        var roles = await _roleManager.Roles.OrderBy(r => r.Name).ToListAsync();
+        var roles = await _roleManager.Roles.AsNoTracking().OrderBy(r => r.Name).ToListAsync();
         if (!isSuperAdmin)
             roles = roles.Where(r => !string.Equals(r.Name, "Super Admin", StringComparison.OrdinalIgnoreCase)).ToList();
 

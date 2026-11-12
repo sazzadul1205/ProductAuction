@@ -37,16 +37,16 @@ namespace ProductAuction.API.Controllers
         public async Task<IActionResult> GetDashboard()
         {
             // Total users 
-            var totalUsers = await _context.Users.CountAsync(u => u.UserName != "platform-system-account");
+            var totalUsers = await _context.Users.AsNoTracking().CountAsync(u => u.UserName != "platform-system-account");
 
             // Pending items
-            var pendingProducts = await _context.Products.CountAsync(p => p.ApprovalStatus == ProductApprovalStatus.PendingApproval);
-            var pendingDeposits = await _context.DepositRequests.CountAsync(d => d.Status == DepositRequestStatus.PendingVerification);
-            var pendingVerifications = await _context.UserProfiles.CountAsync(p => p.VerificationStatus == VerificationStatus.PendingReview);
-            var openDisputes = await _context.Disputes.CountAsync(d => d.Status == DisputeStatus.Open || d.Status == DisputeStatus.UnderReview);
+            var pendingProducts = await _context.Products.AsNoTracking().CountAsync(p => p.ApprovalStatus == ProductApprovalStatus.PendingApproval);
+            var pendingDeposits = await _context.DepositRequests.AsNoTracking().CountAsync(d => d.Status == DepositRequestStatus.PendingVerification);
+            var pendingVerifications = await _context.UserProfiles.AsNoTracking().CountAsync(p => p.VerificationStatus == VerificationStatus.PendingReview);
+            var openDisputes = await _context.Disputes.AsNoTracking().CountAsync(d => d.Status == DisputeStatus.Open || d.Status == DisputeStatus.UnderReview);
 
             // Active auctions
-            var activeAuctions = await _context.Auctions.CountAsync(a => a.Status == AuctionStatus.Active);
+            var activeAuctions = await _context.Auctions.AsNoTracking().CountAsync(a => a.Status == AuctionStatus.Active);
 
             // Platform wallet balance
             var platformUser = await _userManager.FindByNameAsync("platform-system-account");
@@ -54,6 +54,7 @@ namespace ProductAuction.API.Controllers
                 ? 0m
                 : await _context.Wallets
                     .Where(w => w.UserId == platformUser.Id)
+                    .AsNoTracking()
                     .Select(w => w.Balance)
                     .FirstOrDefaultAsync();
 
@@ -396,6 +397,7 @@ namespace ProductAuction.API.Controllers
             // grab registered users
             var userQuery = _userManager.Users
                 .Where(u => u.UserName != "platform-system-account")
+                .AsNoTracking()
                 .AsQueryable();
 
             // apply role filter
@@ -404,8 +406,10 @@ namespace ProductAuction.API.Controllers
                 var roleUserIds = await _context.UserRoles
                     .Where(ur => _context.Roles
                         .Where(r => r.Name == filter)
+                        .AsNoTracking()
                         .Select(r => r.Id)
                         .Contains(ur.RoleId))
+                    .AsNoTracking()
                     .Select(ur => ur.UserId)
                     .ToListAsync();
 
@@ -419,6 +423,7 @@ namespace ProductAuction.API.Controllers
 
                 var matchingProfileUserIds = await _context.UserProfiles
                     .Where(p => p.FullName.Contains(term) || (p.City != null && p.City.Contains(term)))
+                    .AsNoTracking()
                     .Select(p => p.UserId)
                     .ToListAsync();
 
@@ -438,8 +443,8 @@ namespace ProductAuction.API.Controllers
                 .ToListAsync();
 
             // load all profiles and wallets
-            var profiles = await _context.UserProfiles.ToListAsync();
-            var wallets = await _context.Wallets.ToListAsync();
+            var profiles = await _context.UserProfiles.AsNoTracking().ToListAsync();
+            var wallets = await _context.Wallets.AsNoTracking().ToListAsync();
 
             var userList = new List<object>();
 
@@ -631,7 +636,7 @@ namespace ProductAuction.API.Controllers
             // status filter: Upcoming / Active / Completed / Cancelled.
             var filter = query.Filter;
 
-            var auctionsQuery = _context.Auctions.AsQueryable();
+            var auctionsQuery = _context.Auctions.AsNoTracking().AsQueryable();
 
             // apply status filter
             if (!string.IsNullOrWhiteSpace(filter) && filter != "All")
@@ -664,6 +669,7 @@ namespace ProductAuction.API.Controllers
 
                 var matchingProductIds = await _context.Products
                     .Where(p => p.Title.Contains(term))
+                    .AsNoTracking()
                     .Select(p => p.Id)
                     .ToListAsync();
 
@@ -678,6 +684,7 @@ namespace ProductAuction.API.Controllers
             var auctions = await auctionsQuery
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
+                .AsNoTracking()
                 .Select(a => new
                 {
                     auctionId = a.Id,
@@ -685,17 +692,20 @@ namespace ProductAuction.API.Controllers
 
                     productTitle = _context.Products
                         .Where(p => p.Id == a.ProductId)
+                        .AsNoTracking()
                         .Select(p => p.Title)
                         .FirstOrDefault() ?? string.Empty,
 
                     mainImageUrl = _context.ProductImages
                         .Where(i => i.ProductId == a.ProductId && i.IsMain)
+                        .AsNoTracking()
                         .Select(i => i.ImageUrl)
                         .FirstOrDefault() ?? "",
 
                     sellerId = a.SellerId,
                     sellerName = _context.UserProfiles
                         .Where(p => p.UserId == a.SellerId)
+                        .AsNoTracking()
                         .Select(p => p.FullName)
                         .FirstOrDefault(),
                     startTime = a.StartTime,
@@ -707,6 +717,7 @@ namespace ProductAuction.API.Controllers
                     winnerId = a.WinnerId,
                     winnerName = _context.UserProfiles
                         .Where(p => p.UserId == a.WinnerId)
+                        .AsNoTracking()
                         .Select(p => p.FullName)
                         .FirstOrDefault(),
                     result = a.Result != null ? a.Result.ToString() : null,
@@ -780,7 +791,7 @@ namespace ProductAuction.API.Controllers
             if (pageSize < 1) pageSize = 20;
             if (pageSize > 100) pageSize = 100;
 
-            var q = _context.DepositRequests.AsQueryable();
+            var q = _context.DepositRequests.AsNoTracking().AsQueryable();
             if (!string.Equals(status, "All", StringComparison.OrdinalIgnoreCase)
                 && Enum.TryParse<DepositRequestStatus>(status, true, out var st))
                 q = q.Where(d => d.Status == st);
@@ -792,11 +803,11 @@ namespace ProductAuction.API.Controllers
                 {
                     d.Id,
                     d.WalletId,
-                    UserId = _context.Wallets.Where(w => w.Id == d.WalletId).Select(w => w.UserId).FirstOrDefault(),
-                    UserName = _context.Wallets.Where(w => w.Id == d.WalletId)
-                        .Join(_context.UserProfiles, w => w.UserId, p => p.UserId, (w, p) => p.FullName).FirstOrDefault(),
-                    UserEmail = _context.Wallets.Where(w => w.Id == d.WalletId)
-                        .Join(_context.Users, w => w.UserId, u => u.Id, (w, u) => u.Email).FirstOrDefault(),
+                    UserId = _context.Wallets.AsNoTracking().Where(w => w.Id == d.WalletId).Select(w => w.UserId).FirstOrDefault(),
+                    UserName = _context.Wallets.AsNoTracking().Where(w => w.Id == d.WalletId)
+                        .Join(_context.UserProfiles.AsNoTracking(), w => w.UserId, p => p.UserId, (w, p) => p.FullName).FirstOrDefault(),
+                    UserEmail = _context.Wallets.AsNoTracking().Where(w => w.Id == d.WalletId)
+                        .Join(_context.Users.AsNoTracking(), w => w.UserId, u => u.Id, (w, u) => u.Email).FirstOrDefault(),
                     d.Method,
                     d.Amount,
                     d.TransactionReference,
@@ -928,7 +939,7 @@ namespace ProductAuction.API.Controllers
             // transaction type filter: Credit / Debit / Penalty / Release / Commission
             var filter = query.Filter;
 
-            var queryable = _context.WalletTransactions.AsQueryable();
+            var queryable = _context.WalletTransactions.AsNoTracking().AsQueryable();
 
             // apply type filter
             if (!string.IsNullOrWhiteSpace(filter) && filter != "All"
@@ -943,19 +954,19 @@ namespace ProductAuction.API.Controllers
                 var term = search.Trim();
 
                 // user ids whose profile name matches
-                var nameMatchUserIds = await _context.UserProfiles
+                var nameMatchUserIds = await _context.UserProfiles.AsNoTracking()
                     .Where(p => p.FullName.Contains(term))
                     .Select(p => p.UserId)
                     .ToListAsync();
 
                 // user ids whose email matches
-                var emailMatchUserIds = await _context.Users
+                var emailMatchUserIds = await _context.Users.AsNoTracking()
                     .Where(u => u.Email != null && u.Email.Contains(term))
                     .Select(u => u.Id)
                     .ToListAsync();
 
                 // wallets owned by those users
-                var matchingWalletIds = await _context.Wallets
+                var matchingWalletIds = await _context.Wallets.AsNoTracking()
                     .Where(w => nameMatchUserIds.Contains(w.UserId) || emailMatchUserIds.Contains(w.UserId))
                     .Select(w => w.Id)
                     .ToListAsync();
@@ -972,27 +983,27 @@ namespace ProductAuction.API.Controllers
             // Global stats.
 
             // Total volume
-            var totalVolume = await _context.WalletTransactions
+            var totalVolume = await _context.WalletTransactions.AsNoTracking()
                 .Where(t => t.Type == WalletTransactionType.Credit)
                 .SumAsync(t => (decimal?)t.Amount) ?? 0;
 
             // Escrow currently held
-            var totalEscrow = await _context.WalletReservations
+            var totalEscrow = await _context.WalletReservations.AsNoTracking()
                 .Where(r => r.Type == ReservationType.SaleEscrow && r.Status == ReservationStatus.Reserved)
                 .SumAsync(r => (decimal?)r.Amount) ?? 0;
 
             // Active buyer eligibility deposits.
-            var totalBuyerDeposits = await _context.WalletReservations
+            var totalBuyerDeposits = await _context.WalletReservations.AsNoTracking()
                 .Where(r => r.Type == ReservationType.BuyerFunds && r.Status == ReservationStatus.Reserved)
                 .SumAsync(r => (decimal?)r.Amount) ?? 0;
 
             // Active seller deposits.
-            var totalSellerDeposits = await _context.WalletReservations
+            var totalSellerDeposits = await _context.WalletReservations.AsNoTracking()
                 .Where(r => r.Type == ReservationType.SellerDeposit && r.Status == ReservationStatus.Reserved)
                 .SumAsync(r => (decimal?)r.Amount) ?? 0;
 
             // Count of active reservations
-            var totalActiveReservations = await _context.WalletReservations.CountAsync(r => r.Status == ReservationStatus.Reserved);
+            var totalActiveReservations = await _context.WalletReservations.AsNoTracking().CountAsync(r => r.Status == ReservationStatus.Reserved);
 
 
             var transactions = await queryable
@@ -1008,8 +1019,8 @@ namespace ProductAuction.API.Controllers
                     wt.CreatedAt,
 
                     // Get the user's full name using the wallet's UserId.
-                    UserName = _context.UserProfiles
-                        .Where(up => up.UserId == _context.Wallets
+                    UserName = _context.UserProfiles.AsNoTracking()
+                        .Where(up => up.UserId == _context.Wallets.AsNoTracking()
                             .Where(w => w.Id == wt.WalletId)
                             .Select(w => w.UserId)
                             .FirstOrDefault())
@@ -1017,8 +1028,8 @@ namespace ProductAuction.API.Controllers
                         .FirstOrDefault(),
 
                     // Get the user's email using the wallet's UserId.
-                    UserEmail = _context.Users
-                        .Where(u => u.Id == _context.Wallets
+                    UserEmail = _context.Users.AsNoTracking()
+                        .Where(u => u.Id == _context.Wallets.AsNoTracking()
                             .Where(w => w.Id == wt.WalletId)
                             .Select(w => w.UserId)
                             .FirstOrDefault())
@@ -1063,23 +1074,24 @@ namespace ProductAuction.API.Controllers
 
             var search = query.Search;
 
-            var queryable = _context.WalletReservations
+            var queryable = _context.WalletReservations.AsNoTracking()
                 .Where(r => r.Status == ReservationStatus.Reserved)
                 .AsQueryable();
 
             if (!string.IsNullOrWhiteSpace(search))
             {
                 var term = search.Trim().ToLower();
-                var nameMatchUserIds = await _context.UserProfiles
+                var nameMatchUserIds = await _context.UserProfiles.AsNoTracking()
                     .Where(p => p.FullName.ToLower().Contains(term))
                     .Select(p => p.UserId)
                     .ToListAsync();
-                var matchingWalletIds = await _context.Wallets
+                var matchingWalletIds = await _context.Wallets.AsNoTracking()
                     .Where(w => nameMatchUserIds.Contains(w.UserId))
                     .Select(w => w.Id)
                     .ToListAsync();
                 var matchingProductIds = await _context.Products
-                    .Where(p => p.Title.ToLower().Contains(term))
+                    .Where(p => p.Title.Contains(term))
+                    .AsNoTracking()
                     .Select(p => p.Id)
                     .ToListAsync();
 
@@ -1105,8 +1117,8 @@ namespace ProductAuction.API.Controllers
                     wr.AuctionId,
                     wr.SaleId,
 
-                    UserName = _context.UserProfiles
-                        .Where(up => up.UserId == _context.Wallets
+                    UserName = _context.UserProfiles.AsNoTracking()
+                        .Where(up => up.UserId == _context.Wallets.AsNoTracking()
                             .Where(w => w.Id == wr.WalletId)
                             .Select(w => w.UserId)
                             .FirstOrDefault())
@@ -1114,7 +1126,7 @@ namespace ProductAuction.API.Controllers
                         .FirstOrDefault(),
 
                     ProductTitle = wr.ProductId != null
-                        ? _context.Products
+                        ? _context.Products.AsNoTracking()
                             .Where(p => p.Id == wr.ProductId)
                             .Select(p => p.Title)
                             .FirstOrDefault()
@@ -1167,7 +1179,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == platformUser.Id);
+            var wallet = await _context.Wallets.AsNoTracking().FirstOrDefaultAsync(w => w.UserId == platformUser.Id);
 
             if (wallet == null)
             {
@@ -1178,25 +1190,25 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            var txQuery = _context.WalletTransactions
+            var txQuery = _context.WalletTransactions.AsNoTracking()
                 .Where(t => t.WalletId == wallet.Id)
                 .AsQueryable();
 
             // Total balances held by sellers and buyers (exclude platform)
             var platformWalletId = wallet.Id;
-            var sellerRoleId = await _context.Roles.Where(r => r.Name == "Seller").Select(r => r.Id).FirstOrDefaultAsync();
-            var buyerRoleId = await _context.Roles.Where(r => r.Name == "Buyer").Select(r => r.Id).FirstOrDefaultAsync();
+            var sellerRoleId = await _context.Roles.AsNoTracking().Where(r => r.Name == "Seller").Select(r => r.Id).FirstOrDefaultAsync();
+            var buyerRoleId = await _context.Roles.AsNoTracking().Where(r => r.Name == "Buyer").Select(r => r.Id).FirstOrDefaultAsync();
 
-            var sellerUserIds = _context.UserRoles.Where(ur => ur.RoleId == sellerRoleId).Select(ur => ur.UserId);
-            var buyerUserIds = _context.UserRoles.Where(ur => ur.RoleId == buyerRoleId).Select(ur => ur.UserId);
+            var sellerUserIds = _context.UserRoles.AsNoTracking().Where(ur => ur.RoleId == sellerRoleId).Select(ur => ur.UserId);
+            var buyerUserIds = _context.UserRoles.AsNoTracking().Where(ur => ur.RoleId == buyerRoleId).Select(ur => ur.UserId);
 
-            var sellerTotals = await _context.Wallets
+            var sellerTotals = await _context.Wallets.AsNoTracking()
                 .Where(w => w.Id != platformWalletId && sellerUserIds.Contains(w.UserId))
                 .GroupBy(_ => 1)
                 .Select(g => new { Balance = g.Sum(w => w.Balance), Reserved = g.Sum(w => w.ReservedBalance) })
                 .FirstOrDefaultAsync();
 
-            var buyerTotals = await _context.Wallets
+            var buyerTotals = await _context.Wallets.AsNoTracking()
                 .Where(w => w.Id != platformWalletId && buyerUserIds.Contains(w.UserId))
                 .GroupBy(_ => 1)
                 .Select(g => new { Balance = g.Sum(w => w.Balance), Reserved = g.Sum(w => w.ReservedBalance) })
@@ -1282,18 +1294,18 @@ namespace ProductAuction.API.Controllers
         public async Task<IActionResult> GetUserRoleCounts()
         {
             // Get the IDs of every user, excluding the platform system account.
-            var allUserIds = await _userManager.Users
+            var allUserIds = await _userManager.Users.AsNoTracking()
                 .Where(u => u.UserName != "platform-system-account")
                 .Select(u => u.Id)
                 .ToListAsync();
 
             // Load the role rows for those users.
-            var userRoleRows = await _context.UserRoles
+            var userRoleRows = await _context.UserRoles.AsNoTracking()
                 .Where(ur => allUserIds.Contains(ur.UserId))
                 .ToListAsync();
 
             // Load all roles
-            var allRoles = await _context.Roles.ToListAsync();
+            var allRoles = await _context.Roles.AsNoTracking().ToListAsync();
 
             // Count roles: Admin + any other non-Buyer/Seller role = staff
             var adminCount = 0;

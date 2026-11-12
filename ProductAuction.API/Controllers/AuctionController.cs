@@ -41,6 +41,7 @@ namespace ProductAuction.API.Controllers
             // Base query
             var auctionsQuery = _context.Auctions
                 .Where(a => a.StartTime.HasValue)
+                .AsNoTracking()
                 .AsQueryable();
 
             // Apply Status Filter
@@ -109,13 +110,15 @@ namespace ProductAuction.API.Controllers
             {
                 auctionsQuery = _context.Auctions
                     .Where(a => a.Status != AuctionStatus.Upcoming || a.StartTime.HasValue)
-                    .OrderByDescending(a => a.Id);
+                    .OrderByDescending(a => a.Id)
+                    .AsNoTracking();
                 totalCount = await auctionsQuery.CountAsync();
             }
 
             var auctions = await auctionsQuery
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
+                .AsNoTracking()
                 .Select(a => new AuctionListDto
                 {
                     Id = a.Id,
@@ -130,6 +133,7 @@ namespace ProductAuction.API.Controllers
                     BidCount = a.BidCount,
                     MainImageUrl = _context.ProductImages
                         .Where(i => i.ProductId == a.ProductId && i.IsMain)
+                        .AsNoTracking()
                         .Select(i => i.ImageUrl)
                         .FirstOrDefault() ?? "",
                     CategoryId = a.Product.CategoryId,
@@ -161,7 +165,7 @@ namespace ProductAuction.API.Controllers
         {
             var now = DateTime.UtcNow;
 
-            var allQuery = _context.Auctions.Where(a => a.StartTime.HasValue).AsQueryable();
+            var allQuery = _context.Auctions.Where(a => a.StartTime.HasValue).AsNoTracking().AsQueryable();
 
             // Banner is fixed (not affected by search/category filters)
             var banner = await allQuery
@@ -169,6 +173,7 @@ namespace ProductAuction.API.Controllers
                             (a.Status == AuctionStatus.Upcoming && a.StartTime > now && (!a.EndTime.HasValue || a.EndTime > now)))
                 .OrderBy(a => a.Status == AuctionStatus.Active ? 0 : 1)
                 .ThenBy(a => a.Status == AuctionStatus.Active ? a.EndTime : a.StartTime)
+                .AsNoTracking()
                 .Select(a => new AuctionListDto
                 {
                     Id = a.Id,
@@ -183,6 +188,7 @@ namespace ProductAuction.API.Controllers
                     BidCount = a.BidCount,
                     MainImageUrl = _context.ProductImages
                         .Where(i => i.ProductId == a.ProductId && i.IsMain)
+                        .AsNoTracking()
                         .Select(i => i.ImageUrl)
                         .FirstOrDefault() ?? "",
                     CategoryId = a.Product.CategoryId,
@@ -205,6 +211,7 @@ namespace ProductAuction.API.Controllers
                 .Where(a => a.Status == AuctionStatus.Active && (!a.EndTime.HasValue || a.EndTime > now) && a.Id != bannerId)
                 .OrderBy(a => a.EndTime)
                 .Take(8)
+                .AsNoTracking()
                 .Select(a => new AuctionListDto
                 {
                     Id = a.Id,
@@ -219,6 +226,7 @@ namespace ProductAuction.API.Controllers
                     BidCount = a.BidCount,
                     MainImageUrl = _context.ProductImages
                         .Where(i => i.ProductId == a.ProductId && i.IsMain)
+                        .AsNoTracking()
                         .Select(i => i.ImageUrl)
                         .FirstOrDefault() ?? "",
                     CategoryId = a.Product.CategoryId,
@@ -230,6 +238,7 @@ namespace ProductAuction.API.Controllers
                 .Where(a => a.Status == AuctionStatus.Upcoming && a.StartTime > now && (!a.EndTime.HasValue || a.EndTime > now) && a.Id != bannerId)
                 .OrderBy(a => a.StartTime)
                 .Take(8)
+                .AsNoTracking()
                 .Select(a => new AuctionListDto
                 {
                     Id = a.Id,
@@ -244,6 +253,7 @@ namespace ProductAuction.API.Controllers
                     BidCount = a.BidCount,
                     MainImageUrl = _context.ProductImages
                         .Where(i => i.ProductId == a.ProductId && i.IsMain)
+                        .AsNoTracking()
                         .Select(i => i.ImageUrl)
                         .FirstOrDefault() ?? "",
                     CategoryId = a.Product.CategoryId,
@@ -267,6 +277,7 @@ namespace ProductAuction.API.Controllers
         {
             var auction = await _context.Auctions
                 .Where(a => a.Id == id)
+                .AsNoTracking()
                 .Select(a => new AuctionDetailsDto
                 {
                     Id = a.Id,
@@ -291,10 +302,12 @@ namespace ProductAuction.API.Controllers
                     KnownIssues = a.Product.KnownIssues,
                     MainImageUrl = _context.ProductImages
                         .Where(i => i.ProductId == a.ProductId && i.IsMain)
+                        .AsNoTracking()
                         .Select(i => i.ImageUrl)
                         .FirstOrDefault() ?? "",
                     Images = _context.ProductImages
                         .Where(i => i.ProductId == a.ProductId)
+                        .AsNoTracking()
                         .Select(i => new ProductImageResponseDto
                         {
                             Id = i.Id,
@@ -341,6 +354,7 @@ namespace ProductAuction.API.Controllers
 
             var auction = await _context.Auctions
                 .Where(a => a.Id == id && a.SellerId == userId)
+                .AsNoTracking()
                 .Select(a => new AuctionDetailsDto
                 {
                     Id = a.Id,
@@ -357,10 +371,12 @@ namespace ProductAuction.API.Controllers
                     Result = a.Result != null ? a.Result.ToString() : null,
                     MainImageUrl = _context.ProductImages
                         .Where(i => i.ProductId == a.ProductId && i.IsMain)
+                        .AsNoTracking()
                         .Select(i => i.ImageUrl)
                         .FirstOrDefault() ?? "",
                     Images = _context.ProductImages
                         .Where(i => i.ProductId == a.ProductId)
+                        .AsNoTracking()
                         .Select(i => new ProductImageResponseDto
                         {
                             Id = i.Id,

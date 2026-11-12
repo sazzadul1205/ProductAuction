@@ -37,12 +37,13 @@ namespace ProductAuction.API.Controllers
                 categoriesQuery = categoriesQuery.Where(c => c.Name.ToLower().Contains(term));
             }
 
-            var totalCount = await categoriesQuery.CountAsync();
+            var totalCount = await categoriesQuery.AsNoTracking().CountAsync();
 
             var categories = await categoriesQuery
                 .OrderBy(c => c.Name)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
+                .AsNoTracking()
                 .Select(c => new
                 {
                     c.Id,
