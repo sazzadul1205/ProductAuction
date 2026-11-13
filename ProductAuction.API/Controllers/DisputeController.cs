@@ -180,11 +180,11 @@ namespace ProductAuction.API.Controllers
                     d.DecidedBy,
                     d.CreatedAt,
 
-                    RaisedByName = GetName(d.RaisedBy),
+                    RaisedByName = GetRole(d.RaisedBy),
                     RaisedByRole = GetRole(d.RaisedBy),
 
                     AgainstUserId = againstUserId,
-                    AgainstName = GetName(againstUserId),
+                    AgainstName = GetRole(againstUserId),
                     AgainstRole = GetRole(againstUserId),
 
                     Penalty = penalty == null
@@ -341,6 +341,305 @@ namespace ProductAuction.API.Controllers
             });
         }
 
+
+        // GET: api/dispute/{id}
+        // Returns dispute details for parties and admins.
+        [HttpGet("{id}")]
+        public async Task<IActionResult> GetDisputeById(int id)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (userId == null)
+            {
+                return Unauthorized(new
+                {
+                    status = 401,
+                    message = "User information was not found."
+                });
+            }
+
+            var dispute = await _context.Disputes.AsNoTracking().FirstOrDefaultAsync(d => d.Id == id);
+            if (dispute == null)
+            {
+                return NotFound(new
+                {
+                    status = 404,
+                    message = "Dispute not found."
+                });
+            }
+
+            var sale = await _context.Sales.AsNoTracking().FirstOrDefaultAsync(s => s.Id == dispute.SaleId);
+            if (sale == null)
+            {
+                return NotFound(new
+                {
+                    status = 404,
+                    message = "Related sale not found."
+                });
+            }
+
+            var isSuperAdmin = User.IsInRole("Super Admin");
+            var isAdmin = isSuperAdmin || User.IsInRole("Admin");
+            var isParty = sale.BuyerId == userId || sale.SellerId == userId;
+            var isAssignedAdmin = isAdmin && (dispute.AssignedAdminId == null || dispute.AssignedAdminId == userId);
+
+            if (!isParty && !isSuperAdmin && !isAssignedAdmin)
+            {
+                return StatusCode(403, new
+                {
+                    status = 403,
+                    message = "Access denied."
+                });
+            }
+
+            var product = await _context.Products.AsNoTracking().FirstOrDefaultAsync(p => p.Id == dispute.ProductId);
+            var penalty = await _context.Penalties.AsNoTracking().FirstOrDefaultAsync(p => p.DisputeId == dispute.Id);
+
+            var involvedUserIds = new List<string> { dispute.RaisedBy, sale.BuyerId, sale.SellerId };
+            var profiles = await _context.UserProfiles.AsNoTracking()
+                .Where(p => involvedUserIds.Contains(p.UserId))
+                .Select(p => new { p.UserId, p.FullName })
+                .ToListAsync();
+
+            var userRoles = await _context.UserRoles.AsNoTracking()
+                .Where(ur => involvedUserIds.Contains(ur.UserId))
+                .ToListAsync();
+            var roleIds = userRoles.Select(ur => ur.RoleId).Distinct().ToList();
+            var roles = await _context.Roles.AsNoTracking()
+                .Where(r => roleIds.Contains(r.Id))
+                .Select(r => new { r.Id, r.Name })
+                .ToListAsync();
+
+            string GetRole(string? uid)
+            {
+                if (string.IsNullOrEmpty(uid)) return "User";
+                var ur = userRoles.FirstOrDefault(x => x.UserId == uid);
+                if (ur == null) return "User";
+                return roles.FirstOrDefault(r => r.Id == ur.RoleId)?.Name ?? "User";
+            }
+
+            var againstUserId = sale.BuyerId == dispute.RaisedBy ? sale.SellerId : sale.BuyerId;
+            var canSendMessages = dispute.Status == DisputeStatus.UnderReview && (isParty || isSuperAdmin || isAssignedAdmin);
+
+            return Ok(new
+            {
+                status = 200,
+                message = "Dispute retrieved successfully.",
+                data = new
+                {
+                    id = dispute.Id,
+                    saleId = dispute.SaleId,
+                    productId = dispute.ProductId,
+                    productTitle = product?.Title,
+                    raisedBy = dispute.RaisedBy,
+                    raisedByName = GetRole(dispute.RaisedBy),
+                    raisedByRole = GetRole(dispute.RaisedBy),
+                    againstUserId,
+                    againstName = GetRole(againstUserId),
+                    againstRole = GetRole(againstUserId),
+                    complaint = dispute.Complaint,
+                    evidenceUrl = dispute.EvidenceUrl,
+                    status = dispute.Status.ToString(),
+                    adminDecision = dispute.AdminDecision,
+                    decidedBy = dispute.DecidedBy,
+                    createdAt = dispute.CreatedAt,
+                    canSendMessages,
+                    penalty = penalty == null ? null : new
+                    {
+                        totalAmount = penalty.TotalAmount,
+                        oppositePartyAmount = penalty.OppositePartyAmount,
+                        platformAmount = penalty.PlatformAmount,
+                        againstUserId = penalty.AgainstUserId
+                    }
+                }
+            });
+        }
+
+        // GET: api/dispute/{id}/messages
+        [HttpGet("{id}/messages")]
+        public async Task<IActionResult> GetDisputeMessages(int id)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (userId == null)
+            {
+                return Unauthorized(new
+                {
+                    status = 401,
+                    message = "User information was not found."
+                });
+            }
+
+            var dispute = await _context.Disputes.AsNoTracking().FirstOrDefaultAsync(d => d.Id == id);
+            if (dispute == null)
+            {
+                return NotFound(new
+                {
+                    status = 404,
+                    message = "Dispute not found."
+                });
+            }
+
+            var sale = await _context.Sales.AsNoTracking().FirstOrDefaultAsync(s => s.Id == dispute.SaleId);
+            if (sale == null)
+            {
+                return NotFound(new
+                {
+                    status = 404,
+                    message = "Related sale not found."
+                });
+            }
+
+            var isSuperAdmin = User.IsInRole("Super Admin");
+            var isAdmin = isSuperAdmin || User.IsInRole("Admin");
+            var isParty = sale.BuyerId == userId || sale.SellerId == userId;
+            var isAssignedAdmin = isAdmin && (dispute.AssignedAdminId == null || dispute.AssignedAdminId == userId);
+            if (!isParty && !isSuperAdmin && !isAssignedAdmin)
+            {
+                return StatusCode(403, new
+                {
+                    status = 403,
+                    message = "Access denied."
+                });
+            }
+
+            var messages = await _context.DisputeMessages.AsNoTracking()
+                .Where(m => m.DisputeId == id)
+                .OrderBy(m => m.CreatedAt)
+                .ToListAsync();
+
+            var senderIds = messages.Where(m => !string.IsNullOrEmpty(m.SenderId)).Select(m => m.SenderId).Distinct().ToList();
+
+            var data = messages.Select(m => new
+            {
+                id = m.Id,
+                disputeId = m.DisputeId,
+                senderId = m.SenderId,
+                senderName = m.SenderRole,
+                senderRole = m.SenderRole,
+                body = m.Body,
+                attachmentUrl = m.AttachmentUrl,
+                createdAt = m.CreatedAt
+            }).ToList();
+
+            return Ok(new { status = 200, message = "Messages retrieved successfully.", data });
+        }
+
+        // POST: api/dispute/{id}/messages
+        [HttpPost("{id}/messages")]
+        public async Task<IActionResult> SendDisputeMessage(int id, [FromForm] CreateDisputeMessageDto dto)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (userId == null)
+            {
+                return Unauthorized(new
+                {
+                    status = 401,
+                    message = "User information was not found."
+                });
+            }
+
+            var dispute = await _context.Disputes.FirstOrDefaultAsync(d => d.Id == id);
+            if (dispute == null)
+            {
+                return NotFound(new
+                {
+                    status = 404,
+                    message = "Dispute not found."
+                });
+            }
+
+            if (dispute.Status != DisputeStatus.UnderReview)
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "Messages can only be sent while the dispute is under review."
+                });
+            }
+
+            var sale = await _context.Sales.AsNoTracking().FirstOrDefaultAsync(s => s.Id == dispute.SaleId);
+            if (sale == null)
+            {
+                return NotFound(new
+                {
+                    status = 404,
+                    message = "Related sale not found."
+                });
+            }
+
+            var isSuperAdmin = User.IsInRole("Super Admin");
+            var isAdmin = isSuperAdmin || User.IsInRole("Admin");
+            var isBuyer = sale.BuyerId == userId;
+            var isSeller = sale.SellerId == userId;
+            var isParty = isBuyer || isSeller;
+
+            if (isAdmin && !isSuperAdmin && dispute.AssignedAdminId != null && dispute.AssignedAdminId != userId)
+            {
+                return StatusCode(403, new
+                {
+                    status = 403,
+                    message = "This dispute is assigned to another admin."
+                });
+            }
+            if (!isParty && !isSuperAdmin && !(isAdmin && (dispute.AssignedAdminId == null || dispute.AssignedAdminId == userId)))
+            {
+                return StatusCode(403, new
+                {
+                    status = 403,
+                    message = "Access denied."
+                });
+            }
+
+            // auto-claim unassigned dispute for admin
+            if (isAdmin && !isSuperAdmin && dispute.AssignedAdminId == null)
+            {
+                dispute.AssignedAdminId = userId;
+                _context.DisputeMessages.Add(new DisputeMessage
+                {
+                    DisputeId = dispute.Id,
+                    SenderId = userId,
+                    SenderRole = "System",
+                    Body = "An admin has joined the dispute review.",
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+
+            string? attachmentUrl = null;
+            if (dto.Attachment != null)
+            {
+                attachmentUrl = await _imageUploadService.UploadImageAsync(dto.Attachment);
+            }
+
+            string senderRole = isSuperAdmin ? "Super Admin" : isAdmin ? "Admin" : isSeller ? "Seller" : "Buyer";
+            var message = new DisputeMessage
+            {
+                DisputeId = dispute.Id,
+                SenderId = userId,
+                SenderRole = senderRole,
+                Body = (dto.Body ?? string.Empty).Trim(),
+                AttachmentUrl = attachmentUrl,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _context.DisputeMessages.Add(message);
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                status = 200,
+                message = "Message sent successfully.",
+                data = new
+                {
+                    id = message.Id,
+                    disputeId = message.DisputeId,
+                    senderId = message.SenderId,
+                    senderName = message.SenderRole,
+                    senderRole = message.SenderRole,
+                    body = message.Body,
+                    attachmentUrl = message.AttachmentUrl,
+                    createdAt = message.CreatedAt
+                }
+            });
+        }
 
         // PUT: api/dispute/{id}/resolve
         // Admin decides who's at fault and resolves the dispute.

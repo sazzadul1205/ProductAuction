@@ -8,6 +8,7 @@ using ProductAuction.API.DTOs.Common;
 using ProductAuction.API.DTOs.Wallet;
 using ProductAuction.API.Models;
 using ProductAuction.API.Models.Enums;
+using System.Security.Claims;
 
 namespace ProductAuction.API.Controllers
 {
@@ -745,6 +746,16 @@ namespace ProductAuction.API.Controllers
         [HttpPost("disputes/{id}/start-review")]
         public async Task<IActionResult> StartDisputeReview(int id)
         {
+            var adminId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (adminId == null)
+            {
+                return Unauthorized(new
+                {
+                    status = 401,
+                    message = "Admin information was not found."
+                });
+            }
+
             var dispute = await _context.Disputes.FirstOrDefaultAsync(d => d.Id == id);
 
             if (dispute == null)
@@ -767,6 +778,7 @@ namespace ProductAuction.API.Controllers
             }
 
             dispute.Status = DisputeStatus.UnderReview;
+            dispute.AssignedAdminId = adminId;
 
             await _context.SaveChangesAsync();
 

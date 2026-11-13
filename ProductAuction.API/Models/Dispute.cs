@@ -17,6 +17,7 @@ namespace ProductAuction.API.Models
         public DisputeStatus Status { get; set; } = DisputeStatus.Open;
 
         public string? AdminDecision { get; set; }
+        public string? AssignedAdminId { get; set; }
         public string? DecidedBy { get; set; }
 
         public DateTime CreatedAt { get; set; }

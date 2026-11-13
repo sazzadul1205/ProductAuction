@@ -248,7 +248,6 @@ namespace ProductAuction.API.Migrations
                         .HasColumnType("int");
 
                     b.Property<int?>("Result")
-                        .HasMaxLength(30)
                         .HasColumnType("int");
 
                     b.Property<byte[]>("RowVersion")
@@ -263,7 +262,6 @@ namespace ProductAuction.API.Migrations
                         .HasColumnType("datetime2");
 
                     b.Property<int>("Status")
-                        .HasMaxLength(30)
                         .HasColumnType("int");
 
                     b.Property<string>("WinnerId")
@@ -355,7 +353,6 @@ namespace ProductAuction.API.Migrations
                         .HasColumnType("int");
 
                     b.Property<int>("Status")
-                        .HasMaxLength(30)
                         .HasColumnType("int");
 
                     b.Property<string>("TrackingEvidence")
@@ -399,7 +396,6 @@ namespace ProductAuction.API.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<int>("Status")
-                        .HasMaxLength(30)
                         .HasColumnType("int");
 
                     b.Property<string>("TransactionReference")
@@ -423,6 +419,9 @@ namespace ProductAuction.API.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<string>("AdminDecision")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("AssignedAdminId")
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Complaint")
@@ -449,12 +448,49 @@ namespace ProductAuction.API.Migrations
                         .HasColumnType("int");
 
                     b.Property<int>("Status")
-                        .HasMaxLength(30)
                         .HasColumnType("int");
 
                     b.HasKey("Id");
 
                     b.ToTable("Disputes");
+                });
+
+            modelBuilder.Entity("ProductAuction.API.Models.DisputeMessage", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AttachmentUrl")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("DisputeId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SenderId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("SenderRole")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DisputeId");
+
+                    b.ToTable("DisputeMessages");
                 });
 
             modelBuilder.Entity("ProductAuction.API.Models.Penalty", b =>
@@ -485,7 +521,6 @@ namespace ProductAuction.API.Migrations
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<int>("Status")
-                        .HasMaxLength(30)
                         .HasColumnType("int");
 
                     b.Property<decimal>("TotalAmount")
@@ -506,7 +541,6 @@ namespace ProductAuction.API.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<int>("ApprovalStatus")
-                        .HasMaxLength(30)
                         .HasColumnType("int");
 
                     b.Property<string>("Brand")
@@ -560,7 +594,6 @@ namespace ProductAuction.API.Migrations
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<int>("Status")
-                        .HasMaxLength(30)
                         .HasColumnType("int");
 
                     b.Property<string>("Title")
@@ -657,7 +690,6 @@ namespace ProductAuction.API.Migrations
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<int>("Status")
-                        .HasMaxLength(30)
                         .HasColumnType("int");
 
                     b.HasKey("Id");
@@ -709,7 +741,6 @@ namespace ProductAuction.API.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<int>("VerificationStatus")
-                        .HasMaxLength(30)
                         .HasColumnType("int");
 
                     b.Property<DateTime?>("VerifiedAt")
@@ -770,11 +801,9 @@ namespace ProductAuction.API.Migrations
                         .HasColumnType("int");
 
                     b.Property<int>("Status")
-                        .HasMaxLength(30)
                         .HasColumnType("int");
 
                     b.Property<int>("Type")
-                        .HasMaxLength(30)
                         .HasColumnType("int");
 
                     b.Property<int>("WalletId")
@@ -808,7 +837,6 @@ namespace ProductAuction.API.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<int>("Type")
-                        .HasMaxLength(30)
                         .HasColumnType("int");
 
                     b.Property<int>("WalletId")
@@ -890,6 +918,17 @@ namespace ProductAuction.API.Migrations
                         .IsRequired();
 
                     b.Navigation("Auction");
+                });
+
+            modelBuilder.Entity("ProductAuction.API.Models.DisputeMessage", b =>
+                {
+                    b.HasOne("ProductAuction.API.Models.Dispute", "Dispute")
+                        .WithMany()
+                        .HasForeignKey("DisputeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Dispute");
                 });
 
             modelBuilder.Entity("ProductAuction.API.Models.Product", b =>
