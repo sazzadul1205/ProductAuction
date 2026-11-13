@@ -201,7 +201,13 @@ namespace ProductAuction.API.Controllers
             {
                 status = 200,
                 message = "Your bids were retrieved successfully.",
-                data = bids,
+                data = new
+                {
+                    items = bids,
+                    totalBidsCount,
+                    activeBidsCount,
+                    highestBidsCount
+                },
                 pagination = new
                 {
                     page,
@@ -423,7 +429,13 @@ namespace ProductAuction.API.Controllers
             {
                 status = 200,
                 message = "Won auctions retrieved successfully.",
-                data = auctions,
+                data = new
+                {
+                    items = auctions,
+                    totalWon,
+                    pendingPaymentCount,
+                    totalSpent
+                },
                 pagination = new
                 {
                     page,
