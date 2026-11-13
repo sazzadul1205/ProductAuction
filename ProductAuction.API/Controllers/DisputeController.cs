@@ -140,13 +140,6 @@ namespace ProductAuction.API.Controllers
                 .Where(p => disputeIds.Contains(p.DisputeId))
                 .ToListAsync();
 
-            // Small helpers to look up a name/role from the loaded lists.
-            string GetName(string? userId)
-            {
-                if (string.IsNullOrEmpty(userId)) { return "Unknown"; }
-                var profile = profiles.FirstOrDefault(p => p.UserId == userId);
-                return profile?.FullName ?? "Unknown";
-            }
 
             string GetRole(string? userId)
             {
