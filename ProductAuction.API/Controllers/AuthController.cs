@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -10,8 +10,10 @@ using ProductAuction.API.DTOs.Profile;
 using ProductAuction.API.Models;
 using ProductAuction.API.Services;
 using System.IdentityModel.Tokens.Jwt;
+using System.Net;
 using System.Security.Claims;
 using System.Text;
+using System.Text.Encodings.Web;
 
 namespace ProductAuction.API.Controllers
 {
@@ -22,26 +24,32 @@ namespace ProductAuction.API.Controllers
         private readonly UserManager<IdentityUser> _userManager;
         private readonly AppDbContext _context;
         private readonly IImageUploadService _imageUploadService;
+        private readonly IEmailService _emailService;
         private readonly IConfiguration _configuration;
         private readonly ILogger<AuthController> _logger;
+        private readonly IWebHostEnvironment _env;
 
         public AuthController(
             UserManager<IdentityUser> userManager,
             AppDbContext context,
             IConfiguration configuration,
             IImageUploadService imageUploadService,
-            ILogger<AuthController> logger)
+            IEmailService emailService,
+            ILogger<AuthController> logger,
+            IWebHostEnvironment env)
         {
             _userManager = userManager;
             _context = context;
             _configuration = configuration;
             _imageUploadService = imageUploadService;
+            _emailService = emailService;
             _logger = logger;
+            _env = env;
         }
 
 
         // POST: api/auth/register
-        // Creates an account, assigns a role, and saves the profile and wallet.
+        // Creates an account, assigns a role, saves profile/wallet, and sends confirmation email.
         [HttpPost("register")]
         public async Task<IActionResult> Register(RegisterDto dto)
         {
@@ -68,7 +76,8 @@ namespace ProductAuction.API.Controllers
             var user = new IdentityUser
             {
                 UserName = dto.Email,
-                Email = dto.Email
+                Email = dto.Email,
+                EmailConfirmed = false
             };
 
             var result = await _userManager.CreateAsync(user, dto.Password);
@@ -87,6 +96,7 @@ namespace ProductAuction.API.Controllers
 
             if (!roleResult.Succeeded)
             {
+                await _userManager.DeleteAsync(user);
                 return BadRequest(new
                 {
                     status = 400,
@@ -114,21 +124,44 @@ namespace ProductAuction.API.Controllers
 
             await _context.SaveChangesAsync();
 
+            try
+            {
+                await SendConfirmationEmailAsync(user, dto.Email);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send confirmation email to {Email}", dto.Email);
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+                {
+                    status = StatusCodes.Status503ServiceUnavailable,
+                    message = "Registration completed, but the confirmation email could not be sent. Please try resending.",
+                    data = new
+                    {
+                        email = user.Email,
+                        role = dto.Role,
+                        requiresEmailConfirmation = true,
+                        emailSent = false
+                    }
+                });
+            }
+
             return Ok(new
             {
                 status = 200,
-                message = "Registration successful.",
+                message = "Registration successful. Please check your email to confirm your account before signing in.",
                 data = new
                 {
                     email = user.Email,
-                    role = dto.Role
+                    role = dto.Role,
+                    requiresEmailConfirmation = true,
+                    emailSent = true
                 }
             });
         }
 
 
         // POST: api/auth/login
-        // Checks the credentials and returns a JWT token.
+        // Checks credentials and returns a JWT token only for verified accounts.
         [HttpPost("login")]
         [EnableRateLimiting("login")]
         public async Task<IActionResult> Login(LoginDto dto)
@@ -137,7 +170,6 @@ namespace ProductAuction.API.Controllers
 
             if (user == null)
             {
-
                 return Unauthorized(new
                 {
                     status = 401,
@@ -147,7 +179,6 @@ namespace ProductAuction.API.Controllers
 
             if (await _userManager.IsLockedOutAsync(user))
             {
-
                 return Unauthorized(new
                 {
                     status = 401,
@@ -159,11 +190,24 @@ namespace ProductAuction.API.Controllers
 
             if (!passwordIsValid)
             {
-
                 return Unauthorized(new
                 {
                     status = 401,
                     message = "Invalid email or password."
+                });
+            }
+
+            if (!await _userManager.IsEmailConfirmedAsync(user))
+            {
+                return Unauthorized(new
+                {
+                    status = 401,
+                    message = "Email address is not confirmed. Please verify your email before signing in.",
+                    data = new
+                    {
+                        requiresEmailConfirmation = true,
+                        email = user.Email
+                    }
                 });
             }
 
@@ -172,7 +216,7 @@ namespace ProductAuction.API.Controllers
             var claims = new List<Claim>
             {
                 new Claim(ClaimTypes.NameIdentifier, user.Id),
-                new Claim(ClaimTypes.Email, user.Email!)
+                new Claim(ClaimTypes.Email, user.Email ?? string.Empty)
             };
 
             foreach (var role in roles)
@@ -421,11 +465,214 @@ namespace ProductAuction.API.Controllers
                     errors = result.Errors.Select(e => e.Description)
                 });
             }
-            
+
             return Ok(new
             {
                 status = 200,
                 message = "Password changed successfully."
+            });
+        }
+
+        // POST: api/auth/forgot-password
+        [HttpPost("forgot-password")]
+        public async Task<IActionResult> ForgotPassword(ForgotPasswordDto dto)
+        {
+            var user = await _userManager.FindByEmailAsync(dto.Email);
+            if (user == null)
+            {
+                return Ok(new
+                {
+                    status = 200,
+                    message = "If the email is registered, a password reset link has been sent."
+                });
+            }
+
+            var token = await _userManager.GeneratePasswordResetTokenAsync(user);
+            var encodedToken = WebUtility.UrlEncode(token);
+            var encodedEmail = WebUtility.UrlEncode(dto.Email);
+            var frontendBase = ResolveFrontendBaseUrl();
+            var resetLink = $"{frontendBase}/reset-password?email={encodedEmail}&token={encodedToken}";
+
+            var body = EmailTemplates.BuildPasswordResetEmail(resetLink);
+
+            try
+            {
+                await _emailService.SendEmailAsync(dto.Email, "Reset your password", body);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send password reset email to {Email}", dto.Email);
+                if (_env.IsDevelopment())
+                {
+                    _logger.LogWarning("DEV password reset link for {Email}: {Link}", dto.Email, resetLink);
+                    return Ok(new
+                    {
+                        status = 200,
+                        message = "Password reset link generated (email delivery failed in development). Use the provided link.",
+                        data = new { resetLink }
+                    });
+                }
+                return StatusCode(500, new
+                {
+                    status = 500,
+                    message = "Failed to send password reset email. Check SMTP configuration."
+                });
+            }
+
+            return Ok(new
+            {
+                status = 200,
+                message = "If the email is registered, a password reset link has been sent."
+            });
+        }
+
+        // POST: api/auth/reset-password
+        [HttpPost("reset-password")]
+        public async Task<IActionResult> ResetPassword(ResetPasswordDto dto)
+        {
+            var user = await _userManager.FindByEmailAsync(dto.Email);
+            if (user == null)
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "Invalid reset request."
+                });
+            }
+
+            var result = await _userManager.ResetPasswordAsync(user, dto.Token, dto.NewPassword);
+            if (!result.Succeeded)
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "Password reset failed.",
+                    errors = result.Errors.Select(e => e.Description)
+                });
+            }
+
+            return Ok(new
+            {
+                status = 200,
+                message = "Password reset successful."
+            });
+        }
+
+        // GET: api/auth/confirm-email
+        // Verifies the email confirmation token (link target).
+        [HttpGet("confirm-email")]
+        public async Task<IActionResult> ConfirmEmail([FromQuery] ConfirmEmailDto dto)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(new { status = 400, message = "Invalid confirmation request." });
+            }
+
+            var user = await _userManager.FindByEmailAsync(dto.Email);
+            if (user == null)
+            {
+                return BadRequest(new { status = 400, message = "Invalid confirmation request." });
+            }
+
+            if (user.EmailConfirmed)
+            {
+                return Ok(new { status = 200, message = "Email is already confirmed. You can sign in." });
+            }
+
+            var result = await _userManager.ConfirmEmailAsync(user, dto.Token);
+            if (!result.Succeeded)
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "Email confirmation failed. The link may be invalid or expired.",
+                    errors = result.Errors.Select(e => e.Description)
+                });
+            }
+
+            return Ok(new { status = 200, message = "Email confirmed successfully. You can now sign in." });
+        }
+
+        // POST: api/auth/confirm-email
+        [HttpPost("confirm-email")]
+        public async Task<IActionResult> ConfirmEmailPost(ConfirmEmailDto dto)
+        {
+            return await ConfirmEmail(dto);
+        }
+
+        // POST: api/auth/resend-confirmation
+        [HttpPost("resend-confirmation")]
+        public async Task<IActionResult> ResendConfirmation(ResendConfirmationDto dto)
+        {
+            var user = await _userManager.FindByEmailAsync(dto.Email);
+            if (user == null)
+            {
+                return Ok(new { status = 200, message = "If the email is registered and unconfirmed, a confirmation link has been sent." });
+            }
+
+            if (user.EmailConfirmed)
+            {
+                return Ok(new { status = 200, message = "Email is already confirmed. You can sign in." });
+            }
+
+            try
+            {
+                await SendConfirmationEmailAsync(user, dto.Email);
+                return Ok(new { status = 200, message = "If the email is registered and unconfirmed, a confirmation link has been sent." });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to resend confirmation email to {Email}", dto.Email);
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+                {
+                    status = StatusCodes.Status503ServiceUnavailable,
+                    message = "The confirmation email could not be sent. Please try again later."
+                });
+            }
+        }
+
+        private string ResolveFrontendBaseUrl()
+        {
+            var origin = Request.Headers.Origin.ToString().TrimEnd('/');
+            if (!string.IsNullOrWhiteSpace(origin))
+            {
+                return origin;
+            }
+
+            return (_configuration["App:FrontendBaseUrl"] ?? "http://localhost:5173").TrimEnd('/');
+        }
+
+        private async Task<string> BuildConfirmationLinkAsync(IdentityUser user, string email)
+        {
+            var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
+            var encodedToken = WebUtility.UrlEncode(token);
+            var encodedEmail = WebUtility.UrlEncode(email);
+            var frontendBase = ResolveFrontendBaseUrl();
+            return $"{frontendBase}/confirm-email?email={encodedEmail}&token={encodedToken}";
+        }
+
+        private async Task SendConfirmationEmailAsync(IdentityUser user, string email)
+        {
+            var confirmLink = await BuildConfirmationLinkAsync(user, email);
+            var body = EmailTemplates.BuildAccountConfirmationEmail(confirmLink);
+            await _emailService.SendEmailAsync(email, "Confirm your email address", body);
+        }
+
+        // GET: api/auth/check
+        // Basic auth check: returns 200 when the JWT is valid.
+        [Authorize]
+        [HttpGet("check")]
+        public IActionResult CheckAuth()
+        {
+            return Ok(new
+            {
+                status = 200,
+                message = "Authenticated.",
+                data = new
+                {
+                    userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value,
+                    email = User.FindFirst(ClaimTypes.Email)?.Value
+                }
             });
         }
     }
