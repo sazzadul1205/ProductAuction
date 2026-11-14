@@ -19,15 +19,18 @@ namespace ProductAuction.API.Controllers
         private readonly AppDbContext _context;
         private readonly IImageUploadService _imageUploadService;
         private readonly ILogger<SaleController> _logger;
+        private readonly INotificationService _notificationService;
 
         public SaleController(
             AppDbContext context,
             IImageUploadService imageUploadService,
-            ILogger<SaleController> logger)
+            ILogger<SaleController> logger,
+            INotificationService notificationService)
         {
             _context = context;
             _imageUploadService = imageUploadService;
             _logger = logger;
+            _notificationService = notificationService;
         }
 
 
@@ -500,6 +503,15 @@ namespace ProductAuction.API.Controllers
             await _context.SaveChangesAsync();
             await transaction.CommitAsync();
 
+            if (!string.IsNullOrEmpty(sale.SellerId))
+            {
+                await _notificationService.CreateNotificationAsync(
+                    sale.SellerId,
+                    "Item paid, please dispatch",
+                    $"Sale #{sale.Id} has been paid. Please dispatch the item.",
+                    "/seller/sales");
+            }
+
             return Ok(new
             {
                 status = 200,
@@ -627,6 +639,15 @@ namespace ProductAuction.API.Controllers
             sale.Status = SaleStatus.Dispatched;
 
             await _context.SaveChangesAsync();
+
+            if (!string.IsNullOrEmpty(sale.BuyerId))
+            {
+                await _notificationService.CreateNotificationAsync(
+                    sale.BuyerId,
+                    "Your item has been dispatched",
+                    $"Sale #{sale.Id} has been dispatched.",
+                    "/buyer/won-auctions");
+            }
 
             return Ok(new
             {

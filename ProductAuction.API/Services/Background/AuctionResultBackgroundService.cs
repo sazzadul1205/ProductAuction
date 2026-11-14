@@ -2,6 +2,7 @@
 using ProductAuction.API.Data;
 using ProductAuction.API.Models;
 using ProductAuction.API.Models.Enums;
+using ProductAuction.API.Services;
 
 namespace ProductAuction.API.Services.Background
 {
@@ -46,12 +47,13 @@ namespace ProductAuction.API.Services.Background
                         {
                             using var scope = _scopeFactory.CreateScope();
                             var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                            var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
 
                             var auction = await context.Auctions.FirstOrDefaultAsync(a => a.Id == auctionId, stoppingToken);
 
                             if (auction == null) continue;
 
-                            await ProcessAuctionAsync(context, auction, now, stoppingToken);
+                            await ProcessAuctionAsync(context, auction, now, notificationService, stoppingToken);
                         }
                         catch (Exception ex)
                         {
@@ -69,7 +71,12 @@ namespace ProductAuction.API.Services.Background
             }
         }
 
-        private async Task ProcessAuctionAsync(AppDbContext context, Auction auction, DateTime now, CancellationToken stoppingToken)
+        private async Task ProcessAuctionAsync(
+            AppDbContext context,
+            Auction auction,
+            DateTime now,
+            INotificationService notificationService,
+            CancellationToken stoppingToken)
         {
             _logger.LogInformation("Processing ended auction {AuctionId}.", auction.Id);
 
@@ -89,6 +96,8 @@ namespace ProductAuction.API.Services.Background
                 .FirstOrDefaultAsync(stoppingToken);
 
             string? winnerId = null;
+            string? sellerId = product.SellerId;
+            string productTitle = product.Title;
 
             if (highestBid == null)
             {
@@ -202,6 +211,24 @@ namespace ProductAuction.API.Services.Background
             }
 
             await context.SaveChangesAsync(stoppingToken);
+
+            if (!string.IsNullOrEmpty(winnerId))
+            {
+                await notificationService.CreateNotificationAsync(
+                    winnerId,
+                    "You won!",
+                    $"You won the auction for \"{productTitle}\".",
+                    "/buyer/won-auctions");
+
+                if (!string.IsNullOrEmpty(sellerId))
+                {
+                    await notificationService.CreateNotificationAsync(
+                        sellerId,
+                        "Your item sold!",
+                        $"Your item \"{productTitle}\" has been sold.",
+                        "/seller/sales");
+                }
+            }
 
             _logger.LogDebug("Auction {AuctionId} finalized. Result={Result}, Winner={WinnerId}", auction.Id, auction.Result, auction.WinnerId ?? "<none>");
         }

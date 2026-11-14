@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using ProductAuction.API.Data;
 using ProductAuction.API.DTOs.Profile;
 using ProductAuction.API.Models.Enums;
+using ProductAuction.API.Services;
 using System.Security.Claims;
 
 namespace ProductAuction.API.Controllers
@@ -15,11 +16,13 @@ namespace ProductAuction.API.Controllers
     {
         private readonly AppDbContext _context;
         private readonly ILogger<ProfileController> _logger;
+        private readonly INotificationService _notificationService;
 
-        public ProfileController(AppDbContext context, ILogger<ProfileController> logger)
+        public ProfileController(AppDbContext context, ILogger<ProfileController> logger, INotificationService notificationService)
         {
             _context = context;
             _logger = logger;
+            _notificationService = notificationService;
         }
 
         // PUT: api/profile/submit-verification
@@ -180,6 +183,26 @@ namespace ProductAuction.API.Controllers
             profile.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
+
+            if (!string.IsNullOrEmpty(profile.UserId))
+            {
+                if (profile.VerificationStatus == VerificationStatus.Verified)
+                {
+                    await _notificationService.CreateNotificationAsync(
+                        profile.UserId,
+                        "Profile verified",
+                        "Your profile verification has been approved.",
+                        "/settings");
+                }
+                else
+                {
+                    await _notificationService.CreateNotificationAsync(
+                        profile.UserId,
+                        "Profile verification rejected",
+                        $"Your profile verification was rejected. Reason: {profile.RejectionReason}",
+                        "/settings");
+                }
+            }
 
             return Ok(new
             {

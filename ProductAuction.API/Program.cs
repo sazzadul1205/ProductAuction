@@ -83,6 +83,7 @@ builder.Services.AddOpenApi();
 
 // Register Services
 builder.Services.AddScoped<IImageUploadService, ImageUploadService>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
 
 // Background service
 builder.Services.AddHostedService<AuctionStatusBackgroundService>();

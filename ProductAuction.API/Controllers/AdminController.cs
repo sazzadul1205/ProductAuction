@@ -8,6 +8,7 @@ using ProductAuction.API.DTOs.Common;
 using ProductAuction.API.DTOs.Wallet;
 using ProductAuction.API.Models;
 using ProductAuction.API.Models.Enums;
+using ProductAuction.API.Services;
 using System.Security.Claims;
 
 namespace ProductAuction.API.Controllers
@@ -20,15 +21,18 @@ namespace ProductAuction.API.Controllers
         private readonly UserManager<IdentityUser> _userManager;
         private readonly AppDbContext _context;
         private readonly ILogger<AdminController> _logger;
+        private readonly INotificationService _notificationService;
 
         public AdminController(
             UserManager<IdentityUser> userManager,
             AppDbContext context,
-            ILogger<AdminController> logger)
+            ILogger<AdminController> logger,
+            INotificationService notificationService)
         {
             _userManager = userManager;
             _context = context;
             _logger = logger;
+            _notificationService = notificationService;
         }
 
 
@@ -782,6 +786,27 @@ namespace ProductAuction.API.Controllers
 
             await _context.SaveChangesAsync();
 
+            var sale = await _context.Sales.AsNoTracking().FirstOrDefaultAsync(s => s.Id == dispute.SaleId);
+            if (sale != null)
+            {
+                if (!string.IsNullOrEmpty(sale.BuyerId))
+                {
+                    await _notificationService.CreateNotificationAsync(
+                        sale.BuyerId,
+                        "Dispute under review",
+                        $"Dispute #{dispute.Id} is now under review.",
+                        "/buyer/won-auctions");
+                }
+                if (!string.IsNullOrEmpty(sale.SellerId))
+                {
+                    await _notificationService.CreateNotificationAsync(
+                        sale.SellerId,
+                        "Dispute under review",
+                        $"Dispute #{dispute.Id} is now under review.",
+                        "/seller/sales");
+                }
+            }
+
             return Ok(new
             {
                 status = 200,
@@ -913,6 +938,26 @@ namespace ProductAuction.API.Controllers
             }
 
             await _context.SaveChangesAsync();
+
+            if (!string.IsNullOrEmpty(wallet.UserId))
+            {
+                if (depositRequest.Status == DepositRequestStatus.Approved)
+                {
+                    await _notificationService.CreateNotificationAsync(
+                        wallet.UserId,
+                        "Deposit approved",
+                        $"Your deposit request of {depositRequest.Amount:F2} has been approved.",
+                        "/wallet");
+                }
+                else
+                {
+                    await _notificationService.CreateNotificationAsync(
+                        wallet.UserId,
+                        "Deposit rejected",
+                        $"Your deposit request of {depositRequest.Amount:F2} was rejected. Reason: {depositRequest.RejectionReason}",
+                        "/wallet");
+                }
+            }
 
             return Ok(new
             {

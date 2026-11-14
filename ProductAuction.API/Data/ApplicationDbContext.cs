@@ -30,5 +30,6 @@ namespace ProductAuction.API.Data
         public DbSet<Dispute> Disputes { get; set; }
         public DbSet<Penalty> Penalties { get; set; }
         public DbSet<DisputeMessage> DisputeMessages { get; set; }
+        public DbSet<Notification> Notifications { get; set; }
     }
 }

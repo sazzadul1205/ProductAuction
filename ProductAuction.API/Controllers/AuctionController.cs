@@ -7,6 +7,7 @@ using ProductAuction.API.DTOs.Common;
 using ProductAuction.API.DTOs.Product;
 using ProductAuction.API.Models;
 using ProductAuction.API.Models.Enums;
+using ProductAuction.API.Services;
 using System.Security.Claims;
 
 namespace ProductAuction.API.Controllers
@@ -17,11 +18,13 @@ namespace ProductAuction.API.Controllers
     {
         private readonly AppDbContext _context;
         private readonly ILogger<AuctionController> _logger;
+        private readonly INotificationService _notificationService;
 
-        public AuctionController(AppDbContext context, ILogger<AuctionController> logger)
+        public AuctionController(AppDbContext context, ILogger<AuctionController> logger, INotificationService notificationService)
         {
             _context = context;
             _logger = logger;
+            _notificationService = notificationService;
         }
 
 
@@ -462,6 +465,15 @@ namespace ProductAuction.API.Controllers
 
             await _context.SaveChangesAsync();
 
+            if (!string.IsNullOrEmpty(auction.SellerId))
+            {
+                await _notificationService.CreateNotificationAsync(
+                    auction.SellerId,
+                    "Auction scheduled",
+                    "Your auction schedule has been configured.",
+                    $"/auctions/{auction.Id}");
+            }
+
             return Ok(new
             {
                 status = 200,
@@ -693,6 +705,33 @@ namespace ProductAuction.API.Controllers
 
             await _context.SaveChangesAsync();
             await transaction.CommitAsync();
+
+            if (!string.IsNullOrEmpty(auction.SellerId) && isAdmin)
+            {
+                await _notificationService.CreateNotificationAsync(
+                    auction.SellerId,
+                    "Auction cancelled",
+                    $"Auction #{auction.Id} was cancelled by admin. Reason: {auction.CancellationReason}",
+                    $"/auctions/{auction.Id}");
+            }
+
+            if (isAdmin)
+            {
+                var bidderIds = await _context.Bids.AsNoTracking()
+                    .Where(b => b.AuctionId == auction.Id)
+                    .Select(b => b.BidderId)
+                    .Distinct()
+                    .ToListAsync();
+                foreach (var bidderId in bidderIds)
+                {
+                    if (string.IsNullOrEmpty(bidderId)) continue;
+                    await _notificationService.CreateNotificationAsync(
+                        bidderId,
+                        "Auction cancelled",
+                        $"Auction #{auction.Id} was cancelled by admin.",
+                        $"/auctions/{auction.Id}");
+                }
+            }
 
             return Ok(new
             {

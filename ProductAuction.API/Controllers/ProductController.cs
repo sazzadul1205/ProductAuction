@@ -19,15 +19,18 @@ namespace ProductAuction.API.Controllers
         private readonly AppDbContext _context;
         private readonly IImageUploadService _imageUploadService;
         private readonly ILogger<ProductController> _logger;
+        private readonly INotificationService _notificationService;
 
         public ProductController(
             AppDbContext context,
             IImageUploadService imageUploadService,
-            ILogger<ProductController> logger)
+            ILogger<ProductController> logger,
+            INotificationService notificationService)
         {
             _context = context;
             _imageUploadService = imageUploadService;
             _logger = logger;
+            _notificationService = notificationService;
         }
 
 
@@ -1044,6 +1047,26 @@ namespace ProductAuction.API.Controllers
             }
 
             await _context.SaveChangesAsync();
+
+            if (!string.IsNullOrEmpty(product.SellerId))
+            {
+                if (dto.Status == "Approved")
+                {
+                    await _notificationService.CreateNotificationAsync(
+                        product.SellerId,
+                        "Product approved",
+                        $"Your product \"{product.Title}\" has been approved and is ready for auction.",
+                        "/seller/products");
+                }
+                else
+                {
+                    await _notificationService.CreateNotificationAsync(
+                        product.SellerId,
+                        "Product rejected",
+                        $"Your product \"{product.Title}\" was rejected. Reason: {product.RejectionReason}",
+                        "/seller/products");
+                }
+            }
 
             return Ok(new
             {

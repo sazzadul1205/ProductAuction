@@ -20,15 +20,18 @@ namespace ProductAuction.API.Controllers
         private readonly AppDbContext _context;
         private readonly IImageUploadService _imageUploadService;
         private readonly ILogger<DisputeController> _logger;
+        private readonly INotificationService _notificationService;
 
         public DisputeController(
             AppDbContext context,
             IImageUploadService imageUploadService,
-            ILogger<DisputeController> logger)
+            ILogger<DisputeController> logger,
+            INotificationService notificationService)
         {
             _context = context;
             _imageUploadService = imageUploadService;
             _logger = logger;
+            _notificationService = notificationService;
         }
 
 
@@ -615,6 +618,32 @@ namespace ProductAuction.API.Controllers
 
             _context.DisputeMessages.Add(message);
             await _context.SaveChangesAsync();
+
+            var disputeLink = $"/admin/disputes";
+            var recipients = new HashSet<string>(StringComparer.Ordinal);
+            if (isParty)
+            {
+                var otherPartyId = sale.BuyerId == userId ? sale.SellerId : sale.BuyerId;
+                if (!string.IsNullOrEmpty(otherPartyId)) recipients.Add(otherPartyId);
+                if (!string.IsNullOrEmpty(dispute.AssignedAdminId) && dispute.AssignedAdminId != userId)
+                {
+                    recipients.Add(dispute.AssignedAdminId);
+                }
+            }
+            else if (isAdmin || isSuperAdmin)
+            {
+                if (!string.IsNullOrEmpty(sale.BuyerId) && sale.BuyerId != userId) recipients.Add(sale.BuyerId);
+                if (!string.IsNullOrEmpty(sale.SellerId) && sale.SellerId != userId) recipients.Add(sale.SellerId);
+            }
+
+            foreach (var recipientId in recipients)
+            {
+                await _notificationService.CreateNotificationAsync(
+                    recipientId,
+                    "New dispute message",
+                    $"A new message was posted on dispute #{dispute.Id}.",
+                    disputeLink);
+            }
 
             return Ok(new
             {
@@ -1209,6 +1238,23 @@ namespace ProductAuction.API.Controllers
 
             await _context.SaveChangesAsync();
             await transaction.CommitAsync();
+
+            if (!string.IsNullOrEmpty(sale.BuyerId))
+            {
+                await _notificationService.CreateNotificationAsync(
+                    sale.BuyerId,
+                    "Dispute resolved",
+                    $"Dispute #{dispute.Id} has been resolved. Decision: {dispute.AdminDecision}",
+                    "/buyer/won-auctions");
+            }
+            if (!string.IsNullOrEmpty(sale.SellerId))
+            {
+                await _notificationService.CreateNotificationAsync(
+                    sale.SellerId,
+                    "Dispute resolved",
+                    $"Dispute #{dispute.Id} has been resolved. Decision: {dispute.AdminDecision}",
+                    "/seller/sales");
+            }
 
             return Ok(new
             {

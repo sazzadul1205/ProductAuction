@@ -6,6 +6,7 @@ using ProductAuction.API.Data;
 using ProductAuction.API.DTOs.Bid;
 using ProductAuction.API.Models;
 using ProductAuction.API.Models.Enums;
+using ProductAuction.API.Services;
 
 namespace ProductAuction.API.Controllers
 {
@@ -16,11 +17,13 @@ namespace ProductAuction.API.Controllers
     {
         private readonly AppDbContext _context;
         private readonly ILogger<BidController> _logger;
+        private readonly INotificationService _notificationService;
 
-        public BidController(AppDbContext context, ILogger<BidController> logger)
+        public BidController(AppDbContext context, ILogger<BidController> logger, INotificationService notificationService)
         {
             _context = context;
             _logger = logger;
+            _notificationService = notificationService;
         }
 
 
@@ -198,6 +201,9 @@ namespace ProductAuction.API.Controllers
                 PlacedAt = DateTime.UtcNow
             };
 
+            var previousHighestBidderId = auction.CurrentHighestBidderId;
+            var previousHighestBid = auction.CurrentHighestBid;
+
             _context.Bids.Add(bid);
 
             // the auction's highest bid info
@@ -206,6 +212,17 @@ namespace ProductAuction.API.Controllers
             auction.BidCount++;
 
             await _context.SaveChangesAsync();
+
+            if (!string.IsNullOrEmpty(previousHighestBidderId)
+                && previousHighestBidderId != userId
+                && previousHighestBid.HasValue)
+            {
+                await _notificationService.CreateNotificationAsync(
+                    previousHighestBidderId,
+                    "You have been outbid",
+                    $"You were outbid on \"{product.Title}\". The new highest bid is {dto.Amount:F2}.",
+                    $"/auctions/{auction.Id}");
+            }
 
             return Ok(new
             {
