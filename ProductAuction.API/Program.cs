@@ -6,6 +6,7 @@ using Microsoft.IdentityModel.Tokens;
 using ProductAuction.API.Data;
 using ProductAuction.API.Data.Seeder;
 using ProductAuction.API.Services;
+using ProductAuction.API.Services.Auth;
 using ProductAuction.API.Services.Background;
 using System.Text;
 using System.Text.Json.Serialization;
@@ -59,7 +60,7 @@ var jwtKey = builder.Configuration["Jwt:Key"]!;
 var jwtIssuer = builder.Configuration["Jwt:Issuer"]!;
 var jwtAudience = builder.Configuration["Jwt:Audience"]!;
 
-// Configure JWT token validation.
+// Configure JWT token validation (default) and Google sign-in scheme support.
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -77,12 +78,19 @@ builder.Services.AddAuthentication(options =>
         ValidAudience = jwtAudience,
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
     };
+})
+.AddGoogle(options =>
+{
+    var googleAuth = builder.Configuration.GetSection("Authentication:Google");
+    options.ClientId = googleAuth["ClientId"] ?? string.Empty;
+    options.ClientSecret = googleAuth["ClientSecret"] ?? string.Empty;
 });
 
 builder.Services.AddOpenApi();
 
 // Register Services
 builder.Services.AddScoped<IImageUploadService, ImageUploadService>();
+builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 
 // Background service
 builder.Services.AddHostedService<AuctionStatusBackgroundService>();

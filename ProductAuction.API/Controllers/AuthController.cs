@@ -1,17 +1,16 @@
+using Google.Apis.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.IdentityModel.Tokens;
 using ProductAuction.API.Data;
 using ProductAuction.API.DTOs.Auth;
 using ProductAuction.API.DTOs.Profile;
 using ProductAuction.API.Models;
 using ProductAuction.API.Services;
-using System.IdentityModel.Tokens.Jwt;
+using ProductAuction.API.Services.Auth;
 using System.Security.Claims;
-using System.Text;
 
 namespace ProductAuction.API.Controllers
 {
@@ -23,6 +22,7 @@ namespace ProductAuction.API.Controllers
         private readonly AppDbContext _context;
         private readonly IImageUploadService _imageUploadService;
         private readonly IConfiguration _configuration;
+        private readonly IJwtTokenService _jwtTokenService;
         private readonly ILogger<AuthController> _logger;
 
         public AuthController(
@@ -30,12 +30,14 @@ namespace ProductAuction.API.Controllers
             AppDbContext context,
             IConfiguration configuration,
             IImageUploadService imageUploadService,
+            IJwtTokenService jwtTokenService,
             ILogger<AuthController> logger)
         {
             _userManager = userManager;
             _context = context;
             _configuration = configuration;
             _imageUploadService = imageUploadService;
+            _jwtTokenService = jwtTokenService;
             _logger = logger;
         }
 
@@ -128,16 +130,14 @@ namespace ProductAuction.API.Controllers
 
 
         // POST: api/auth/login
-        // Checks the credentials and returns a JWT token.
-        [HttpPost("login")]
+        // Validates email/password and returns a JWT token if successful.
         [EnableRateLimiting("login")]
+        [HttpPost("login")]
         public async Task<IActionResult> Login(LoginDto dto)
         {
             var user = await _userManager.FindByEmailAsync(dto.Email);
-
             if (user == null)
             {
-
                 return Unauthorized(new
                 {
                     status = 401,
@@ -147,7 +147,6 @@ namespace ProductAuction.API.Controllers
 
             if (await _userManager.IsLockedOutAsync(user))
             {
-
                 return Unauthorized(new
                 {
                     status = 401,
@@ -156,10 +155,8 @@ namespace ProductAuction.API.Controllers
             }
 
             var passwordIsValid = await _userManager.CheckPasswordAsync(user, dto.Password);
-
             if (!passwordIsValid)
             {
-
                 return Unauthorized(new
                 {
                     status = 401,
@@ -167,50 +164,117 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            var roles = await _userManager.GetRolesAsync(user);
-
-            var claims = new List<Claim>
-            {
-                new Claim(ClaimTypes.NameIdentifier, user.Id),
-                new Claim(ClaimTypes.Email, user.Email!)
-            };
-
-            foreach (var role in roles)
-            {
-                claims.Add(new Claim(ClaimTypes.Role, role));
-            }
-
-            // signing key comes from config
-            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]!));
-
-            // pick the signing algorithm
-            var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-
-            // token lasts 2 hours
-            var token = new JwtSecurityToken(
-                issuer: _configuration["Jwt:Issuer"],
-                audience: _configuration["Jwt:Audience"],
-                claims: claims,
-                expires: DateTime.UtcNow.AddHours(2),
-                signingCredentials: credentials);
-
-            // turn it into a string for the client
-            var tokenString = new JwtSecurityTokenHandler().WriteToken(token);
-
+            var tokenData = await _jwtTokenService.GenerateTokenAsync(user);
             return Ok(new
             {
                 status = 200,
                 message = "Login successful.",
-                data = new
-                {
-                    email = user.Email,
-                    roles,
-                    token = tokenString,
-                    expiresInMinutes = 120
-                }
+                data = tokenData
             });
         }
 
+        // POST: api/auth/google-login
+        [HttpPost("google-login")]
+        public async Task<IActionResult> GoogleLogin([FromBody] GoogleLoginDto dto)
+        {
+            if (dto == null || string.IsNullOrWhiteSpace(dto.IdToken))
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "ID token is required."
+                });
+            }
+
+            GoogleJsonWebSignature.Payload payload;
+            try
+            {
+                var settings = new GoogleJsonWebSignature.ValidationSettings();
+                var clientId = _configuration["Authentication:Google:ClientId"];
+                if (!string.IsNullOrWhiteSpace(clientId) && !clientId.StartsWith("YOUR_GOOGLE_CLIENT_ID", StringComparison.OrdinalIgnoreCase))
+                {
+                    settings.Audience = [clientId];
+                }
+                payload = await GoogleJsonWebSignature.ValidateAsync(dto.IdToken, settings);
+            }
+            catch
+            {
+                return Unauthorized(new
+                {
+                    status = 401,
+                    message = "Invalid Google token."
+                });
+            }
+
+            var email = payload.Email;
+            if (string.IsNullOrWhiteSpace(email))
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "Google account email is missing."
+                });
+            }
+
+            var user = await _userManager.FindByEmailAsync(email);
+            if (user == null)
+            {
+                user = new IdentityUser
+                {
+                    UserName = email,
+                    Email = email,
+                    EmailConfirmed = payload.EmailVerified
+                };
+
+                var createResult = await _userManager.CreateAsync(user);
+                if (!createResult.Succeeded)
+                {
+                    return BadRequest(new
+                    {
+                        status = 400,
+                        message = "Failed to create user from Google account.",
+                        errors = createResult.Errors.Select(e => e.Description)
+                    });
+                }
+
+                var roleResult = await _userManager.AddToRoleAsync(user, "Buyer");
+                if (!roleResult.Succeeded)
+                {
+                    return BadRequest(new
+                    {
+                        status = 400,
+                        message = "Failed to assign default role.",
+                        errors = roleResult.Errors.Select(e => e.Description)
+                    });
+                }
+
+                _context.UserProfiles.Add(new UserProfile
+                {
+                    UserId = user.Id,
+                    FullName = string.IsNullOrWhiteSpace(payload.Name) ? email : payload.Name,
+                    CreatedAt = DateTime.UtcNow
+                });
+                _context.Wallets.Add(new Wallet { UserId = user.Id, Balance = 0, ReservedBalance = 0 });
+                await _context.SaveChangesAsync();
+            }
+
+            if (await _userManager.IsLockedOutAsync(user))
+            {
+                return Unauthorized(new
+                {
+                    status = 401,
+                    message = "Account is locked."
+                });
+            }
+
+            var tokenData = await _jwtTokenService.GenerateTokenAsync(user);
+            return Ok(new
+            {
+                status = 200,
+                message = "Google login successful.",
+                data = tokenData
+            });
+        }
 
         // GET: api/auth/test-token
         // Requires a valid JWT token
@@ -421,7 +485,7 @@ namespace ProductAuction.API.Controllers
                     errors = result.Errors.Select(e => e.Description)
                 });
             }
-            
+
             return Ok(new
             {
                 status = 200,
