@@ -189,20 +189,32 @@ namespace ProductAuction.API.Controllers
             GoogleJsonWebSignature.Payload payload;
             try
             {
-                var settings = new GoogleJsonWebSignature.ValidationSettings();
-                var clientId = _configuration["Authentication:Google:ClientId"];
-                if (!string.IsNullOrWhiteSpace(clientId) && !clientId.StartsWith("YOUR_GOOGLE_CLIENT_ID", StringComparison.OrdinalIgnoreCase))
+                var clientId = (_configuration["Authentication:Google:ClientId"] ?? string.Empty).Trim();
+                if (string.IsNullOrWhiteSpace(clientId))
                 {
-                    settings.Audience = [clientId];
+                    _logger.LogError("Google login is not configured: client ID is missing.");
+                    return StatusCode(StatusCodes.Status500InternalServerError, new
+                    {
+                        status = StatusCodes.Status500InternalServerError,
+                        message = "Google login is not configured."
+                    });
                 }
-                payload = await GoogleJsonWebSignature.ValidateAsync(dto.IdToken, settings);
+
+                payload = await GoogleJsonWebSignature.ValidateAsync(dto.IdToken);
+                if (!payload.AudienceAsList.Any(audience =>
+                        string.Equals(audience, clientId, StringComparison.Ordinal)))
+                {
+                    throw new InvalidJwtException("Google ID token audience does not match the configured client ID.");
+                }
             }
-            catch
+            catch (Exception ex)
             {
+                _logger.LogWarning(ex, "Google token validation failed.");
                 return Unauthorized(new
                 {
                     status = 401,
-                    message = "Invalid Google token."
+                    message = "Invalid Google token.",
+                    detail = ex.Message
                 });
             }
 
