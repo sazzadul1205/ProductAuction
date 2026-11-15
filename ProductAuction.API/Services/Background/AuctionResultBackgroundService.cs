@@ -170,7 +170,7 @@ namespace ProductAuction.API.Services.Background
                 });
             }
 
-            // Release every buyers locked funds, except the winners.
+            // Release every buyers locked funds, Exclude the winners.
             var reservations = await context.WalletReservations
                 .Where(r =>
                     r.AuctionId == auction.Id &&

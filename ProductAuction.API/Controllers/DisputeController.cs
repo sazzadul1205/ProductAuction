@@ -513,7 +513,12 @@ namespace ProductAuction.API.Controllers
                 createdAt = m.CreatedAt
             }).ToList();
 
-            return Ok(new { status = 200, message = "Messages retrieved successfully.", data });
+            return Ok(new
+            {
+                status = 200,
+                message = "Messages retrieved successfully.",
+                data
+            });
         }
 
         // POST: api/dispute/{id}/messages
