@@ -554,7 +554,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            var sale = await _context.Sales.AsNoTracking().FirstOrDefaultAsync(s => s.Id == dispute.SaleId);
+            var sale = await _context.Sales.FirstOrDefaultAsync(s => s.Id == dispute.SaleId);
             if (sale == null)
             {
                 return NotFound(new
