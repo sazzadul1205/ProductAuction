@@ -183,7 +183,6 @@ namespace ProductAuction.API.Controllers
 
             var product = await _context.Products
                 .Where(p => p.Id == id && p.SellerId == userId)
-                .AsNoTracking()
                 .Select(p => new ProductResponseDto
                 {
                     Id = p.Id,
@@ -210,7 +209,6 @@ namespace ProductAuction.API.Controllers
                     // all images for this product
                     Images = _context.ProductImages
                         .Where(i => i.ProductId == p.Id)
-                        .AsNoTracking()
                         .Select(i => new ProductImageResponseDto
                         {
                             Id = i.Id,
@@ -849,7 +847,6 @@ namespace ProductAuction.API.Controllers
         {
             var product = await _context.Products
                 .Where(p => p.Id == id && p.ApprovalStatus == ProductApprovalStatus.PendingApproval)
-                .AsNoTracking()
                 .Select(p => new ProductResponseDto
                 {
                     Id = p.Id,
@@ -873,7 +870,6 @@ namespace ProductAuction.API.Controllers
                     CreatedAt = p.CreatedAt,
                     Images = _context.ProductImages
                         .Where(i => i.ProductId == p.Id)
-                        .AsNoTracking()
                         .Select(i => new ProductImageResponseDto
                         {
                             Id = i.Id,

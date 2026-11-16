@@ -277,7 +277,6 @@ namespace ProductAuction.API.Controllers
         {
             var auction = await _context.Auctions
                 .Where(a => a.Id == id)
-                .AsNoTracking()
                 .Select(a => new AuctionDetailsDto
                 {
                     Id = a.Id,
@@ -302,12 +301,10 @@ namespace ProductAuction.API.Controllers
                     KnownIssues = a.Product.KnownIssues,
                     MainImageUrl = _context.ProductImages
                         .Where(i => i.ProductId == a.ProductId && i.IsMain)
-                        .AsNoTracking()
                         .Select(i => i.ImageUrl)
                         .FirstOrDefault() ?? "",
                     Images = _context.ProductImages
                         .Where(i => i.ProductId == a.ProductId)
-                        .AsNoTracking()
                         .Select(i => new ProductImageResponseDto
                         {
                             Id = i.Id,
@@ -354,7 +351,6 @@ namespace ProductAuction.API.Controllers
 
             var auction = await _context.Auctions
                 .Where(a => a.Id == id && a.SellerId == userId)
-                .AsNoTracking()
                 .Select(a => new AuctionDetailsDto
                 {
                     Id = a.Id,
@@ -371,12 +367,10 @@ namespace ProductAuction.API.Controllers
                     Result = a.Result != null ? a.Result.ToString() : null,
                     MainImageUrl = _context.ProductImages
                         .Where(i => i.ProductId == a.ProductId && i.IsMain)
-                        .AsNoTracking()
                         .Select(i => i.ImageUrl)
                         .FirstOrDefault() ?? "",
                     Images = _context.ProductImages
                         .Where(i => i.ProductId == a.ProductId)
-                        .AsNoTracking()
                         .Select(i => new ProductImageResponseDto
                         {
                             Id = i.Id,
