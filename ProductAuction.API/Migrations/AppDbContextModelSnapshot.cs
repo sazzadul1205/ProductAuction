@@ -280,6 +280,33 @@ namespace ProductAuction.API.Migrations
                     b.ToTable("Auctions");
                 });
 
+            modelBuilder.Entity("ProductAuction.API.Models.AuctionView", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AuctionId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("IpAddress")
+                        .IsRequired()
+                        .HasMaxLength(45)
+                        .HasColumnType("nvarchar(45)");
+
+                    b.Property<DateTime>("ViewedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AuctionId", "IpAddress")
+                        .IsUnique();
+
+                    b.ToTable("AuctionViews");
+                });
+
             modelBuilder.Entity("ProductAuction.API.Models.Bid", b =>
                 {
                     b.Property<int>("Id")
@@ -505,6 +532,36 @@ namespace ProductAuction.API.Migrations
                     b.HasIndex("DisputeId");
 
                     b.ToTable("DisputeMessages");
+                });
+
+            modelBuilder.Entity("ProductAuction.API.Models.Favorite", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AuctionId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AuctionId");
+
+                    b.HasIndex("UserId", "AuctionId")
+                        .IsUnique();
+
+                    b.HasIndex("UserId", "CreatedAt");
+
+                    b.ToTable("Favorites");
                 });
 
             modelBuilder.Entity("ProductAuction.API.Models.Penalty", b =>
@@ -923,6 +980,17 @@ namespace ProductAuction.API.Migrations
                     b.Navigation("Product");
                 });
 
+            modelBuilder.Entity("ProductAuction.API.Models.AuctionView", b =>
+                {
+                    b.HasOne("ProductAuction.API.Models.Auction", "Auction")
+                        .WithMany()
+                        .HasForeignKey("AuctionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Auction");
+                });
+
             modelBuilder.Entity("ProductAuction.API.Models.Bid", b =>
                 {
                     b.HasOne("ProductAuction.API.Models.Auction", "Auction")
@@ -953,6 +1021,17 @@ namespace ProductAuction.API.Migrations
                         .IsRequired();
 
                     b.Navigation("Dispute");
+                });
+
+            modelBuilder.Entity("ProductAuction.API.Models.Favorite", b =>
+                {
+                    b.HasOne("ProductAuction.API.Models.Auction", "Auction")
+                        .WithMany()
+                        .HasForeignKey("AuctionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Auction");
                 });
 
             modelBuilder.Entity("ProductAuction.API.Models.Product", b =>

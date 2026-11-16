@@ -18,6 +18,7 @@ namespace ProductAuction.API.DTOs.Auction
     public int BidCount { get; set; }
     public int ViewCount { get; set; }
     public bool IsFeatured { get; set; }
+    public bool IsFavorited { get; set; }
     public string? Result { get; set; }
     public string? MainImageUrl { get; set; }
 

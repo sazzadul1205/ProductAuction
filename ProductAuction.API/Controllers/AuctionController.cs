@@ -308,21 +308,49 @@ namespace ProductAuction.API.Controllers
         
 
         // GET: api/auction/{id}
-        // Returns full auction details and increments view count.
+        // Returns full auction details and increments view count once per IP.
         [HttpGet("{id}")]
         public async Task<IActionResult> GetAuctionById(int id)
         {
-            var updated = await _context.Auctions
-                .Where(a => a.Id == id)
-                .ExecuteUpdateAsync(s => s.SetProperty(a => a.ViewCount, a => a.ViewCount + 1));
-
-            if (updated == 0)
+            var exists = await _context.Auctions.AsNoTracking().AnyAsync(a => a.Id == id);
+            if (!exists)
             {
                 return NotFound(new
                 {
                     status = 404,
                     message = "Auction not found."
                 });
+            }
+
+            var ipAddress = GetClientIpAddress();
+            if (!string.IsNullOrWhiteSpace(ipAddress))
+            {
+                var alreadyViewed = await _context.AuctionViews
+                    .AsNoTracking()
+                    .AnyAsync(v => v.AuctionId == id && v.IpAddress == ipAddress);
+
+                if (!alreadyViewed)
+                {
+                    try
+                    {
+                        _context.AuctionViews.Add(new AuctionView
+                        {
+                            AuctionId = id,
+                            IpAddress = ipAddress,
+                            ViewedAt = DateTime.UtcNow
+                        });
+                        await _context.SaveChangesAsync();
+
+                        await _context.Auctions
+                            .Where(a => a.Id == id)
+                            .ExecuteUpdateAsync(s => s.SetProperty(a => a.ViewCount, a => a.ViewCount + 1));
+                    }
+                    catch (DbUpdateException)
+                    {
+                        // Unique constraint race: same IP already recorded concurrently.
+                        _context.ChangeTracker.Clear();
+                    }
+                }
             }
 
             var auction = await _context.Auctions
@@ -378,12 +406,41 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (!string.IsNullOrEmpty(userId))
+            {
+                auction.IsFavorited = await _context.Favorites
+                    .AsNoTracking()
+                    .AnyAsync(f => f.UserId == userId && f.AuctionId == id);
+            }
+
             return Ok(new
             {
                 status = 200,
                 message = "Auction details retrieved successfully.",
                 data = auction
             });
+        }
+
+        private string? GetClientIpAddress()
+        {
+            var forwarded = Request.Headers["X-Forwarded-For"].FirstOrDefault();
+            if (!string.IsNullOrWhiteSpace(forwarded))
+            {
+                var ip = forwarded.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault();
+                if (!string.IsNullOrWhiteSpace(ip))
+                {
+                    return ip.Length > 45 ? ip[..45] : ip;
+                }
+            }
+
+            var remoteIp = HttpContext.Connection.RemoteIpAddress?.ToString();
+            if (string.IsNullOrWhiteSpace(remoteIp))
+            {
+                return null;
+            }
+
+            return remoteIp.Length > 45 ? remoteIp[..45] : remoteIp;
         }
 
 

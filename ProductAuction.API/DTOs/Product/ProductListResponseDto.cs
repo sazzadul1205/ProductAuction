@@ -35,6 +35,7 @@
         public int? AuctionId { get; set; }
         public int? AuctionBidCount { get; set; }
         public decimal? AuctionCurrentHighestBid { get; set; }
+        public int? AuctionViewCount { get; set; }
         public string? AuctionCancellationReason { get; set; }
     }
 }

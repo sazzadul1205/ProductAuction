@@ -147,6 +147,12 @@ namespace ProductAuction.API.Controllers
                         .Select(a => a.CurrentHighestBid)
                         .FirstOrDefault(),
 
+                    AuctionViewCount = _context.Auctions
+                        .Where(a => a.ProductId == p.Id)
+                        .AsNoTracking()
+                        .Select(a => (int?)a.ViewCount)
+                        .FirstOrDefault(),
+
                     AuctionCancellationReason = _context.Auctions
                         .Where(a => a.ProductId == p.Id)
                         .AsNoTracking()
@@ -206,6 +212,32 @@ namespace ProductAuction.API.Controllers
                     RejectionReason = p.RejectionReason,
                     Status = p.Status.ToString(),
                     CreatedAt = p.CreatedAt,
+
+                    AuctionId = _context.Auctions
+                        .Where(a => a.ProductId == p.Id)
+                        .AsNoTracking()
+                        .Select(a => (int?)a.Id)
+                        .FirstOrDefault(),
+                    AuctionStatus = _context.Auctions
+                        .Where(a => a.ProductId == p.Id)
+                        .AsNoTracking()
+                        .Select(a => a.Status.ToString())
+                        .FirstOrDefault(),
+                    AuctionBidCount = _context.Auctions
+                        .Where(a => a.ProductId == p.Id)
+                        .AsNoTracking()
+                        .Select(a => (int?)a.BidCount)
+                        .FirstOrDefault(),
+                    AuctionCurrentHighestBid = _context.Auctions
+                        .Where(a => a.ProductId == p.Id)
+                        .AsNoTracking()
+                        .Select(a => a.CurrentHighestBid)
+                        .FirstOrDefault(),
+                    AuctionViewCount = _context.Auctions
+                        .Where(a => a.ProductId == p.Id)
+                        .AsNoTracking()
+                        .Select(a => (int?)a.ViewCount)
+                        .FirstOrDefault(),
 
                     // all images for this product
                     Images = _context.ProductImages

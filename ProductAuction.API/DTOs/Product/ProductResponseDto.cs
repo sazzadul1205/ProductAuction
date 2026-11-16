@@ -43,6 +43,13 @@ namespace ProductAuction.API.DTOs.Product
 
         public DateTime CreatedAt { get; set; }
 
+        // Auction info (null when no auction exists for this product)
+        public int? AuctionId { get; set; }
+        public string? AuctionStatus { get; set; }
+        public int? AuctionBidCount { get; set; }
+        public decimal? AuctionCurrentHighestBid { get; set; }
+        public int? AuctionViewCount { get; set; }
+
         public List<ProductImageResponseDto> Images { get; set; } = new();
     }
 }

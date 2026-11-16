@@ -48,6 +48,11 @@ namespace ProductAuction.API.Controllers
                 .AsNoTracking()
                 .CountAsync(a => a.SellerId == userId && a.Status == AuctionStatus.Active);
 
+            var totalAuctionViews = await _context.Auctions
+                .AsNoTracking()
+                .Where(a => a.SellerId == userId)
+                .SumAsync(a => (int?)a.ViewCount) ?? 0;
+
             // sales & earnings
             var sales = await _context.Sales
                 .Where(s => s.SellerId == userId)
@@ -78,6 +83,7 @@ namespace ProductAuction.API.Controllers
                     approved,
                     rejected,
                     activeAuctions,
+                    totalAuctionViews,
                     soldCount,
                     awaitingDispatch,
                     totalEarnings,
