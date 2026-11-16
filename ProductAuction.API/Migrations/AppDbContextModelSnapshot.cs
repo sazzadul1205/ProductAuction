@@ -244,6 +244,9 @@ namespace ProductAuction.API.Migrations
                     b.Property<DateTime?>("EndTime")
                         .HasColumnType("datetime2");
 
+                    b.Property<bool>("IsFeatured")
+                        .HasColumnType("bit");
+
                     b.Property<int>("ProductId")
                         .HasColumnType("int");
 
@@ -262,6 +265,9 @@ namespace ProductAuction.API.Migrations
                         .HasColumnType("datetime2");
 
                     b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ViewCount")
                         .HasColumnType("int");
 
                     b.Property<string>("WinnerId")
@@ -314,11 +320,19 @@ namespace ProductAuction.API.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("IconUrl")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<int?>("ParentId")
+                        .HasColumnType("int");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("ParentId");
 
                     b.ToTable("Categories");
                 });
@@ -920,6 +934,16 @@ namespace ProductAuction.API.Migrations
                     b.Navigation("Auction");
                 });
 
+            modelBuilder.Entity("ProductAuction.API.Models.Category", b =>
+                {
+                    b.HasOne("ProductAuction.API.Models.Category", "Parent")
+                        .WithMany("Children")
+                        .HasForeignKey("ParentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Parent");
+                });
+
             modelBuilder.Entity("ProductAuction.API.Models.DisputeMessage", b =>
                 {
                     b.HasOne("ProductAuction.API.Models.Dispute", "Dispute")
@@ -940,6 +964,11 @@ namespace ProductAuction.API.Migrations
                         .IsRequired();
 
                     b.Navigation("Category");
+                });
+
+            modelBuilder.Entity("ProductAuction.API.Models.Category", b =>
+                {
+                    b.Navigation("Children");
                 });
 #pragma warning restore 612, 618
         }

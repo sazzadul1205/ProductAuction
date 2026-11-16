@@ -30,5 +30,16 @@ namespace ProductAuction.API.Data
         public DbSet<Dispute> Disputes { get; set; }
         public DbSet<Penalty> Penalties { get; set; }
         public DbSet<DisputeMessage> DisputeMessages { get; set; }
+
+        protected override void OnModelCreating(ModelBuilder builder)
+        {
+            base.OnModelCreating(builder);
+
+            builder.Entity<Category>()
+                .HasOne(c => c.Parent)
+                .WithMany(c => c.Children)
+                .HasForeignKey(c => c.ParentId)
+                .OnDelete(DeleteBehavior.Restrict);
+        }
     }
 }

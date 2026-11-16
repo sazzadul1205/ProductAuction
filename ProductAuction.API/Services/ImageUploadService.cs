@@ -22,14 +22,14 @@ namespace ProductAuction.API.Services
             {
                 throw new ArgumentException("Image size cannot exceed 5 MB.");
             }
-            var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".webp" };
+            var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".webp", ".svg" };
 
             // Get the file extension in lowercase.
             var extension = Path.GetExtension(image.FileName).ToLowerInvariant();
 
             if (!allowedExtensions.Contains(extension))
             {
-                throw new ArgumentException("Only JPG, JPEG, PNG, and WEBP images are allowed.");
+                throw new ArgumentException("Only JPG, JPEG, PNG, WEBP, and SVG files are allowed.");
             }
 
             var webRoot = _environment.WebRootPath ?? Path.Combine(_environment.ContentRootPath, "wwwroot");

@@ -131,6 +131,8 @@ namespace ProductAuction.API.Controllers
                     Status = a.Status.ToString(),
                     CurrentHighestBid = a.CurrentHighestBid,
                     BidCount = a.BidCount,
+                    ViewCount = a.ViewCount,
+                    IsFeatured = a.IsFeatured,
                     MainImageUrl = _context.ProductImages
                         .Where(i => i.ProductId == a.ProductId && i.IsMain)
                         .AsNoTracking()
@@ -186,6 +188,8 @@ namespace ProductAuction.API.Controllers
                     Status = a.Status.ToString(),
                     CurrentHighestBid = a.CurrentHighestBid,
                     BidCount = a.BidCount,
+                    ViewCount = a.ViewCount,
+                    IsFeatured = a.IsFeatured,
                     MainImageUrl = _context.ProductImages
                         .Where(i => i.ProductId == a.ProductId && i.IsMain)
                         .AsNoTracking()
@@ -224,6 +228,8 @@ namespace ProductAuction.API.Controllers
                     Status = a.Status.ToString(),
                     CurrentHighestBid = a.CurrentHighestBid,
                     BidCount = a.BidCount,
+                    ViewCount = a.ViewCount,
+                    IsFeatured = a.IsFeatured,
                     MainImageUrl = _context.ProductImages
                         .Where(i => i.ProductId == a.ProductId && i.IsMain)
                         .AsNoTracking()
@@ -251,6 +257,37 @@ namespace ProductAuction.API.Controllers
                     Status = a.Status.ToString(),
                     CurrentHighestBid = a.CurrentHighestBid,
                     BidCount = a.BidCount,
+                    ViewCount = a.ViewCount,
+                    IsFeatured = a.IsFeatured,
+                    MainImageUrl = _context.ProductImages
+                        .Where(i => i.ProductId == a.ProductId && i.IsMain)
+                        .AsNoTracking()
+                        .Select(i => i.ImageUrl)
+                        .FirstOrDefault() ?? "",
+                    CategoryId = a.Product.CategoryId,
+                    CategoryName = a.Product.Category.Name
+                })
+                .ToListAsync();
+
+            var featured = await baseQuery
+                .Where(a => a.IsFeatured && a.Status == AuctionStatus.Active && (!a.EndTime.HasValue || a.EndTime > now))
+                .OrderBy(a => a.EndTime)
+                .Take(8)
+                .AsNoTracking()
+                .Select(a => new AuctionListDto
+                {
+                    Id = a.Id,
+                    ProductId = a.ProductId,
+                    ProductTitle = a.Product.Title,
+                    StartingPrice = a.Product.StartingPrice,
+                    BuyoutPrice = a.Product.BuyoutPrice,
+                    StartTime = a.StartTime,
+                    EndTime = a.EndTime,
+                    Status = a.Status.ToString(),
+                    CurrentHighestBid = a.CurrentHighestBid,
+                    BidCount = a.BidCount,
+                    ViewCount = a.ViewCount,
+                    IsFeatured = a.IsFeatured,
                     MainImageUrl = _context.ProductImages
                         .Where(i => i.ProductId == a.ProductId && i.IsMain)
                         .AsNoTracking()
@@ -265,16 +302,29 @@ namespace ProductAuction.API.Controllers
             {
                 status = 200,
                 message = "Home auctions retrieved successfully.",
-                data = new { banner, active, upcoming }
+                data = new { banner, active, upcoming, featured }
             });
         }
         
 
         // GET: api/auction/{id}
-        // Returns full auction details
+        // Returns full auction details and increments view count.
         [HttpGet("{id}")]
         public async Task<IActionResult> GetAuctionById(int id)
         {
+            var updated = await _context.Auctions
+                .Where(a => a.Id == id)
+                .ExecuteUpdateAsync(s => s.SetProperty(a => a.ViewCount, a => a.ViewCount + 1));
+
+            if (updated == 0)
+            {
+                return NotFound(new
+                {
+                    status = 404,
+                    message = "Auction not found."
+                });
+            }
+
             var auction = await _context.Auctions
                 .Where(a => a.Id == id)
                 .AsNoTracking()
@@ -291,6 +341,8 @@ namespace ProductAuction.API.Controllers
                     Status = a.Status.ToString(),
                     CurrentHighestBid = a.CurrentHighestBid,
                     BidCount = a.BidCount,
+                    ViewCount = a.ViewCount,
+                    IsFeatured = a.IsFeatured,
                     Result = a.Result != null ? a.Result.ToString() : null,
                     Brand = a.Product.Brand,
                     ModelNumber = a.Product.ModelNumber,
@@ -368,6 +420,8 @@ namespace ProductAuction.API.Controllers
                     Status = a.Status.ToString(),
                     CurrentHighestBid = a.CurrentHighestBid,
                     BidCount = a.BidCount,
+                    ViewCount = a.ViewCount,
+                    IsFeatured = a.IsFeatured,
                     Result = a.Result != null ? a.Result.ToString() : null,
                     MainImageUrl = _context.ProductImages
                         .Where(i => i.ProductId == a.ProductId && i.IsMain)
@@ -409,6 +463,51 @@ namespace ProductAuction.API.Controllers
                 status = 200,
                 message = "Auction details retrieved successfully.",
                 data = auction
+            });
+        }
+
+
+        // GET: api/auction/hot
+        // Returns top 8 active auctions ordered by bid count.
+        [HttpGet("hot")]
+        public async Task<IActionResult> GetHotAuctions()
+        {
+            var now = DateTime.UtcNow;
+            var hot = await _context.Auctions
+                .Where(a => a.Status == AuctionStatus.Active && (!a.EndTime.HasValue || a.EndTime > now))
+                .OrderByDescending(a => a.BidCount)
+                .ThenBy(a => a.EndTime)
+                .Take(8)
+                .AsNoTracking()
+                .Select(a => new AuctionListDto
+                {
+                    Id = a.Id,
+                    ProductId = a.ProductId,
+                    ProductTitle = a.Product.Title,
+                    StartingPrice = a.Product.StartingPrice,
+                    BuyoutPrice = a.Product.BuyoutPrice,
+                    StartTime = a.StartTime,
+                    EndTime = a.EndTime,
+                    Status = a.Status.ToString(),
+                    CurrentHighestBid = a.CurrentHighestBid,
+                    BidCount = a.BidCount,
+                    ViewCount = a.ViewCount,
+                    IsFeatured = a.IsFeatured,
+                    MainImageUrl = _context.ProductImages
+                        .Where(i => i.ProductId == a.ProductId && i.IsMain)
+                        .AsNoTracking()
+                        .Select(i => i.ImageUrl)
+                        .FirstOrDefault() ?? "",
+                    CategoryId = a.Product.CategoryId,
+                    CategoryName = a.Product.Category.Name
+                })
+                .ToListAsync();
+
+            return Ok(new
+            {
+                status = 200,
+                message = "Hot auctions retrieved successfully.",
+                data = hot
             });
         }
 

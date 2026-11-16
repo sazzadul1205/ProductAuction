@@ -24,6 +24,9 @@ namespace ProductAuction.API.Models
 
         public int BidCount { get; set; } = 0;
 
+        public int ViewCount { get; set; } = 0;
+        public bool IsFeatured { get; set; } = false;
+
         public string? WinnerId { get; set; }
 
         public AuctionResult? Result { get; set; }
