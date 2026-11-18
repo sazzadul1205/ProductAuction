@@ -350,7 +350,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            var dispute = await _context.Disputes.AsNoTracking().FirstOrDefaultAsync(d => d.Id == id);
+            var dispute = await _context.Disputes.FirstOrDefaultAsync(d => d.Id == id);
             if (dispute == null)
             {
                 return NotFound(new
@@ -360,7 +360,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            var sale = await _context.Sales.AsNoTracking().FirstOrDefaultAsync(s => s.Id == dispute.SaleId);
+            var sale = await _context.Sales.FirstOrDefaultAsync(s => s.Id == dispute.SaleId);
             if (sale == null)
             {
                 return NotFound(new
@@ -384,20 +384,20 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            var product = await _context.Products.AsNoTracking().FirstOrDefaultAsync(p => p.Id == dispute.ProductId);
-            var penalty = await _context.Penalties.AsNoTracking().FirstOrDefaultAsync(p => p.DisputeId == dispute.Id);
+            var product = await _context.Products.FirstOrDefaultAsync(p => p.Id == dispute.ProductId);
+            var penalty = await _context.Penalties.FirstOrDefaultAsync(p => p.DisputeId == dispute.Id);
 
             var involvedUserIds = new List<string> { dispute.RaisedBy, sale.BuyerId, sale.SellerId };
-            var profiles = await _context.UserProfiles.AsNoTracking()
+            var profiles = await _context.UserProfiles
                 .Where(p => involvedUserIds.Contains(p.UserId))
                 .Select(p => new { p.UserId, p.FullName })
                 .ToListAsync();
 
-            var userRoles = await _context.UserRoles.AsNoTracking()
+            var userRoles = await _context.UserRoles
                 .Where(ur => involvedUserIds.Contains(ur.UserId))
                 .ToListAsync();
             var roleIds = userRoles.Select(ur => ur.RoleId).Distinct().ToList();
-            var roles = await _context.Roles.AsNoTracking()
+            var roles = await _context.Roles
                 .Where(r => roleIds.Contains(r.Id))
                 .Select(r => new { r.Id, r.Name })
                 .ToListAsync();
@@ -461,7 +461,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            var dispute = await _context.Disputes.AsNoTracking().FirstOrDefaultAsync(d => d.Id == id);
+            var dispute = await _context.Disputes.FirstOrDefaultAsync(d => d.Id == id);
             if (dispute == null)
             {
                 return NotFound(new
@@ -471,7 +471,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            var sale = await _context.Sales.AsNoTracking().FirstOrDefaultAsync(s => s.Id == dispute.SaleId);
+            var sale = await _context.Sales.FirstOrDefaultAsync(s => s.Id == dispute.SaleId);
             if (sale == null)
             {
                 return NotFound(new
@@ -494,7 +494,7 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            var messages = await _context.DisputeMessages.AsNoTracking()
+            var messages = await _context.DisputeMessages
                 .Where(m => m.DisputeId == id)
                 .OrderBy(m => m.CreatedAt)
                 .ToListAsync();
