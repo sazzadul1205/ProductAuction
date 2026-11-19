@@ -83,12 +83,14 @@ builder.Services.AddOpenApi();
 
 // Register Services
 builder.Services.AddScoped<IImageUploadService, ImageUploadService>();
+builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 
 // Background service
 builder.Services.AddHostedService<AuctionStatusBackgroundService>();
 builder.Services.AddHostedService<AuctionResultBackgroundService>();
 builder.Services.AddHostedService<PaymentOverdueBackgroundService>();
 builder.Services.AddHostedService<DispatchOverdueBackgroundService>();
+builder.Services.AddHostedService<RefreshTokenCleanupBackgroundService>();
 
 var app = builder.Build();
 

@@ -3,15 +3,12 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.IdentityModel.Tokens;
 using ProductAuction.API.Data;
 using ProductAuction.API.DTOs.Auth;
 using ProductAuction.API.DTOs.Profile;
 using ProductAuction.API.Models;
 using ProductAuction.API.Services;
-using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
-using System.Text;
 
 namespace ProductAuction.API.Controllers
 {
@@ -24,19 +21,22 @@ namespace ProductAuction.API.Controllers
         private readonly IImageUploadService _imageUploadService;
         private readonly IConfiguration _configuration;
         private readonly ILogger<AuthController> _logger;
+        private readonly IJwtTokenService _jwtTokenService;
 
         public AuthController(
             UserManager<IdentityUser> userManager,
             AppDbContext context,
             IConfiguration configuration,
             IImageUploadService imageUploadService,
-            ILogger<AuthController> logger)
+            ILogger<AuthController> logger,
+            IJwtTokenService jwtTokenService)
         {
             _userManager = userManager;
             _context = context;
             _configuration = configuration;
             _imageUploadService = imageUploadService;
             _logger = logger;
+            _jwtTokenService = jwtTokenService;
         }
 
 
@@ -180,22 +180,23 @@ namespace ProductAuction.API.Controllers
                 claims.Add(new Claim(ClaimTypes.Role, role));
             }
 
-            // signing key comes from config
-            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]!));
+            // Generate access token via service
+            var tokenString = _jwtTokenService.GenerateAccessToken(claims);
 
-            // pick the signing algorithm
-            var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-
-            // token lasts 2 hours
-            var token = new JwtSecurityToken(
-                issuer: _configuration["Jwt:Issuer"],
-                audience: _configuration["Jwt:Audience"],
-                claims: claims,
-                expires: DateTime.UtcNow.AddHours(2),
-                signingCredentials: credentials);
-
-            // turn it into a string for the client
-            var tokenString = new JwtSecurityTokenHandler().WriteToken(token);
+            // Generate refresh token if RememberMe is true
+            string refreshToken = null;
+            if (dto.RememberMe)
+            {
+                refreshToken = _jwtTokenService.GenerateRefreshToken();
+                var rt = new RefreshToken
+                {
+                    Token = refreshToken,
+                    UserId = user.Id,
+                    ExpiresAt = DateTime.UtcNow.AddDays(30)
+                };
+                _context.RefreshTokens.Add(rt);
+                await _context.SaveChangesAsync();
+            }
 
             return Ok(new
             {
@@ -206,6 +207,7 @@ namespace ProductAuction.API.Controllers
                     email = user.Email,
                     roles,
                     token = tokenString,
+                    refreshToken,
                     expiresInMinutes = 120
                 }
             });
@@ -426,6 +428,115 @@ namespace ProductAuction.API.Controllers
             {
                 status = 200,
                 message = "Password changed successfully."
+            });
+        }
+
+        // POST: api/auth/refresh
+        // Refreshes the access token using a refresh token
+        [HttpPost("refresh")]
+        public async Task<IActionResult> Refresh([FromBody] RefreshTokenDto dto)
+        {
+            var refreshToken = await _context.RefreshTokens.FirstOrDefaultAsync(rt => rt.Token == dto.RefreshToken);
+
+            if (refreshToken == null || !refreshToken.IsActive)
+            {
+                return Unauthorized(new
+                {
+                    status = 401,
+                    message = "Invalid or expired refresh token."
+                });
+            }
+
+            var user = await _userManager.FindByIdAsync(refreshToken.UserId);
+            if (user == null)
+            {
+                return Unauthorized(new
+                {
+                    status = 401,
+                    message = "User not found."
+                });
+            }
+
+            // Revoke the old refresh token
+            refreshToken.IsRevoked = true;
+
+            // Generate new tokens
+            var roles = await _userManager.GetRolesAsync(user);
+            var claims = new List<Claim>
+            {
+                new Claim(ClaimTypes.NameIdentifier, user.Id),
+                new Claim(ClaimTypes.Email, user.Email!)
+            };
+            foreach (var role in roles)
+            {
+                claims.Add(new Claim(ClaimTypes.Role, role));
+            }
+
+            var tokenString = _jwtTokenService.GenerateAccessToken(claims);
+
+            var newRefreshToken = _jwtTokenService.GenerateRefreshToken();
+            var rt = new RefreshToken
+            {
+                Token = newRefreshToken,
+                UserId = user.Id,
+                ExpiresAt = DateTime.UtcNow.AddDays(30)
+            };
+            _context.RefreshTokens.Add(rt);
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                status = 200,
+                message = "Token refreshed successfully.",
+                data = new
+                {
+                    token = tokenString,
+                    refreshToken = newRefreshToken,
+                    expiresInMinutes = 120
+                }
+            });
+        }
+
+        // POST: api/auth/logout
+        // Revokes the provided refresh token
+        [Authorize]
+        [HttpPost("logout")]
+        public async Task<IActionResult> Logout([FromBody] LogoutDto dto)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            if (string.IsNullOrEmpty(userId))
+            {
+                return Unauthorized(new
+                {
+                    status = 401,
+                    message = "User identity was not found."
+                });
+            }
+
+            if (dto.RefreshToken == null)
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "Refresh token is required."
+                });
+            }
+
+            var refreshToken = await _context.RefreshTokens.FirstOrDefaultAsync(rt => rt.Token == dto.RefreshToken && rt.UserId == userId);
+
+            if (refreshToken != null && refreshToken.IsActive)
+            {
+                refreshToken.IsRevoked = true;
+                refreshToken.IsActive = false;
+                await _context.SaveChangesAsync();
+            }
+
+            return Ok(new
+            {
+                status = 200,
+                message = "Logged out successfully."
             });
         }
     }
