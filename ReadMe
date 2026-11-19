@@ -8,6 +8,8 @@ Built with **ASP.NET Core 10**, **Entity Framework Core 10**, **SQL Server**, **
 
 ## Table of Contents
 
+dada
+
 1. [Overview](#overview)
 2. [Roles](#roles)
 3. [Core Workflows](#core-workflows)
@@ -468,7 +470,7 @@ Registered as hosted services in `Program.cs`; each polls every **30 seconds** u
 | `ConnectionStrings:DefaultConnection` | SQL Server connection string.                |
 | `Jwt:Key`                             | Symmetric signing key (keep secret, rotate). |
 | `Jwt:Issuer`                          | Token issuer.                                |
-| `Jwt:Audience` | Token audience (matches the React client). |
+| `Jwt:Audience`                        | Token audience (matches the React client).   |
 
 ---
 
