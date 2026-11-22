@@ -119,4 +119,11 @@ app.UseAuthorization();
 
 app.MapControllers();
 
+// Simple Swagger UI entry point -> /swagger/index.html
+app.MapGet("/swagger", context =>
+{
+    context.Response.Redirect("/swagger/index.html");
+    return Task.CompletedTask;
+});
+
 app.Run();
