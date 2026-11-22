@@ -752,6 +752,10 @@ namespace ProductAuction.API.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<bool>("IsProfileSetupCompleted")
+                        .HasColumnType("bit")
+                        .HasColumnName("SignUpCompleted");
+
                     b.Property<string>("NationalIdBackImageUrl")
                         .HasColumnType("nvarchar(max)");
 

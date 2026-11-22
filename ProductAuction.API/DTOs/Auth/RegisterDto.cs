@@ -14,11 +14,7 @@ namespace ProductAuction.API.DTOs.Auth
         public string Password { get; set; } = string.Empty;
 
         [Required]
-        [StringLength(150)]
-        public string FullName { get; set; } = string.Empty;
-
-        // The role selected during registration.
-        [Required]
-        public string Role { get; set; } = "Buyer";
+        [Compare("Password", ErrorMessage = "Password and confirmation password do not match.")]
+        public string ConfirmPassword { get; set; } = string.Empty;
     }
 }

@@ -1,4 +1,5 @@
 ﻿using ProductAuction.API.Models.Enums;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace ProductAuction.API.Models
 {
@@ -25,5 +26,12 @@ namespace ProductAuction.API.Models
 
         public DateTime CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
+
+        /// <summary>
+        /// Indicates whether the user has completed the initial onboarding profile setup.
+        /// Kept separate from KYC verification status. Stored in the SignUpCompleted column.
+        /// </summary>
+        [Column("SignUpCompleted")]
+        public bool IsProfileSetupCompleted { get; set; } = false;
     }
 }

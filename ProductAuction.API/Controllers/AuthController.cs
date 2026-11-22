@@ -41,10 +41,21 @@ namespace ProductAuction.API.Controllers
 
 
         // POST: api/auth/register
-        // Creates an account, assigns a role, and saves the profile and wallet.
         [HttpPost("register")]
         public async Task<IActionResult> Register(RegisterDto dto)
         {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "Invalid registration data.",
+                    errors = ModelState.Values
+                        .SelectMany(v => v.Errors)
+                        .Select(e => e.ErrorMessage)
+                });
+            }
+
             var existingUser = await _userManager.FindByEmailAsync(dto.Email);
 
             if (existingUser != null)
@@ -53,15 +64,6 @@ namespace ProductAuction.API.Controllers
                 {
                     status = 400,
                     message = "Email is already registered."
-                });
-            }
-
-            if (dto.Role != "Buyer" && dto.Role != "Seller")
-            {
-                return BadRequest(new
-                {
-                    status = 400,
-                    message = "Only Buyer and Seller roles are allowed."
                 });
             }
 
@@ -83,45 +85,35 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            var roleResult = await _userManager.AddToRoleAsync(user, dto.Role);
-
-            if (!roleResult.Succeeded)
+            var claims = new List<Claim>
             {
-                return BadRequest(new
-                {
-                    status = 400,
-                    message = "Role assignment failed.",
-                    errors = roleResult.Errors.Select(e => e.Description)
-                });
-            }
-
-            var profile = new UserProfile
-            {
-                UserId = user.Id,
-                FullName = dto.FullName,
-                CreatedAt = DateTime.UtcNow
+                new Claim(ClaimTypes.NameIdentifier, user.Id),
+                new Claim(ClaimTypes.Email, user.Email!)
             };
 
-            var wallet = new Wallet
+            var tokenString = _jwtTokenService.GenerateAccessToken(claims);
+
+            var refreshToken = _jwtTokenService.GenerateRefreshToken();
+            var rt = new RefreshToken
             {
+                Token = refreshToken,
                 UserId = user.Id,
-                Balance = 0,
-                ReservedBalance = 0
+                ExpiresAt = DateTime.UtcNow.AddDays(30)
             };
-
-            _context.UserProfiles.Add(profile);
-            _context.Wallets.Add(wallet);
-
+            _context.RefreshTokens.Add(rt);
             await _context.SaveChangesAsync();
 
             return Ok(new
             {
                 status = 200,
-                message = "Registration successful.",
+                message = "Registration successful. Please complete your profile setup.",
                 data = new
                 {
                     email = user.Email,
-                    role = dto.Role
+                    token = tokenString,
+                    refreshToken,
+                    expiresInMinutes = 120,
+                    profileSetupRequired = true
                 }
             });
         }
@@ -169,6 +161,15 @@ namespace ProductAuction.API.Controllers
 
             var roles = await _userManager.GetRolesAsync(user);
 
+            var profile = await _context.UserProfiles.FirstOrDefaultAsync(p => p.UserId == user.Id);
+            
+            var isProfileCompleted = profile != null && profile.IsProfileSetupCompleted;
+
+            var isStaff = roles.Contains("Admin") || roles.Contains("Super Admin");
+
+            // Staff accounts are pre-provisioned with a role and do not require buyer/seller onboarding.
+            var profileSetupRequired = !isStaff && !isProfileCompleted;
+
             var claims = new List<Claim>
             {
                 new Claim(ClaimTypes.NameIdentifier, user.Id),
@@ -184,7 +185,7 @@ namespace ProductAuction.API.Controllers
             var tokenString = _jwtTokenService.GenerateAccessToken(claims);
 
             // Generate refresh token if RememberMe is true
-            string refreshToken = null;
+            string? refreshToken = null;
             if (dto.RememberMe)
             {
                 refreshToken = _jwtTokenService.GenerateRefreshToken();
@@ -208,7 +209,8 @@ namespace ProductAuction.API.Controllers
                     roles,
                     token = tokenString,
                     refreshToken,
-                    expiresInMinutes = 120
+                    expiresInMinutes = 120,
+                    profileSetupRequired
                 }
             });
         }
@@ -293,6 +295,7 @@ namespace ProductAuction.API.Controllers
                         nationalIdBackImageUrl = profile?.NationalIdBackImageUrl,
                         verificationStatus = profile?.VerificationStatus,
                         rejectionReason = profile?.RejectionReason,
+                        isProfileSetupCompleted = profile?.IsProfileSetupCompleted ?? false,
                         createdAt = profile?.CreatedAt,
                         updatedAt = profile?.UpdatedAt
                     }
