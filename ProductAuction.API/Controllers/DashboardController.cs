@@ -1,3 +1,4 @@
+
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -12,6 +13,7 @@ namespace ProductAuction.API.Controllers
     public class DashboardController : ControllerBase
     {
         private readonly AppDbContext _context;
+
         public DashboardController(AppDbContext context)
         {
             _context = context;
@@ -21,11 +23,13 @@ namespace ProductAuction.API.Controllers
         public async Task<IActionResult> AdminAnalytics([FromQuery] string period = "30days")
         {
             int days = period == "7days" ? 7 : period == "6months" ? 180 : period == "12months" ? 365 : 30;
+
             var now = DateTime.UtcNow.Date;
 
-            // Calculate the start date for the given number of days, (including today)
+            // Calculate the start date for the selected period, including today.
             var start = now.AddDays(-days + 1);
 
+            // Group newly registered users by their registration date and count them.
             var grouped = await _context.UserProfiles
                 .Where(p => p.CreatedAt >= start)
                 .GroupBy(p => p.CreatedAt.Date)
@@ -34,8 +38,10 @@ namespace ProductAuction.API.Controllers
 
             var userGrowth = new List<object>();
 
+            // Loop through every date in the selected period.
             for (var d = start; d <= now; d = d.AddDays(1))
             {
+                // Find the registration count for the current date.
                 var c = grouped.FirstOrDefault(x => x.date == d)?.count ?? 0;
 
                 userGrowth.Add(new
@@ -45,23 +51,40 @@ namespace ProductAuction.API.Controllers
                 });
             }
 
-            var statuses = await _context.Auctions
+            // Group all auctions by their current status and count each group.
+            var auctionStatuses = await _context.Auctions
                 .GroupBy(a => a.Status)
                 .Select(g => new { status = g.Key.ToString(), count = g.Count() })
                 .ToListAsync();
 
+            // Retrieve completed sales within the selected period.
             var sales = await _context.Sales
                 .Where(sa => sa.Status == SaleStatus.Completed)
                 .Where(sa => sa.CreatedAt >= start)
                 .GroupBy(sa => new { sa.CreatedAt.Year, sa.CreatedAt.Month })
-                .Select(g => new { year = g.Key.Year, month = g.Key.Month, volume = g.Sum(x => x.FinalAmount), fees = g.Sum(x => x.CommissionAmount) })
+                .Select(g => new
+                {
+                    year = g.Key.Year,
+                    month = g.Key.Month,
+                    volume = g.Sum(x => x.FinalAmount),
+                    fees = g.Sum(x => x.CommissionAmount)
+                })
                 .ToListAsync();
 
-            var monthly = new List<object>();
+            var monthlyFinancialActivity = new List<object>();
+
+            // Start from the first day of the month containing the selected start date.
             for (var d = new DateTime(start.Year, start.Month, 1); d <= now; d = d.AddMonths(1))
             {
+                // Find the financial data for the current month.
                 var m = sales.FirstOrDefault(x => x.year == d.Year && x.month == d.Month);
-                monthly.Add(new { month = d.ToString("yyyy-MM"), transactionVolume = m?.volume ?? 0, platformFees = m?.fees ?? 0 });
+
+                monthlyFinancialActivity.Add(new
+                {
+                    month = d.ToString("yyyy-MM"),
+                    transactionVolume = m?.volume ?? 0,
+                    platformFees = m?.fees ?? 0
+                });
             }
 
             return Ok(new
@@ -70,8 +93,8 @@ namespace ProductAuction.API.Controllers
                 data = new
                 {
                     userGrowth,
-                    auctionStatuses = statuses,
-                    monthlyFinancialActivity = monthly
+                    auctionStatuses,
+                    monthlyFinancialActivity
                 }
             });
         }
