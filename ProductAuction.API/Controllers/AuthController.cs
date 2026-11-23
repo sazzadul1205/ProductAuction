@@ -9,6 +9,8 @@ using ProductAuction.API.DTOs.Profile;
 using ProductAuction.API.Models;
 using ProductAuction.API.Services;
 using System.Security.Claims;
+using System.Text.Json;
+using Google.Apis.Auth;
 
 namespace ProductAuction.API.Controllers
 {
@@ -162,7 +164,7 @@ namespace ProductAuction.API.Controllers
             var roles = await _userManager.GetRolesAsync(user);
 
             var profile = await _context.UserProfiles.FirstOrDefaultAsync(p => p.UserId == user.Id);
-            
+
             var isProfileCompleted = profile != null && profile.IsProfileSetupCompleted;
 
             var isStaff = roles.Contains("Admin") || roles.Contains("Super Admin");
@@ -215,6 +217,131 @@ namespace ProductAuction.API.Controllers
             });
         }
 
+
+        // POST: api/auth/google
+        [HttpPost("google")]
+        public async Task<IActionResult> GoogleLogin([FromBody] GoogleLoginDto dto)
+        {
+            if (string.IsNullOrWhiteSpace(dto?.Credential))
+            {
+                return BadRequest(new
+                {
+                    status = 400,
+                    message = "Google credential is required."
+                });
+            }
+
+            GoogleJsonWebSignature.Payload payload;
+            try
+            {
+                var settings = new GoogleJsonWebSignature.ValidationSettings();
+                var clientId = _configuration["Google:ClientId"];
+                if (!string.IsNullOrEmpty(clientId))
+                {
+                    settings.Audience = new[] { clientId };
+                }
+                payload = await GoogleJsonWebSignature.ValidateAsync(dto.Credential, settings);
+            }
+            catch
+            {
+                return Unauthorized(new
+                {
+                    status = 401,
+                    message = "Invalid Google credential."
+                });
+            }
+
+            var sub = payload.Subject ?? "";
+            var email = payload.Email ?? "";
+            var name = payload.Name ?? email;
+            var emailVerified = payload.EmailVerified;
+
+            if (string.IsNullOrEmpty(sub) || string.IsNullOrEmpty(email) || !emailVerified)
+            {
+                return Unauthorized(new
+                {
+                    status = 401,
+                    message = "Google credential is invalid or email not verified."
+                });
+            }
+
+            var user = await _userManager.FindByLoginAsync("Google", sub);
+
+            if (user == null)
+            {
+                user = await _userManager.FindByEmailAsync(email);
+                if (user != null)
+                {
+                    await _userManager.AddLoginAsync(user, new UserLoginInfo("Google", sub, "Google"));
+                }
+                else
+                {
+                    user = new IdentityUser
+                    {
+                        UserName = email,
+                        Email = email,
+                        EmailConfirmed = true
+                    };
+                    var createResult = await _userManager.CreateAsync(user);
+                    if (!createResult.Succeeded)
+                    {
+                        return BadRequest(new
+                        {
+                            status = 400,
+                            message = "User creation failed.",
+                            errors = createResult.Errors.Select(e => e.Description)
+                        });
+                    }
+                    await _userManager.AddLoginAsync(user, new UserLoginInfo("Google", sub, "Google"));
+                }
+            }
+
+            var roles = await _userManager.GetRolesAsync(user);
+            var profile = await _context.UserProfiles.FirstOrDefaultAsync(p => p.UserId == user.Id);
+            var isProfileCompleted = profile != null && profile.IsProfileSetupCompleted;
+
+
+            var isStaff = roles.Contains("Admin") || roles.Contains("Super Admin");
+            var profileSetupRequired = !isStaff && !isProfileCompleted;
+
+            var claims = new List<Claim>
+            {
+                new Claim(ClaimTypes.NameIdentifier, user.Id),
+                new Claim(ClaimTypes.Email, user.Email!)
+            };
+            foreach (var role in roles)
+            {
+                claims.Add(new Claim(ClaimTypes.Role, role));
+            }
+
+            var tokenString = _jwtTokenService.GenerateAccessToken(claims);
+            var refreshToken = _jwtTokenService.GenerateRefreshToken();
+            var rt = new RefreshToken
+            {
+                Token = refreshToken,
+                UserId = user.Id,
+                ExpiresAt = DateTime.UtcNow.AddDays(30)
+            };
+
+            
+            _context.RefreshTokens.Add(rt);
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                status = 200,
+                message = "Google login successful.",
+                data = new
+                {
+                    email = user.Email,
+                    roles,
+                    token = tokenString,
+                    refreshToken,
+                    expiresInMinutes = 120,
+                    profileSetupRequired
+                }
+            });
+        }
 
         // GET: api/auth/test-token
         // Requires a valid JWT token
@@ -426,7 +553,7 @@ namespace ProductAuction.API.Controllers
                     errors = result.Errors.Select(e => e.Description)
                 });
             }
-            
+
             return Ok(new
             {
                 status = 200,
