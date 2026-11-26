@@ -1,0 +1,52 @@
+Bidora Analytics Progress Tracker
+================================
+
+Phase 1: Understand existing projects
+- [x] Inspect backend (no DashboardController; dashboards use existing endpoints)
+- [x] Inspect frontend dashboard pages
+- [x] Identify auth/role patterns (JWT, roles)
+- [x] Identify financial/auction/bid models
+
+Phase 2 sub-tasks:
+2.1 Admin analytics
+  2.1.1 User growth (daily registrations)
+  2.1.2 Auction status distribution
+  2.1.3 Monthly financial activity
+2.2 Buyer analytics
+  2.2.1 Spending history
+  2.2.2 Bidding activity
+  2.2.3 Bidding performance
+2.3 Seller analytics
+  2.3.1 Earnings history
+  2.3.2 Top-selling products
+  2.3.3 Product approval distribution
+  
+Phase 2: Backend analytics
+- [ ] DashboardController + service
+- [ ] Admin analytics endpoint
+- [ ] Buyer analytics endpoint
+- [ ] Seller analytics endpoint
+- [ ] Date range support + zero buckets
+
+Phase 3: Backend build & verify
+- [ ] Build backend
+- [ ] Test endpoints/auth/isolation
+
+Phase 4: Frontend charts (Recharts)
+- [ ] Install recharts
+- [ ] Reusable chart components
+- [ ] Admin charts
+- [ ] Buyer charts
+- [ ] Seller charts
+- [ ] Date range selector
+
+Phase 5: Frontend build & verify
+- [ ] Build frontend
+- [ ] Test responsive/loading/empty/error states
+
+Phase 6: Final report
+
+
+
+
+

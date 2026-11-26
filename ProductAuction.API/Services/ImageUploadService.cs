@@ -11,20 +11,20 @@ namespace ProductAuction.API.Services
             _environment = environment;
         }
 
-        // Saves the uploaded image to disk and returns its relative URL.
         public async Task<string> UploadImageAsync(IFormFile image)
         {
             if (image == null || image.Length == 0)
             {
                 throw new ArgumentException("Please select an image.");
             }
+
             if (image.Length > 5 * 1024 * 1024)
             {
                 throw new ArgumentException("Image size cannot exceed 5 MB.");
             }
+
             var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".webp" };
 
-            // Get the file extension in lowercase.
             var extension = Path.GetExtension(image.FileName).ToLowerInvariant();
 
             if (!allowedExtensions.Contains(extension))
@@ -32,17 +32,13 @@ namespace ProductAuction.API.Services
                 throw new ArgumentException("Only JPG, JPEG, PNG, and WEBP images are allowed.");
             }
 
-            var webRoot = _environment.WebRootPath ?? Path.Combine(_environment.ContentRootPath, "wwwroot");
+            var webRoot = _environment.WebRootPath;
 
-            // Build the path to the uploads folder 
             var uploadFolder = Path.Combine(webRoot, "uploads");
 
-            // Create the uploads folder if it does not exist yet.
-            Directory.CreateDirectory(uploadFolder);
             var fileName = $"{Guid.NewGuid()}{extension}";
             var filePath = Path.Combine(uploadFolder, fileName);
 
-            // Copy the uploaded stream to disk.
             using (var stream = new FileStream(filePath, FileMode.Create))
             {
                 await image.CopyToAsync(stream);
@@ -67,20 +63,50 @@ namespace ProductAuction.API.Services
                 return Task.FromResult(false);
             }
 
-            var webRoot = _environment.WebRootPath ?? Path.Combine(_environment.ContentRootPath, "wwwroot");
-
-            // Build the full path to the file on disk.
+            var webRoot = _environment.WebRootPath;
             var filePath = Path.Combine(webRoot, "uploads", fileName);
-
-            // If the file is not there, nothing to delete.
             if (!System.IO.File.Exists(filePath))
             {
                 return Task.FromResult(false);
             }
 
-            // Delete the file.
             System.IO.File.Delete(filePath);
             return Task.FromResult(true);
         }
+
+
+
+
+
+
+
+
+
+        // Deletes an image from disk based on its relative URL.
+        //public bool DeleteImage(string imageUrl)
+        //{
+        //    if (string.IsNullOrEmpty(imageUrl))
+        //    {
+        //        return false;
+        //    }
+
+        //    var fileName = Path.GetFileName(imageUrl);
+
+        //    if (string.IsNullOrEmpty(fileName))
+        //    {
+        //        return false;
+        //    }
+
+        //    var webRoot = _environment.WebRootPath;
+        //    var filePath = Path.Combine(webRoot, "uploads", fileName);
+
+        //    if (!System.IO.File.Exists(filePath))
+        //    {
+        //        return false;
+        //    }
+
+        //    System.IO.File.Delete(filePath);
+        //    return true;
+        //}
     }
 }

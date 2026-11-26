@@ -7,7 +7,6 @@ namespace ProductAuction.API.Services.Background
 {
     public class AuctionResultBackgroundService : BackgroundService
     {
-        // Factory used to create a new DI scope each time we access the database.
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly ILogger<AuctionResultBackgroundService> _logger;
 
@@ -26,27 +25,19 @@ namespace ProductAuction.API.Services.Background
                 try
                 {
                     var now = DateTime.UtcNow;
+                    using var scope = _scopeFactory.CreateScope();
+                    var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-                    List<int> auctionIds;
+                    // Find all active auctions whose end time has passed.
+                    var auctionIds = await context.Auctions
+                        .Where(a => a.Status == AuctionStatus.Active && a.EndTime <= now)
+                        .Select(a => a.Id)
+                        .ToListAsync(stoppingToken);
 
-                    // Find active auctions whose end time has passed.
-                    using (var scope = _scopeFactory.CreateScope())
-                    {
-                        var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-                        auctionIds = await context.Auctions
-                            .Where(a => a.Status == AuctionStatus.Active && a.EndTime <= now)
-                            .Select(a => a.Id)
-                            .ToListAsync(stoppingToken);
-                    }
-
-                    // Process each auction in its own scope so one failure doesn't affect the others.
                     foreach (var auctionId in auctionIds)
                     {
                         try
                         {
-                            using var scope = _scopeFactory.CreateScope();
-                            var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
                             var auction = await context.Auctions.FirstOrDefaultAsync(a => a.Id == auctionId, stoppingToken);
 
                             if (auction == null) continue;
@@ -55,7 +46,12 @@ namespace ProductAuction.API.Services.Background
                         }
                         catch (Exception ex)
                         {
-                            _logger.LogError(ex, "Failed to process auction {AuctionId}.", auctionId);
+                            _logger.LogError(
+                                ex,
+                                "Failed to process auction {AuctionId}.",
+                                auctionId
+                            );
+
                         }
                     }
                 }
@@ -63,8 +59,6 @@ namespace ProductAuction.API.Services.Background
                 {
                     _logger.LogError(ex, "Error in AuctionResultBackgroundService");
                 }
-
-                // Wait 30 seconds before checking again.
                 await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
             }
         }
@@ -194,8 +188,7 @@ namespace ProductAuction.API.Services.Background
                     continue;
                 }
 
-                if (winnerId != null && wallet.UserId == winnerId)
-                    continue;
+                if (winnerId != null && wallet.UserId == winnerId) continue;
 
                 wallet.ReservedBalance -= reservation.Amount;
                 reservation.Status = ReservationStatus.Released;

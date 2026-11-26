@@ -6,7 +6,6 @@ namespace ProductAuction.API.Services.Background
 {
     public class DispatchOverdueBackgroundService : BackgroundService
     {
-        // Factory used to create a new DI scope each time we access the database.
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly ILogger<DispatchOverdueBackgroundService> _logger;
 
@@ -46,8 +45,6 @@ namespace ProductAuction.API.Services.Background
                 {
                     _logger.LogError(ex, "Error In DispatchOverdueBackgroundService");
                 }
-
-                // Wait 30 seconds before checking again.
                 await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
             }
         }

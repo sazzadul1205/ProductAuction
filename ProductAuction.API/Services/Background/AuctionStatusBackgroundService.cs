@@ -6,7 +6,6 @@ namespace ProductAuction.API.Services.Background
 {
     public class AuctionStatusBackgroundService : BackgroundService
     {
-        // Factory used to create a new DI scope each time we touch the database.
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly ILogger<AuctionStatusBackgroundService> _logger;
 
@@ -46,8 +45,6 @@ namespace ProductAuction.API.Services.Background
                 {
                     _logger.LogError(ex, "Error In AuctionStatusBackgroundService");
                 }
-
-                // Wait 30 seconds before checking again.
                 await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
             }
         }

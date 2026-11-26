@@ -55,7 +55,6 @@ namespace ProductAuction.API.Services.Background
                 {
                     _logger.LogError(ex, "Error in RefreshTokenCleanupBackgroundService");
                 }
-
                 await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken);
             }
         }

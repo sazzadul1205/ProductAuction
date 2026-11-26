@@ -4,7 +4,6 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using ProductAuction.API.Data;
-using ProductAuction.API.Data.Seeder;
 using ProductAuction.API.Services;
 using ProductAuction.API.Services.Background;
 using System.Text;
@@ -17,7 +16,6 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
-        // Serialize/deserialize enums as their string names, not integers.
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
     });
 
@@ -94,11 +92,6 @@ builder.Services.AddHostedService<RefreshTokenCleanupBackgroundService>();
 
 var app = builder.Build();
 
-// Seeders
-await RoleSeeder.SeedRolesAsync(app.Services);
-await AdminAccountSeeder.SeedAdminAccountAsync(app.Services);
-await PlatformAccountSeeder.SeedPlatformAccountAsync(app.Services);
-
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
@@ -119,7 +112,7 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-// Simple Swagger UI entry point -> /swagger/index.html
+// Simple Swagger UI 
 app.MapGet("/swagger", context =>
 {
     context.Response.Redirect("/swagger/index.html");
